@@ -33,7 +33,7 @@ rule {}
     condition:
         hash.md5(0, {}) == \"{}\"
 }}",
-            self.name.replace(".", "_"),
+            self.name.replace(".", "_").replace("-", "_"),
             self.name,
             self.filesize,
             self.hash
