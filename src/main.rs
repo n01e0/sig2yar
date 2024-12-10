@@ -16,7 +16,7 @@ fn main() -> Result<()> {
         }
         DbType::Logical => {
             let sig = LogicalSignature::parse(&args.signature)?;
-            println!("{:?}", sig);
+            println!("{}", sig);
         }
     };
 
