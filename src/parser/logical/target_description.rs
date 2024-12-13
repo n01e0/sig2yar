@@ -1,14 +1,14 @@
-use std::ops::Range;
-use std::collections::HashMap;
-use std::fmt::Display;
 use anyhow::{anyhow, Context, Result};
+use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt::Display;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub struct TargetDescription<'t> {
     engine: Range<u32>,
     target: TargetType,
-    file_size: Option<Range::<usize>>,
+    file_size: Option<Range<usize>>,
     entry_point: Option<usize>,
     number_of_sections: Option<usize>,
     container: Option<FileType>,
@@ -213,7 +213,6 @@ impl Display for FileType {
     }
 }
 
-
 impl<'t> TargetDescription<'t> {
     pub fn parse(target_description: &'t str) -> Result<Self> {
         let parts = target_description.split(',').collect::<Vec<&str>>();
@@ -238,24 +237,34 @@ impl<'t> TargetDescription<'t> {
         let target = TargetType::try_from(
             map.get("Target")
                 .with_context(|| "Can't find Target Type block")?
-                .parse::<u8>().with_context(|| "Can't parse TargetType number")?,
+                .parse::<u8>()
+                .with_context(|| "Can't parse TargetType number")?,
         )
         .with_context(|| "Can't parse TargetType")?;
 
-        let container = map.get("Container")
+        let container = map
+            .get("Container")
             .and_then(|c| FileType::try_from(*c).ok());
 
         Ok({
             TargetDescription {
                 engine,
                 target,
-                file_size: map.get("FileSize").and_then(|n| parse_range::<usize>(n).ok()),
+                file_size: map
+                    .get("FileSize")
+                    .and_then(|n| parse_range::<usize>(n).ok()),
                 entry_point: map.get("EntryPoint").and_then(|n| n.parse::<usize>().ok()),
-                number_of_sections: map.get("NumberOfSections").and_then(|n| n.parse::<usize>().ok()),
+                number_of_sections: map
+                    .get("NumberOfSections")
+                    .and_then(|n| n.parse::<usize>().ok()),
                 container,
                 intermediates: map.get("Intermediates").map(|v| *v),
-                icon_group1: map.get("IconGroup1").and_then(|n| parse_range::<usize>(n).ok()),
-                icon_group2: map.get("IconGroup2").and_then(|n| parse_range::<usize>(n).ok()),
+                icon_group1: map
+                    .get("IconGroup1")
+                    .and_then(|n| parse_range::<usize>(n).ok()),
+                icon_group2: map
+                    .get("IconGroup2")
+                    .and_then(|n| parse_range::<usize>(n).ok()),
             }
         })
     }
@@ -263,47 +272,63 @@ impl<'t> TargetDescription<'t> {
 
 impl<'t> Display for TargetDescription<'t> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = format!("
+        let mut s = format!(
+            "
         engine: \"{:?}\"
         target: \"{}\"
-        ",self.engine, self.target);
+        ",
+            self.engine, self.target
+        );
 
         if let Some(file_size) = self.file_size.as_ref() {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         file_size: \"{file_size:?}\"
-            "))
+            "
+            ))
         }
         if let Some(entry_point) = self.entry_point {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         entry_point: \"{entry_point}\"
-            "))
+            "
+            ))
         }
         if let Some(number_of_sections) = self.number_of_sections {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         number_of_sections: \"{number_of_sections}\"
-            "))
+            "
+            ))
         }
         if let Some(container) = self.container.as_ref() {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         container: \"{container}\"
-            "))
+            "
+            ))
         }
         if let Some(intermediates) = self.intermediates {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         intermediates: \"{intermediates}\"
-            "))
+            "
+            ))
         }
         if let Some(icon_group1) = self.icon_group1.as_ref() {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         icon_group1: \"{icon_group1:?}\"
-            "))
+            "
+            ))
         }
         if let Some(icon_group2) = self.icon_group2.as_ref() {
-            s.push_str(&format!("
+            s.push_str(&format!(
+                "
         icon_group2: \"{icon_group2:?}\"
-            "))
+            "
+            ))
         }
-
 
         write!(f, "{}", s)
     }
@@ -354,7 +379,8 @@ impl TryFrom<u8> for TargetType {
 }
 
 fn parse_range<T>(s: &str) -> Result<Range<T>>
-where T: std::str::FromStr + std::ops::Add<Output = T> + Copy + PartialOrd + From<u8>,
+where
+    T: std::str::FromStr + std::ops::Add<Output = T> + Copy + PartialOrd + From<u8>,
 {
     let parts: Vec<_> = s.split('-').collect();
     if parts.len() != 2 {
@@ -366,4 +392,3 @@ where T: std::str::FromStr + std::ops::Add<Output = T> + Copy + PartialOrd + Fro
         Err(anyhow!("Can't parse Engine range"))
     }
 }
-

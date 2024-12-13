@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::fmt::Display;
 
 mod target_description;
@@ -7,12 +7,15 @@ use target_description::TargetDescription;
 mod expression;
 use expression::LogicalExpression;
 
+mod subsig;
+use subsig::Subsignature;
+
 #[derive(Debug)]
 pub struct LogicalSignature<'p> {
     pub name: &'p str,
     pub target_description: TargetDescription<'p>,
     pub logical_expression: LogicalExpression,
-    pub subsigs: Vec<&'p str>,
+    pub subsigs: Vec<Subsignature<'p>>,
 }
 
 impl<'p> LogicalSignature<'p> {
@@ -23,8 +26,14 @@ impl<'p> LogicalSignature<'p> {
         }
         let name = parts[0];
         let target_description_block = parts[1];
-        let logical_expression = LogicalExpression::parse(String::from(parts[2])).with_context(|| "Can't parse LogicalExpression")?;
-        let subsigs = parts.split_off(3);
+        let logical_expression = LogicalExpression::parse(String::from(parts[2]))
+            .with_context(|| "Can't parse LogicalExpression")?;
+        let subsigs = parts
+            .split_off(3)
+            .into_iter()
+            .map(|s| Subsignature::parse(s))
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| "Can't parse subsigs")?;
 
         Ok(Self {
             name,
@@ -50,7 +59,7 @@ rule {}
     condition:
         \"{:?}\"
 }}",
-            self.name.replace(".","_").replace("-","_"),
+            self.name.replace(".", "_").replace("-", "_"),
             self.name,
             self.target_description,
             self.subsigs,

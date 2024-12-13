@@ -56,7 +56,10 @@ fn parse_comparison<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
         let (input, x) = parse_number(input)?;
         let (input, y) = opt(preceded(tag(","), parse_number))(input)?;
         match (op, y) {
-            ("=", Some(y_val)) => Ok((input, LogicalExpression::MultiMatchCount(Box::new(expr), x, y_val))),
+            ("=", Some(y_val)) => Ok((
+                input,
+                LogicalExpression::MultiMatchCount(Box::new(expr), x, y_val),
+            )),
             ("=", None) => Ok((input, LogicalExpression::MatchCount(Box::new(expr), x))),
             (">", Some(y_val)) => Ok((input, LogicalExpression::MultiGt(Box::new(expr), x, y_val))),
             (">", None) => Ok((input, LogicalExpression::Gt(Box::new(expr), x))),
@@ -78,7 +81,8 @@ fn parse_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
 }
 
 fn parse_and_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
-    let (input, exprs) = separated_list0(preceded(multispace0, tag("&")), parse_or_expression)(input)?;
+    let (input, exprs) =
+        separated_list0(preceded(multispace0, tag("&")), parse_or_expression)(input)?;
     if exprs.len() == 1 {
         Ok((input, exprs.into_iter().next().unwrap()))
     } else {
@@ -87,7 +91,8 @@ fn parse_and_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpressio
 }
 
 fn parse_or_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
-    let (input, exprs) = separated_list0(preceded(multispace0, tag("|")), parse_single_expression)(input)?;
+    let (input, exprs) =
+        separated_list0(preceded(multispace0, tag("|")), parse_single_expression)(input)?;
     if exprs.len() == 1 {
         Ok((input, exprs.into_iter().next().unwrap()))
     } else {
@@ -95,50 +100,54 @@ fn parse_or_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::parser::logical::expression::{
         parse_expression,
         LogicalExpression::{
-            SubExpression,
-            And,
-            Or,
-            MultiGt,
-            MultiLt,
-            MultiMatchCount,
-            Gt,
-            Lt,
-            MatchCount
-        }
+            And, Gt, Lt, MatchCount, MultiGt, MultiLt, MultiMatchCount, Or, SubExpression,
+        },
     };
 
     #[test]
     fn parse_only_and() {
         let expression = "0&1&2&3&4";
         let parsed = parse_expression(expression).unwrap();
-        assert_eq!(And(vec![SubExpression(0), SubExpression(1), SubExpression(2), SubExpression(3), SubExpression(4)]), parsed.1);
+        assert_eq!(
+            And(vec![
+                SubExpression(0),
+                SubExpression(1),
+                SubExpression(2),
+                SubExpression(3),
+                SubExpression(4)
+            ]),
+            parsed.1
+        );
     }
 
     #[test]
     fn parse_only_or() {
         let expression = "(0|1|2|3|4|5|6|7|8|9|10|11)";
         let parsed = parse_expression(expression).unwrap();
-        assert_eq!(
-            Or((0..=11).map(|n| SubExpression(n)).collect()),
-            parsed.1
-        )
+        assert_eq!(Or((0..=11).map(|n| SubExpression(n)).collect()), parsed.1)
     }
 
     #[test]
     fn parse_multi_match() {
         let expression = "1=2,3";
         let parsed = parse_expression(expression).unwrap();
-        assert_eq!(MultiMatchCount(Box::new(SubExpression(1)),2,3), parsed.1);
+        assert_eq!(MultiMatchCount(Box::new(SubExpression(1)), 2, 3), parsed.1);
 
         let expression = "(1&2)=2,2";
         let parsed = parse_expression(expression).unwrap();
-        assert_eq!(MultiMatchCount(Box::new(And(vec![SubExpression(1), SubExpression(2)])),2,2), parsed.1);
+        assert_eq!(
+            MultiMatchCount(
+                Box::new(And(vec![SubExpression(1), SubExpression(2)])),
+                2,
+                2
+            ),
+            parsed.1
+        );
     }
 
     #[test]
@@ -146,17 +155,17 @@ mod tests {
         let expression = "(0&1&2&3)&(4|1)";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![
-                    And(
-                        vec![SubExpression(0), SubExpression(1), SubExpression(2), SubExpression(3)]
-                    ),
-                    Or(
-                        vec![SubExpression(4), SubExpression(1)]
-                    )
-                ]
-            ),
-        parsed.1)
+            And(vec![
+                And(vec![
+                    SubExpression(0),
+                    SubExpression(1),
+                    SubExpression(2),
+                    SubExpression(3)
+                ]),
+                Or(vec![SubExpression(4), SubExpression(1)])
+            ]),
+            parsed.1
+        )
     }
 
     #[test]
@@ -164,11 +173,11 @@ mod tests {
         let expression = "(0>20)&1&2";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![
-                    Gt(Box::new(SubExpression(0)), 20), SubExpression(1), SubExpression(2)
-                ]
-            ),
+            And(vec![
+                Gt(Box::new(SubExpression(0)), 20),
+                SubExpression(1),
+                SubExpression(2)
+            ]),
             parsed.1
         )
     }
@@ -178,39 +187,35 @@ mod tests {
         let expression = "((0|1|2)>5,2)&(3|1)";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![
-                    MultiGt(
-                        Box::new(Or(
-                            vec![SubExpression(0), SubExpression(1), SubExpression(2)]
-                        )),
-                        5,
-                        2
-                    ),
-                    Or(
-                        vec![SubExpression(3), SubExpression(1)]
-                    )
-                ],
-            ),
+            And(vec![
+                MultiGt(
+                    Box::new(Or(vec![
+                        SubExpression(0),
+                        SubExpression(1),
+                        SubExpression(2)
+                    ])),
+                    5,
+                    2
+                ),
+                Or(vec![SubExpression(3), SubExpression(1)])
+            ],),
             parsed.1
         );
         let expression = "((0|1|2)<5,2)&(3|1)";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![
-                    MultiLt(
-                        Box::new(Or(
-                            vec![SubExpression(0), SubExpression(1), SubExpression(2)]
-                        )),
-                        5,
-                        2
-                    ),
-                    Or(
-                        vec![SubExpression(3), SubExpression(1)]
-                    )
-                ],
-            ),
+            And(vec![
+                MultiLt(
+                    Box::new(Or(vec![
+                        SubExpression(0),
+                        SubExpression(1),
+                        SubExpression(2)
+                    ])),
+                    5,
+                    2
+                ),
+                Or(vec![SubExpression(3), SubExpression(1)])
+            ],),
             parsed.1
         )
     }
@@ -220,21 +225,18 @@ mod tests {
         let expression = "((0|1|2|3)=2)&(4|1)";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![
-                    MatchCount(
-                        Box::new(
-                            Or(
-                                vec![SubExpression(0), SubExpression(1), SubExpression(2), SubExpression(3)]
-                            )
-                        ),
-                        2
-                    ),
-                    Or(
-                        vec![SubExpression(4), SubExpression(1)]
-                    )
-                ]
-            ),
+            And(vec![
+                MatchCount(
+                    Box::new(Or(vec![
+                        SubExpression(0),
+                        SubExpression(1),
+                        SubExpression(2),
+                        SubExpression(3)
+                    ])),
+                    2
+                ),
+                Or(vec![SubExpression(4), SubExpression(1)])
+            ]),
             parsed.1
         );
     }
@@ -257,23 +259,17 @@ mod tests {
         let expression = "0>2&1";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(vec![
-                Gt(Box::new(SubExpression(0)), 2),
-                SubExpression(1)
-            ]),
+            And(vec![Gt(Box::new(SubExpression(0)), 2), SubExpression(1)]),
             parsed.1
         )
     }
-
 
     #[test]
     fn parse_doc_trojan() {
         let expression = "0&1>50";
         let parsed = parse_expression(expression).unwrap();
         assert_eq!(
-            And(
-                vec![SubExpression(0), Gt(Box::new(SubExpression(1)), 50)],
-            ),
+            And(vec![SubExpression(0), Gt(Box::new(SubExpression(1)), 50)],),
             parsed.1
         )
     }
@@ -285,25 +281,12 @@ mod tests {
         assert_eq!(
             And(vec![
                 SubExpression(0),
-                Gt(
-                    Box::new(SubExpression(1)),
-                    200
-                ),
-                Lt(
-                    Box::new(SubExpression(2)),
-                    1000
-                ),
-                Gt(
-                    Box::new(SubExpression(3)),
-                    50
-                ),
-                Gt(
-                    Box::new(SubExpression(4)),
-                    200
-                )
+                Gt(Box::new(SubExpression(1)), 200),
+                Lt(Box::new(SubExpression(2)), 1000),
+                Gt(Box::new(SubExpression(3)), 50),
+                Gt(Box::new(SubExpression(4)), 200)
             ]),
             parsed.1
         )
     }
 }
-
