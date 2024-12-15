@@ -8,6 +8,7 @@ use nom::{
 
 mod byte_comparison;
 mod macro_subsignature;
+mod pcre;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subsignature<'s> {

@@ -8,7 +8,7 @@ use nom::{
     IResult,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LogicalExpression {
     SubExpression(usize),
     And(Vec<LogicalExpression>),
@@ -76,7 +76,7 @@ fn parse_single_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpres
     parse_comparison(input)
 }
 
-fn parse_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
+pub(crate) fn parse_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
     parse_and_expression(input)
 }
 
