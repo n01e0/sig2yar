@@ -9,6 +9,7 @@ use nom::{
 mod byte_comparison;
 mod macro_subsignature;
 mod pcre;
+mod fuzzy_img;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subsignature<'s> {
