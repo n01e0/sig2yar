@@ -60,10 +60,10 @@ fn parse_hash_signatures_from_clamav_db() {
         return;
     };
 
-    let files = collect_files(&db_dir, &["hdb"]);
+    let files = collect_files(&db_dir, &["hdb", "hsb", "mdb", "msb", "imp"]);
     if files.is_empty() {
         if clamav_db_required() {
-            panic!("No .hdb files found under {:?}", db_dir);
+            panic!("No hash signature files found under {:?}", db_dir);
         }
         return;
     }
