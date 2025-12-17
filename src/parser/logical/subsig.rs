@@ -1,15 +1,9 @@
 use anyhow::{anyhow, Result};
-use nom::{
-    bytes::complete::{tag, take_while},
-    combinator::{map, opt},
-    sequence::tuple,
-    IResult,
-};
 
 mod byte_comparison;
+mod fuzzy_img;
 mod macro_subsignature;
 mod pcre;
-mod fuzzy_img;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subsignature<'s> {
@@ -28,17 +22,19 @@ pub enum Modifier {
 
 impl<'s> Subsignature<'s> {
     pub fn parse(input: &'s str) -> Result<Subsignature<'s>> {
-        parse_subsignature(&input)
-            .map_err(|e| anyhow!("Can't parse Subsignature: {}", e))
-            .map(|(_, subsig)| subsig)
+        if input.is_empty() {
+            return Err(anyhow!("Subsignature is empty"));
+        }
+
+        let (pattern, modifiers) = split_modifiers(input);
+        Ok(Subsignature { pattern, modifiers })
     }
 }
 
-fn parse_modifier(input: &str) -> IResult<&str, Vec<Modifier>> {
-    let (input, m) = take_while(|c: char| c.is_alphabetic())(input)?;
+fn parse_modifier_chars(input: &str) -> Vec<Modifier> {
     let mut modifiers = Vec::new();
 
-    for c in m.chars() {
+    for c in input.chars() {
         match c {
             'i' => modifiers.push(Modifier::CaseInsensitive),
             'w' => modifiers.push(Modifier::Wide),
@@ -48,17 +44,17 @@ fn parse_modifier(input: &str) -> IResult<&str, Vec<Modifier>> {
         }
     }
 
-    Ok((input, modifiers))
+    modifiers
 }
 
-fn parse_subsignature<'s>(input: &'s str) -> IResult<&'s str, Subsignature<'s>> {
-    let (remaining, (pattern, modifiers)) = tuple((
-        take_while(|c: char| c.is_digit(16)),
-        opt(map(tuple((tag("::"), parse_modifier)), |(_, mods)| mods)),
-    ))(input)?;
+fn split_modifiers<'s>(input: &'s str) -> (&'s str, Vec<Modifier>) {
+    if let Some((pattern, suffix)) = input.rsplit_once("::") {
+        if !suffix.is_empty() && suffix.chars().all(|c| c.is_alphabetic()) {
+            return (pattern, parse_modifier_chars(suffix));
+        }
+    }
 
-    let modifiers = modifiers.unwrap_or_else(Vec::new);
-    Ok((remaining, Subsignature { pattern, modifiers }))
+    (input, Vec::new())
 }
 
 #[cfg(test)]

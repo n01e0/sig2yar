@@ -1,12 +1,14 @@
 use nom::{
+    branch::alt,
+    bytes::complete::take_while,
     character::complete::{char, none_of},
     combinator::{map, recognize},
     multi::many0,
     sequence::preceded,
-    IResult, branch::alt, bytes::complete::take_while,
+    IResult,
 };
 
-use crate::parser::logical::expression::{LogicalExpression, parse_expression};
+use crate::parser::logical::expression::{parse_expression, LogicalExpression};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Flag {
@@ -58,11 +60,14 @@ fn parse_pcre<'p>(input: &'p str) -> IResult<&'p str, PCRE<'p>> {
     let (input, _) = char('/')(input)?;
     let (input, flags) = parse_flags(input)?;
 
-    Ok((input, PCRE {
-        trigger,
-        pcre: pattern,
-        flag: flags,
-    }))
+    Ok((
+        input,
+        PCRE {
+            trigger,
+            pcre: pattern,
+            flag: flags,
+        },
+    ))
 }
 
 #[cfg(test)]

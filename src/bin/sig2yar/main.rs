@@ -1,10 +1,9 @@
 mod args;
-mod parser;
 
 use anyhow::Result;
 use args::Args;
 use clap::Parser;
-use parser::{hash::HashSignature, logical::LogicalSignature, DbType};
+use sig2yar::parser::{hash::HashSignature, logical::LogicalSignature, DbType};
 
 fn main() -> Result<()> {
     let args = Args::parse();

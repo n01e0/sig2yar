@@ -6,15 +6,15 @@ use std::ops::Range;
 
 #[derive(Debug)]
 pub struct TargetDescription<'t> {
-    engine: Range<u32>,
+    engine: Option<Range<u32>>,
     target: TargetType,
     file_size: Option<Range<usize>>,
-    entry_point: Option<usize>,
-    number_of_sections: Option<usize>,
+    entry_point: Option<Range<usize>>,
+    number_of_sections: Option<Range<usize>>,
     container: Option<FileType>,
     intermediates: Option<&'t str>,
-    icon_group1: Option<Range<usize>>,
-    icon_group2: Option<Range<usize>>,
+    icon_group1: Option<&'t str>,
+    icon_group2: Option<&'t str>,
 }
 
 #[derive(Debug)]
@@ -216,7 +216,7 @@ impl Display for FileType {
 impl<'t> TargetDescription<'t> {
     pub fn parse(target_description: &'t str) -> Result<Self> {
         let parts = target_description.split(',').collect::<Vec<&str>>();
-        if parts.len() < 2 {
+        if parts.is_empty() {
             return Err(anyhow::anyhow!(
                 "Invalid target description: not enough parts"
             ));
@@ -230,10 +230,10 @@ impl<'t> TargetDescription<'t> {
             }
         }
 
-        let engine = parse_range(
-            map.get("Engine")
-                .with_context(|| "Can't find Engine block")?,
-        )?;
+        let engine = match map.get("Engine") {
+            Some(value) => Some(parse_range::<u32>(value)?),
+            None => None,
+        };
         let target = TargetType::try_from(
             map.get("Target")
                 .with_context(|| "Can't find Target Type block")?
@@ -253,18 +253,16 @@ impl<'t> TargetDescription<'t> {
                 file_size: map
                     .get("FileSize")
                     .and_then(|n| parse_range::<usize>(n).ok()),
-                entry_point: map.get("EntryPoint").and_then(|n| n.parse::<usize>().ok()),
+                entry_point: map
+                    .get("EntryPoint")
+                    .and_then(|n| parse_range::<usize>(n).ok()),
                 number_of_sections: map
                     .get("NumberOfSections")
-                    .and_then(|n| n.parse::<usize>().ok()),
+                    .and_then(|n| parse_range::<usize>(n).ok()),
                 container,
                 intermediates: map.get("Intermediates").map(|v| *v),
-                icon_group1: map
-                    .get("IconGroup1")
-                    .and_then(|n| parse_range::<usize>(n).ok()),
-                icon_group2: map
-                    .get("IconGroup2")
-                    .and_then(|n| parse_range::<usize>(n).ok()),
+                icon_group1: map.get("IconGroup1").copied(),
+                icon_group2: map.get("IconGroup2").copied(),
             }
         })
     }
@@ -272,13 +270,20 @@ impl<'t> TargetDescription<'t> {
 
 impl<'t> Display for TargetDescription<'t> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = format!(
+        let mut s = String::new();
+        if let Some(engine) = self.engine.as_ref() {
+            s.push_str(&format!(
+                "
+        engine: \"{engine:?}\"
+        "
+            ));
+        }
+        s.push_str(&format!(
             "
-        engine: \"{:?}\"
         target: \"{}\"
         ",
-            self.engine, self.target
-        );
+            self.target
+        ));
 
         if let Some(file_size) = self.file_size.as_ref() {
             s.push_str(&format!(
@@ -287,17 +292,17 @@ impl<'t> Display for TargetDescription<'t> {
             "
             ))
         }
-        if let Some(entry_point) = self.entry_point {
+        if let Some(entry_point) = self.entry_point.as_ref() {
             s.push_str(&format!(
                 "
-        entry_point: \"{entry_point}\"
+        entry_point: \"{entry_point:?}\"
             "
             ))
         }
-        if let Some(number_of_sections) = self.number_of_sections {
+        if let Some(number_of_sections) = self.number_of_sections.as_ref() {
             s.push_str(&format!(
                 "
-        number_of_sections: \"{number_of_sections}\"
+        number_of_sections: \"{number_of_sections:?}\"
             "
             ))
         }
@@ -315,17 +320,17 @@ impl<'t> Display for TargetDescription<'t> {
             "
             ))
         }
-        if let Some(icon_group1) = self.icon_group1.as_ref() {
+        if let Some(icon_group1) = self.icon_group1 {
             s.push_str(&format!(
                 "
-        icon_group1: \"{icon_group1:?}\"
+        icon_group1: \"{icon_group1}\"
             "
             ))
         }
-        if let Some(icon_group2) = self.icon_group2.as_ref() {
+        if let Some(icon_group2) = self.icon_group2 {
             s.push_str(&format!(
                 "
-        icon_group2: \"{icon_group2:?}\"
+        icon_group2: \"{icon_group2}\"
             "
             ))
         }
@@ -383,12 +388,21 @@ where
     T: std::str::FromStr + std::ops::Add<Output = T> + Copy + PartialOrd + From<u8>,
 {
     let parts: Vec<_> = s.split('-').collect();
-    if parts.len() != 2 {
-        return Err(anyhow!("Invalid Engine range!: {}", s));
-    }
-    if let (Ok(start), Ok(end)) = (parts[0].parse::<T>(), parts[1].parse::<T>()) {
-        Ok(start..end + T::from(1))
-    } else {
-        Err(anyhow!("Can't parse Engine range"))
+    match parts.len() {
+        1 => {
+            if let Ok(start) = parts[0].parse::<T>() {
+                Ok(start..start + T::from(1))
+            } else {
+                Err(anyhow!("Can't parse range: {}", s))
+            }
+        }
+        2 => {
+            if let (Ok(start), Ok(end)) = (parts[0].parse::<T>(), parts[1].parse::<T>()) {
+                Ok(start..end + T::from(1))
+            } else {
+                Err(anyhow!("Can't parse range: {}", s))
+            }
+        }
+        _ => Err(anyhow!("Invalid range: {}", s)),
     }
 }

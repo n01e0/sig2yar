@@ -1,0 +1,8 @@
+services:
+  clamav:
+    platform: linux/amd64
+    image: clamav/clamav
+    entrypoint: ["/bin/sh", "-lc"]
+    user: "0:0"
+    volumes:
+      - ./clamav-db:/var/lib/clamav

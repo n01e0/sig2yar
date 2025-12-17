@@ -20,18 +20,26 @@ pub struct LogicalSignature<'p> {
 
 impl<'p> LogicalSignature<'p> {
     pub fn parse(sig: &'p str) -> Result<Self> {
-        let mut parts = sig.split(';').collect::<Vec<&str>>();
-        if parts.len() < 4 {
-            return Err(anyhow::anyhow!("Invalid signature: not enough parts"));
-        }
-        let name = parts[0];
-        let target_description_block = parts[1];
-        let logical_expression = LogicalExpression::parse(String::from(parts[2]))
-            .with_context(|| "Can't parse LogicalExpression")?;
-        let subsigs = parts
-            .split_off(3)
+        let mut parts = sig.splitn(4, ';');
+        let name = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid signature: missing name"))?;
+        let target_description_block = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid signature: missing target description"))?;
+        let logical_expression = LogicalExpression::parse(
+            parts
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Invalid signature: missing expression"))?
+                .to_string(),
+        )
+        .with_context(|| "Can't parse LogicalExpression")?;
+        let subsig_block = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid signature: missing subsigs"))?;
+        let subsigs = split_subsignatures(subsig_block)
             .into_iter()
-            .map(|s| Subsignature::parse(s))
+            .map(Subsignature::parse)
             .collect::<Result<Vec<_>>>()
             .with_context(|| "Can't parse subsigs")?;
 
@@ -42,6 +50,51 @@ impl<'p> LogicalSignature<'p> {
             subsigs,
         })
     }
+}
+
+fn split_subsignatures<'p>(input: &'p str) -> Vec<&'p str> {
+    if input.is_empty() {
+        return Vec::new();
+    }
+
+    let mut subsigs = Vec::new();
+    let mut start = 0usize;
+    let mut in_pcre = false;
+    let mut escaped = false;
+
+    for (idx, ch) in input.char_indices() {
+        if in_pcre {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == '/' {
+                in_pcre = false;
+            }
+            continue;
+        }
+
+        match ch {
+            '/' => {
+                in_pcre = true;
+            }
+            ';' => {
+                subsigs.push(&input[start..idx]);
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+
+    if start <= input.len() {
+        subsigs.push(&input[start..]);
+    }
+
+    subsigs
 }
 
 impl<'p> Display for LogicalSignature<'p> {
