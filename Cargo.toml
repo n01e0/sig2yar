@@ -11,3 +11,6 @@ clap = { version="4.5.53", features=["derive"] }
 hex = "0.4.3"
 nom = "7.1.3"
 thiserror = "2.0.17"
+
+[dev-dependencies]
+yara-x = "1.10.0"

@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::fmt::Display;
 
+use crate::yara::YaraRule;
+
 mod target_description;
 use target_description::TargetDescription;
 
@@ -99,24 +101,9 @@ fn split_subsignatures<'p>(input: &'p str) -> Vec<&'p str> {
 
 impl<'p> Display for LogicalSignature<'p> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "
-rule {}
-{{
-    meta:
-        original_ident: \"{}\"
-        {}
-    strings:
-        \"{:?}\"
-    condition:
-        \"{:?}\"
-}}",
-            self.name.replace(".", "_").replace("-", "_"),
-            self.name,
-            self.target_description,
-            self.subsigs,
-            self.logical_expression
-        )
+        match YaraRule::try_from(self) {
+            Ok(rule) => write!(f, "{}", rule),
+            Err(_) => write!(f, "<invalid yara rule>"),
+        }
     }
 }
