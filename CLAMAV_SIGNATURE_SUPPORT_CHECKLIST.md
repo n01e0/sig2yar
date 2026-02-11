@@ -1,0 +1,83 @@
+# ClamAV Signature Support Checklist
+
+Last update: 2026-02-11
+
+このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
+
+---
+
+## 1) トップレベルDBタイプ（拡張子）
+
+### 1.1 現在サポート済み（少なくとも parse 対象）
+
+- [x] `hdb` (hash)
+- [x] `hsb` (hash)
+- [x] `mdb` (hash)
+- [x] `msb` (hash)
+- [x] `imp` (hash)
+- [x] `ldb` (logical)
+
+### 1.2 未サポート（parse/lower未対応）
+
+- [ ] `ndb` (extended/body signatures)
+- [ ] `idb`
+- [ ] `cdb`
+- [ ] `crb`
+- [ ] `cbc` (bytecode)
+- [ ] `pdb` (phishing)
+- [ ] `wdb` (phishing)
+- [ ] `ftm`
+- [ ] `fp` / `sfp` (false positive related)
+- [ ] `ign` / `ign2` (ignore lists)
+
+### 1.3 更新/差分系ファイル（取り込み方針未整理）
+
+- [ ] `hdu` / `hsu`
+- [ ] `ldu`
+- [ ] `mdu` / `msu`
+- [ ] `ndu`
+- [ ] `cfg` / `info` （シグネチャ本体ではないので扱い定義が必要）
+
+---
+
+## 2) ldb（logical）内部要素のサポート状況
+
+### 2.1 変換できるもの
+
+- [x] hex subsig -> YARA hex string
+- [x] raw subsig -> YARA text string
+- [x] pcre-like subsig -> YARA regex string（基本）
+- [x] logical condition: `&`, `|`, `=`, `>`, `<`, `=min,max`
+
+### 2.2 近似/暫定対応（要改善）
+
+- [ ] `byte_comparison` は現在トリガーsubsigへの alias 近似（厳密評価ではない）
+- [ ] `macro` (`${min-max}id$`) は参照先subsigへの alias 近似
+- [ ] `fuzzy_img` は literal fallback
+
+### 2.3 未対応/不足
+
+- [ ] `MultiGt` / `MultiLt` (`>x,y` / `<x,y`) の本実装
+- [ ] PCRE flags の本対応（現在 `i` 以外は noteのみ）
+- [ ] PCRE trigger prefix の意味反映（現在 ignore note）
+- [ ] hexに付くmodifierの厳密反映（現在 ignore note）
+- [ ] target description を conditionに反映
+
+---
+
+## 3) 次にやる順（提案）
+
+1. [ ] `ndb` パーサ + IR + lower の最小実装
+2. [ ] `byte_comparison` の厳密 lower
+3. [ ] `macro` の意味反映（範囲条件）
+4. [ ] `fuzzy_img` の専用 lower
+5. [ ] PCRE flags / trigger prefix の本対応
+6. [ ] `idb/cdb/crb/cbc/pdb/wdb` の優先順決め
+
+---
+
+## 4) メモ（現状観測）
+
+`clamav-db/unpacked` の現物には以下拡張子が存在（2026-02-11時点）:
+
+- `hdb hsb mdb msb ldb ndb idb cdb crb cbc pdb wdb ftm fp sfp ign ign2 hdu hsu ldu mdu msu ndu cfg info`
