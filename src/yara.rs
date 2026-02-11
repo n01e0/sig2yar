@@ -497,6 +497,12 @@ fn lower_ndb_offset_condition(
     }
 
     if let Some((start, end)) = parse_u64_pair(offset) {
+        if start > end {
+            notes.push(format!(
+                "ndb absolute offset range with descending bounds {offset} is unsupported for strict lowering"
+            ));
+            return None;
+        }
         return Some(format!("{id} in ({start}..{end})"));
     }
 
@@ -713,7 +719,7 @@ fn parse_u64_pair(input: &str) -> Option<(u64, u64)> {
     let (lhs, rhs) = input.split_once(',')?;
     let start = lhs.parse::<u64>().ok()?;
     let end = rhs.parse::<u64>().ok()?;
-    Some((start.min(end), start.max(end)))
+    Some((start, end))
 }
 
 fn parse_ep_offset(input: &str) -> Option<(i64, Option<i64>)> {

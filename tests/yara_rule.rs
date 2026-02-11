@@ -408,6 +408,18 @@ fn lowers_ndb_basic_offset() {
 }
 
 #[test]
+fn rejects_ndb_descending_absolute_offset_range_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:100,10:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($a and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("descending bounds") && value.contains("strict lowering"))));
+}
+
+#[test]
 fn lowers_ndb_entrypoint_with_pe_import() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP+0,15:41424344").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
