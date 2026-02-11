@@ -243,12 +243,8 @@ fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String>
         return None;
     }
 
-    if tokens
-        .first()
-        .is_some_and(|token| is_ndb_jump_token(token))
-        || tokens
-            .last()
-            .is_some_and(|token| is_ndb_jump_token(token))
+    if tokens.first().is_some_and(|token| is_ndb_jump_token(token))
+        || tokens.last().is_some_and(|token| is_ndb_jump_token(token))
     {
         notes.push("ndb body starts/ends with jump token unsupported by YARA".to_string());
         return None;
@@ -262,7 +258,22 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         "0" => None,
         "1" => Some("uint16(0) == 0x5A4D".to_string()), // MZ/PE
         "2" => Some("uint32(0) == 0xE011CFD0 and uint32(4) == 0xE11AB1A1".to_string()), // OLE2
+        "3" => {
+            notes.push(
+                "ndb target_type=3 (HTML normalized) lowered with structural HTML heuristic"
+                    .to_string(),
+            );
+            Some(ndb_html_target_condition())
+        }
+        "4" => {
+            notes.push(
+                "ndb target_type=4 (mail) lowered with header-prefix heuristic".to_string(),
+            );
+            Some(ndb_mail_target_condition())
+        }
+        "5" => Some(ndb_graphics_target_condition()),
         "6" => Some("uint32(0) == 0x464C457F".to_string()), // ELF
+        "7" => Some(ndb_ascii_target_condition()),
         "9" => Some(
             "(uint32(0) == 0xCEFAEDFE or uint32(0) == 0xCFFAEDFE or uint32(0) == 0xFEEDFACE or uint32(0) == 0xFEEDFACF or uint32(0) == 0xBEBAFECA or uint32(0) == 0xCAFEBABE)".to_string(),
         ), // Mach-O and FAT
@@ -278,6 +289,36 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
             None
         }
     }
+}
+
+fn ndb_ascii_predicate(var: &str) -> String {
+    format!(
+        "({var} == 0x09 or {var} == 0x0A or {var} == 0x0D or ({var} >= 0x20 and {var} <= 0x7E))"
+    )
+}
+
+fn ndb_ascii_target_condition() -> String {
+    let pred = ndb_ascii_predicate("uint8(i)");
+    format!(
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({pred})) or (filesize > 4096 and for all i in (0..4095) : ({pred})))"
+    )
+}
+
+fn ndb_html_target_condition() -> String {
+    let ascii_pred = ndb_ascii_predicate("uint8(i)");
+    format!(
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E)) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E)))"
+    )
+}
+
+fn ndb_mail_target_condition() -> String {
+    "filesize > 5 and (uint32(0) == 0x6D6F7246 or uint32(0) == 0x65636552 or uint32(0) == 0x6A627553 or uint32(0) == 0x65746144 or uint32(0) == 0x454D494D or uint32(0) == 0x75746552)"
+        .to_string()
+}
+
+fn ndb_graphics_target_condition() -> String {
+    "(uint32(0) == 0x474E5089 or uint16(0) == 0xD8FF or uint32(0) == 0x38464947 or uint16(0) == 0x4D42 or uint32(0) == 0x002A4949 or uint32(0) == 0x2A004D4D or (filesize >= 12 and uint32(0) == 0x0C000000 and uint32(4) == 0x2020506A and uint32(8) == 0x0A870A0D))"
+        .to_string()
 }
 
 fn lower_ndb_offset_condition(

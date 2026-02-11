@@ -143,3 +143,42 @@ fn lowers_ndb_negative_jump_with_note() {
     assert!(src.contains("ndb negative jump {-15} approximated to [0-15]"));
     assert_eq!(rule.condition, "$a");
 }
+
+#[test]
+fn lowers_ndb_target_type_html_with_constraint() {
+    let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint8(j) == 0x3C"));
+    assert!(rule.condition.contains("for all i"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("target_type=3"))));
+}
+
+#[test]
+fn lowers_ndb_target_type_mail_with_constraint() {
+    let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint32(0) == 0x6D6F7246"));
+}
+
+#[test]
+fn lowers_ndb_target_type_graphics_with_magic_check() {
+    let sig = NdbSignature::parse("Img.Test-1:5:*:89504e47").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint32(0) == 0x474E5089"));
+    assert!(rule.condition.contains("uint16(0) == 0xD8FF"));
+}
+
+#[test]
+fn lowers_ndb_target_type_ascii_with_constraint() {
+    let sig = NdbSignature::parse("Txt.Test-1:7:*:68656c6c6f").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for all i"));
+    assert!(rule.condition.contains("uint8(i) >= 0x20"));
+}
