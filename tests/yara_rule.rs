@@ -376,7 +376,8 @@ fn lowers_ndb_target_type_html_with_constraint() {
 
     assert!(rule.condition.contains("uint8(j) == 0x3C"));
     assert!(rule.condition.contains("for all i"));
-    assert!(rule.condition.contains("0x68")); // h/H in <html marker checks
+    assert!(rule.condition.contains("for any r in (0..511)")); // root marker in early window
+    assert!(rule.condition.contains("uint8((c) + 1) == 0x2F")); // close-tag marker (</...)
     assert!(rule
         .meta
         .iter()
@@ -391,6 +392,12 @@ fn lowers_ndb_target_type_mail_with_constraint() {
     assert!(rule.condition.contains("uint8((0) + 0) == 0x46"));
     assert!(rule.condition.contains("uint8((0) + 4) == 0x3A"));
     assert!(rule.condition.contains("0x52")); // R/r from Received:
+    assert!(rule.condition.contains("for any h in")); // secondary headers required
+    assert!(rule.condition.contains("for any s in")); // header/body separator required
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("strict multi-header heuristic"))));
 }
 
 #[test]
