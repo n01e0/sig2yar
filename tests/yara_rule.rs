@@ -80,12 +80,27 @@ fn lowers_pcre_subsignature_with_nocase() {
 }
 
 #[test]
-fn lowers_byte_comparison_as_trigger_alias() {
+fn lowers_byte_comparison_with_value_check() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#ib2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.strings.len(), 1);
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("uint16be(@s0[j] + 26) > 512"));
+    assert!(rule.condition.contains("(@s0[j] + 26) + 2 <= filesize"));
+}
+
+#[test]
+fn byte_comparison_non_raw_falls_back_to_alias() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#db2#>512)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.strings.len(), 1);
     assert_eq!(rule.condition, "($s0 and $s0)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("fell back to trigger alias"))));
 }
 
 #[test]
