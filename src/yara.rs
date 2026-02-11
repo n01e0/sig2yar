@@ -1300,7 +1300,11 @@ fn lower_raw_or_pcre_subsignature(
                     }
                 }
                 'E' => notes.push(format!("subsig[{idx}] pcre flag 'E' is not mapped yet")),
-                'U' => notes.push(format!("subsig[{idx}] pcre flag 'U' is not mapped yet")),
+                'U' => {
+                    if !inline_flags.contains('U') {
+                        inline_flags.push('U');
+                    }
+                }
                 'a' => {
                     anchored = true;
                     notes.push(format!(
