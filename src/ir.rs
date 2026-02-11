@@ -48,6 +48,10 @@ pub struct NdbSignature {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetDescription {
     pub raw: String,
+    pub target_type: Option<String>,
+    pub file_size: Option<(u64, u64)>,
+    pub entry_point: Option<(u64, u64)>,
+    pub number_of_sections: Option<(u64, u64)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

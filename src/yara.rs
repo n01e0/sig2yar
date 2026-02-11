@@ -622,7 +622,16 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
     }
 
     let (strings, id_map, mut notes) = lower_subsignatures(&value.subsignatures);
-    let condition = lower_condition(&value.expression, &id_map, &mut notes);
+    let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
+
+    let mut imports = Vec::new();
+    let mut condition_parts = vec![base_condition.clone()];
+    condition_parts.extend(lower_target_description_conditions(
+        &value.target_description,
+        &mut imports,
+    ));
+
+    let condition = join_condition(condition_parts, "and");
     let strings = drop_unreferenced_strings(strings, &condition, &mut notes);
 
     if !notes.is_empty() {
@@ -637,8 +646,44 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
         meta,
         strings,
         condition,
-        imports: Vec::new(),
+        imports,
     })
+}
+
+fn lower_target_description_conditions(
+    target: &ir::TargetDescription,
+    imports: &mut Vec<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+
+    if let Some((min, max)) = target.file_size {
+        out.push(range_condition("filesize", min, max));
+    }
+
+    if let Some((min, max)) = target.entry_point {
+        push_import(imports, "pe");
+        out.push(range_condition("pe.entry_point", min, max));
+    }
+
+    if let Some((min, max)) = target.number_of_sections {
+        push_import(imports, "pe");
+        out.push(range_condition("pe.number_of_sections", min, max));
+    }
+
+    out
+}
+
+fn push_import(imports: &mut Vec<String>, module: &str) {
+    if !imports.iter().any(|v| v == module) {
+        imports.push(module.to_string());
+    }
+}
+
+fn range_condition(name: &str, min: u64, max: u64) -> String {
+    if min == max {
+        return format!("{name} == {min}");
+    }
+    format!("({name} >= {min} and {name} <= {max})")
 }
 
 fn lower_subsignatures(
