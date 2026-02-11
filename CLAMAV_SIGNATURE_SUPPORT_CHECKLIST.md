@@ -70,6 +70,7 @@ Last update: 2026-02-11
 - [x] bodyパターン本体のYARA化（hex/wildcard/jump/alt の基本）
 - [x] offsetの主要形式をconditionへ反映（`*`, `n`, `n,m`, `EP±`, `Sx+`, `SL+`, `SE`, `EOF`）
 - [x] target_typeの主要条件化（`1,2,3,4,5,6,7,9,10,11,12`）
+- [x] DB feature coverageテスト（target/offset/body各カテゴリの代表サンプルを固定検証）
 - [ ] 一部構文の近似（例: 負数を含む複合range jump）を厳密化
 - [ ] target_type（残: 8/13+ や3/4/7のheuristic厳密化）の条件化
 
