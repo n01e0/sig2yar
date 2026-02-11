@@ -1,5 +1,6 @@
 use sig2yar::parser::{hash::HashSignature, logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::{self, YaraRule};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -176,6 +177,248 @@ fn sample_ndb_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sa
     }
 
     samples
+}
+
+type NdbPredicate = fn(&NdbSignature<'_>) -> bool;
+
+struct NdbFeatureSpec {
+    name: &'static str,
+    predicate: NdbPredicate,
+}
+
+fn ndb_feature_specs() -> Vec<NdbFeatureSpec> {
+    vec![
+        NdbFeatureSpec {
+            name: "target_type_0",
+            predicate: |s| s.target_type == "0",
+        },
+        NdbFeatureSpec {
+            name: "target_type_1",
+            predicate: |s| s.target_type == "1",
+        },
+        NdbFeatureSpec {
+            name: "target_type_2",
+            predicate: |s| s.target_type == "2",
+        },
+        NdbFeatureSpec {
+            name: "target_type_3",
+            predicate: |s| s.target_type == "3",
+        },
+        NdbFeatureSpec {
+            name: "target_type_4",
+            predicate: |s| s.target_type == "4",
+        },
+        NdbFeatureSpec {
+            name: "target_type_5",
+            predicate: |s| s.target_type == "5",
+        },
+        NdbFeatureSpec {
+            name: "target_type_6",
+            predicate: |s| s.target_type == "6",
+        },
+        NdbFeatureSpec {
+            name: "target_type_7",
+            predicate: |s| s.target_type == "7",
+        },
+        NdbFeatureSpec {
+            name: "target_type_9",
+            predicate: |s| s.target_type == "9",
+        },
+        NdbFeatureSpec {
+            name: "target_type_10",
+            predicate: |s| s.target_type == "10",
+        },
+        NdbFeatureSpec {
+            name: "target_type_11",
+            predicate: |s| s.target_type == "11",
+        },
+        NdbFeatureSpec {
+            name: "target_type_12",
+            predicate: |s| s.target_type == "12",
+        },
+        NdbFeatureSpec {
+            name: "offset_any",
+            predicate: |s| s.offset == "*",
+        },
+        NdbFeatureSpec {
+            name: "offset_abs",
+            predicate: |s| is_ascii_digits(s.offset),
+        },
+        NdbFeatureSpec {
+            name: "offset_abs_range",
+            predicate: |s| is_ascii_digit_range(s.offset),
+        },
+        NdbFeatureSpec {
+            name: "offset_ep",
+            predicate: |s| s.offset.starts_with("EP"),
+        },
+        NdbFeatureSpec {
+            name: "offset_section",
+            predicate: |s| is_section_offset(s.offset),
+        },
+        NdbFeatureSpec {
+            name: "offset_sl",
+            predicate: |s| s.offset.starts_with("SL+"),
+        },
+        NdbFeatureSpec {
+            name: "offset_se",
+            predicate: |s| s.offset.starts_with("SE"),
+        },
+        NdbFeatureSpec {
+            name: "offset_eof",
+            predicate: |s| s.offset.starts_with("EOF"),
+        },
+        NdbFeatureSpec {
+            name: "body_star",
+            predicate: |s| s.body.contains('*'),
+        },
+        NdbFeatureSpec {
+            name: "body_fixed_jump",
+            predicate: |s| has_curly_token(s.body, |tok| is_ascii_digits(tok)),
+        },
+        NdbFeatureSpec {
+            name: "body_negative_jump",
+            predicate: |s| has_curly_token(s.body, is_negative_jump_token),
+        },
+        NdbFeatureSpec {
+            name: "body_open_jump",
+            predicate: |s| has_curly_token(s.body, is_open_ended_jump_token),
+        },
+        NdbFeatureSpec {
+            name: "body_range_jump",
+            predicate: |s| has_curly_token(s.body, is_positive_range_jump_token),
+        },
+        NdbFeatureSpec {
+            name: "body_alt",
+            predicate: |s| s.body.contains('(') && s.body.contains('|') && s.body.contains(')'),
+        },
+        NdbFeatureSpec {
+            name: "body_square",
+            predicate: |s| s.body.contains('[') && s.body.contains(']'),
+        },
+        NdbFeatureSpec {
+            name: "body_nibble_wildcard",
+            predicate: |s| s.body.contains('?'),
+        },
+    ]
+}
+
+fn collect_ndb_feature_samples(db_dir: &Path) -> (Vec<(String, Sample)>, Vec<String>) {
+    let specs = ndb_feature_specs();
+    let mut found: Vec<Option<Sample>> = (0..specs.len()).map(|_| None).collect();
+    let mut remaining: HashSet<usize> = (0..specs.len()).collect();
+
+    for path in collect_files(db_dir, &["ndb"]) {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            if remaining.is_empty() {
+                break;
+            }
+
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let parsed = match NdbSignature::parse(line) {
+                Ok(parsed) => parsed,
+                Err(_) => continue,
+            };
+
+            let sample = Sample {
+                line: line.to_string(),
+                origin: format!("{}:{}", path.display(), line_no + 1),
+            };
+
+            let matches: Vec<usize> = remaining
+                .iter()
+                .copied()
+                .filter(|idx| (specs[*idx].predicate)(&parsed))
+                .collect();
+
+            for idx in matches {
+                found[idx] = Some(sample.clone());
+                remaining.remove(&idx);
+            }
+        }
+
+        if remaining.is_empty() {
+            break;
+        }
+    }
+
+    let mut covered = Vec::new();
+    let mut missing = Vec::new();
+
+    for (idx, spec) in specs.iter().enumerate() {
+        match &found[idx] {
+            Some(sample) => covered.push((spec.name.to_string(), sample.clone())),
+            None => missing.push(spec.name.to_string()),
+        }
+    }
+
+    (covered, missing)
+}
+
+fn is_ascii_digits(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|c| c.is_ascii_digit())
+}
+
+fn is_ascii_digit_range(value: &str) -> bool {
+    let Some((lhs, rhs)) = value.split_once(',') else {
+        return false;
+    };
+    is_ascii_digits(lhs) && is_ascii_digits(rhs)
+}
+
+fn is_section_offset(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix('S') else {
+        return false;
+    };
+    !rest.starts_with('L') && !rest.starts_with('E') && rest.contains('+')
+}
+
+fn has_curly_token(body: &str, predicate: fn(&str) -> bool) -> bool {
+    let mut pos = 0usize;
+    while let Some(open_rel) = body[pos..].find('{') {
+        let open = pos + open_rel;
+        let Some(close_rel) = body[open + 1..].find('}') else {
+            break;
+        };
+        let close = open + 1 + close_rel;
+        let token = body[open + 1..close].trim();
+        if predicate(token) {
+            return true;
+        }
+        pos = close + 1;
+    }
+    false
+}
+
+fn is_negative_jump_token(token: &str) -> bool {
+    let Some(rest) = token.strip_prefix('-') else {
+        return false;
+    };
+    is_ascii_digits(rest)
+}
+
+fn is_open_ended_jump_token(token: &str) -> bool {
+    let Some(rest) = token.strip_suffix('-') else {
+        return false;
+    };
+    is_ascii_digits(rest)
+}
+
+fn is_positive_range_jump_token(token: &str) -> bool {
+    let Some((lhs, rhs)) = token.split_once('-') else {
+        return false;
+    };
+    is_ascii_digits(lhs) && is_ascii_digits(rhs)
 }
 
 #[test]
@@ -407,5 +650,41 @@ fn yara_ndb_rules_from_db_samples_compile() {
 
         yara_x::compile(src.as_str())
             .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_ndb_feature_coverage_samples_compile() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let (samples, missing) = collect_ndb_feature_samples(&db_dir);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No ndb signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    if !missing.is_empty() {
+        panic!(
+            "NDB feature coverage missing samples for: {}",
+            missing.join(", ")
+        );
+    }
+
+    for (feature, sample) in samples {
+        let sig = NdbSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("[{feature}] {}: parse failed: {}", sample.origin, e));
+        let ir = sig.to_ir();
+        let src = yara::render_ndb_signature(&ir);
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("[{feature}] {}: compile failed: {}", sample.origin, e));
     }
 }
