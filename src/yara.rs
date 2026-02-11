@@ -1648,17 +1648,24 @@ fn lower_byte_comparison_condition(
     known_ids: &[Option<String>],
     notes: &mut Vec<String>,
 ) -> Option<String> {
-    let trigger_id = known_ids
+    let Some(trigger_id) = known_ids
         .get(byte_cmp.trigger_idx)
         .and_then(|v| v.as_ref())
-        .cloned()?;
+        .cloned()
+    else {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison trigger {} unresolved; lowered to false for safety",
+            byte_cmp.trigger_idx
+        ));
+        return Some("false".to_string());
+    };
 
     if !is_yara_string_identifier(&trigger_id) {
         notes.push(format!(
-            "subsig[{idx}] byte_comparison trigger {} is not a direct string id",
+            "subsig[{idx}] byte_comparison trigger {} is not a direct string id; lowered to false for safety",
             byte_cmp.trigger_idx
         ));
-        return None;
+        return Some("false".to_string());
     }
 
     let base = byte_cmp.options.base.unwrap_or(ByteCmpBase::Auto);
@@ -1697,9 +1704,9 @@ fn lower_byte_comparison_condition(
             8 => "uint64",
             _ => {
                 notes.push(format!(
-                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8)"
+                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8); lowered to false for safety"
                 ));
-                return None;
+                return Some("false".to_string());
             }
         },
         ByteCmpEndian::Big => match num_bytes {
@@ -1709,9 +1716,9 @@ fn lower_byte_comparison_condition(
             8 => "uint64be",
             _ => {
                 notes.push(format!(
-                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8)"
+                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8); lowered to false for safety"
                 ));
-                return None;
+                return Some("false".to_string());
             }
         },
     };
