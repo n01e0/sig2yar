@@ -2,7 +2,7 @@ use nom::{
     character::complete::{char, hex_digit1, one_of},
     combinator::{map, map_res, opt},
     multi::separated_list0,
-    IResult,
+    IResult, Parser,
 };
 use std::str::FromStr;
 
@@ -59,7 +59,7 @@ impl ByteComparison {
 }
 
 fn parse_usize(input: &str) -> IResult<&str, usize> {
-    map_res(hex_digit1, FromStr::from_str)(input)
+    map_res(hex_digit1, FromStr::from_str).parse(input)
 }
 
 fn parse_offset(input: &str) -> IResult<&str, Offset> {
@@ -81,7 +81,8 @@ fn parse_base(input: &str) -> IResult<&str, Option<Base>> {
         'a' => Base::Auto,
         'i' => Base::Raw,
         _ => unreachable!(),
-    }))(input)
+    }))
+    .parse(input)
 }
 
 fn parse_endian(input: &str) -> IResult<&str, Option<Endian>> {
@@ -89,13 +90,14 @@ fn parse_endian(input: &str) -> IResult<&str, Option<Endian>> {
         'l' => Endian::Little,
         'b' => Endian::Big,
         _ => unreachable!(),
-    }))(input)
+    }))
+    .parse(input)
 }
 
 fn parse_byte_options(input: &str) -> IResult<&str, ByteOptions> {
     let (input, base) = parse_base(input)?;
     let (input, endian) = parse_endian(input)?;
-    let (input, evaluate) = map(opt(char('e')), |o| o.is_some())(input)?;
+    let (input, evaluate) = map(opt(char('e')), |o| o.is_some()).parse(input)?;
     let (input, num_bytes) = parse_usize(input)?;
     Ok((
         input,
@@ -121,7 +123,7 @@ fn parse_comparison(input: &str) -> IResult<&str, Comparison> {
 }
 
 fn parse_comparisons(input: &str) -> IResult<&str, Vec<Comparison>> {
-    separated_list0(char(','), parse_comparison)(input)
+    separated_list0(char(','), parse_comparison).parse(input)
 }
 
 pub fn parse_byte_comparison(input: &str) -> IResult<&str, ByteComparison> {

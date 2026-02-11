@@ -5,7 +5,7 @@ use nom::{
     combinator::{map, recognize},
     multi::many0,
     sequence::preceded,
-    IResult,
+    IResult, Parser,
 };
 
 use crate::parser::logical::expression::{parse_expression, LogicalExpression};
@@ -46,7 +46,8 @@ fn parse_flags(input: &str) -> IResult<&str, Vec<Flag>> {
             map(char('U'), |_| Flag::Ungreedy),
         ))),
         |flags| flags,
-    )(input)
+    )
+    .parse(input)
 }
 
 fn parse_pcre<'p>(input: &'p str) -> IResult<&'p str, PCRE<'p>> {
@@ -56,7 +57,8 @@ fn parse_pcre<'p>(input: &'p str) -> IResult<&'p str, PCRE<'p>> {
     let (input, pattern) = recognize(many0(alt((
         preceded(char('\\'), none_of("")),
         none_of("\\/"),
-    ))))(input)?;
+    ))))
+    .parse(input)?;
     let (input, _) = char('/')(input)?;
     let (input, flags) = parse_flags(input)?;
 

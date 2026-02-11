@@ -5,7 +5,7 @@ use nom::{
     combinator::{map, map_res, opt},
     multi::separated_list0,
     sequence::{delimited, preceded},
-    IResult,
+    IResult, Parser,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -57,14 +57,15 @@ impl LogicalExpression {
 }
 
 fn parse_number<'i>(input: &'i str) -> IResult<&'i str, usize> {
-    map_res(digit1, str::parse::<usize>)(input)
+    map_res(digit1, str::parse::<usize>).parse(input)
 }
 
 fn parse_sub_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
     alt((
         map(parse_number, LogicalExpression::SubExpression),
         parse_paren_expression,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn parse_paren_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
@@ -72,15 +73,16 @@ fn parse_paren_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpress
         preceded(multispace0, tag("(")),
         parse_expression,
         preceded(multispace0, tag(")")),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn parse_comparison<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
     let (input, expr) = parse_sub_expression(input)?;
-    let (input, op) = opt(alt((tag("="), tag(">"), tag("<"))))(input)?;
+    let (input, op) = opt(alt((tag("="), tag(">"), tag("<")))).parse(input)?;
     if let Some(op) = op {
         let (input, x) = parse_number(input)?;
-        let (input, y) = opt(preceded(tag(","), parse_number))(input)?;
+        let (input, y) = opt(preceded(tag(","), parse_number)).parse(input)?;
         match (op, y) {
             ("=", Some(y_val)) => Ok((
                 input,
@@ -108,7 +110,7 @@ pub(crate) fn parse_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalEx
 
 fn parse_and_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
     let (input, exprs) =
-        separated_list0(preceded(multispace0, tag("&")), parse_or_expression)(input)?;
+        separated_list0(preceded(multispace0, tag("&")), parse_or_expression).parse(input)?;
     if exprs.len() == 1 {
         Ok((input, exprs.into_iter().next().unwrap()))
     } else {
@@ -118,7 +120,7 @@ fn parse_and_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpressio
 
 fn parse_or_expression<'i>(input: &'i str) -> IResult<&'i str, LogicalExpression> {
     let (input, exprs) =
-        separated_list0(preceded(multispace0, tag("|")), parse_single_expression)(input)?;
+        separated_list0(preceded(multispace0, tag("|")), parse_single_expression).parse(input)?;
     if exprs.len() == 1 {
         Ok((input, exprs.into_iter().next().unwrap()))
     } else {
