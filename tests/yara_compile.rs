@@ -59,3 +59,21 @@ fn ndb_rule_with_alternatives_and_wildcards_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb complex hex rule");
 }
+
+#[test]
+fn ndb_rule_with_target_type_3_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=3 rule");
+}
+
+#[test]
+fn ndb_rule_with_target_type_7_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Txt.Test-1:7:*:68656c6c6f").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=7 rule");
+}
