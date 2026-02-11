@@ -12,6 +12,7 @@ pub struct TargetDescription<'t> {
     entry_point: Option<Range<usize>>,
     number_of_sections: Option<Range<usize>>,
     container: Option<FileType>,
+    container_raw: Option<&'t str>,
     intermediates: Option<&'t str>,
     icon_group1: Option<&'t str>,
     icon_group2: Option<&'t str>,
@@ -242,9 +243,8 @@ impl<'t> TargetDescription<'t> {
         )
         .with_context(|| "Can't parse TargetType")?;
 
-        let container = map
-            .get("Container")
-            .and_then(|c| FileType::try_from(*c).ok());
+        let container_raw = map.get("Container").copied();
+        let container = container_raw.and_then(|c| FileType::try_from(c).ok());
 
         Ok({
             TargetDescription {
@@ -260,6 +260,7 @@ impl<'t> TargetDescription<'t> {
                     .get("NumberOfSections")
                     .and_then(|n| parse_range::<usize>(n).ok()),
                 container,
+                container_raw,
                 intermediates: map.get("Intermediates").map(|v| *v),
                 icon_group1: map.get("IconGroup1").copied(),
                 icon_group2: map.get("IconGroup2").copied(),
@@ -274,6 +275,8 @@ impl<'t> TargetDescription<'t> {
             file_size: range_to_inclusive_u64(self.file_size.as_ref()),
             entry_point: range_to_inclusive_u64(self.entry_point.as_ref()),
             number_of_sections: range_to_inclusive_u64(self.number_of_sections.as_ref()),
+            container: self.container_raw.map(|v| v.to_string()),
+            intermediates: self.intermediates.map(|v| v.to_string()),
         }
     }
 }

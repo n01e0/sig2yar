@@ -731,6 +731,7 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
     condition_parts.extend(lower_target_description_conditions(
         &value.target_description,
         &mut imports,
+        &mut notes,
     ));
 
     let condition = join_condition(condition_parts, "and");
@@ -755,6 +756,7 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
 fn lower_target_description_conditions(
     target: &ir::TargetDescription,
     imports: &mut Vec<String>,
+    notes: &mut Vec<String>,
 ) -> Vec<String> {
     let mut out = Vec::new();
 
@@ -770,6 +772,20 @@ fn lower_target_description_conditions(
     if let Some((min, max)) = target.number_of_sections {
         push_import(imports, "pe");
         out.push(range_condition("pe.number_of_sections", min, max));
+    }
+
+    if let Some(container) = target.container.as_deref() {
+        notes.push(format!(
+            "target description Container={container} is not observable in standalone YARA scans; constrained to false for safety"
+        ));
+        out.push("false".to_string());
+    }
+
+    if let Some(intermediates) = target.intermediates.as_deref() {
+        notes.push(format!(
+            "target description Intermediates={intermediates} is not observable in standalone YARA scans; constrained to false for safety"
+        ));
+        out.push("false".to_string());
     }
 
     out
