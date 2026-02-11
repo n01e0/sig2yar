@@ -141,17 +141,25 @@ fn lower_subsignatures(
                 notes.push(format!("subsig[{idx}] skipped: invalid hex pattern"));
                 id_map.push(None);
             }
-            ir::SubsignaturePattern::Raw(raw) => {
-                match lower_raw_or_pcre_subsignature(idx, &id, raw, &subsig.modifiers, &mut notes) {
-                    Some(line) => {
-                        strings.push(YaraString::Raw(line));
-                        id_map.push(Some(id));
-                    }
-                    None => {
-                        id_map.push(None);
-                    }
+            ir::SubsignaturePattern::Raw(raw) => match lower_raw_or_pcre_subsignature(
+                idx,
+                &id,
+                raw,
+                &subsig.modifiers,
+                &id_map,
+                &mut notes,
+            ) {
+                RawSubsigLowering::String(line) => {
+                    strings.push(YaraString::Raw(line));
+                    id_map.push(Some(id));
                 }
-            }
+                RawSubsigLowering::Alias(alias) => {
+                    id_map.push(Some(alias));
+                }
+                RawSubsigLowering::Skip => {
+                    id_map.push(None);
+                }
+            },
         }
     }
 
@@ -399,16 +407,55 @@ fn subsig_modifier_codes(modifiers: &[ir::SubsignatureModifier]) -> String {
         .join("")
 }
 
+enum RawSubsigLowering {
+    String(String),
+    Alias(String),
+    Skip,
+}
+
 fn lower_raw_or_pcre_subsignature(
     idx: usize,
     id: &str,
     raw: &str,
     modifiers: &[ir::SubsignatureModifier],
+    known_ids: &[Option<String>],
     notes: &mut Vec<String>,
-) -> Option<String> {
+) -> RawSubsigLowering {
     if raw.trim().is_empty() {
         notes.push(format!("subsig[{idx}] skipped: empty raw pattern"));
-        return None;
+        return RawSubsigLowering::Skip;
+    }
+
+    if let Some(trigger_idx) = parse_byte_comparison_trigger(raw) {
+        if let Some(Some(alias)) = known_ids.get(trigger_idx) {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison lowered as alias to subsig[{trigger_idx}]"
+            ));
+            return RawSubsigLowering::Alias(alias.clone());
+        }
+
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison trigger {trigger_idx} unresolved; fallback to literal"
+        ));
+    }
+
+    if let Some(macro_idx) = parse_macro_reference(raw) {
+        if let Some(Some(alias)) = known_ids.get(macro_idx) {
+            notes.push(format!(
+                "subsig[{idx}] macro lowered as alias to subsig[{macro_idx}]"
+            ));
+            return RawSubsigLowering::Alias(alias.clone());
+        }
+
+        notes.push(format!(
+            "subsig[{idx}] macro reference {macro_idx} unresolved; fallback to literal"
+        ));
+    }
+
+    if is_fuzzy_img_pattern(raw) {
+        notes.push(format!(
+            "subsig[{idx}] fuzzy_img lowering is approximate (literal fallback)"
+        ));
     }
 
     let mut string_mods = StringModifierSet::default();
@@ -447,12 +494,12 @@ fn lower_raw_or_pcre_subsignature(
         }
 
         let render_mods = render_string_modifiers(&string_mods);
-        return Some(format!("{id} = /{}/{}", pcre.pattern, render_mods));
+        return RawSubsigLowering::String(format!("{id} = /{}/{}", pcre.pattern, render_mods));
     }
 
     let escaped = escape_yara_string(raw);
     let render_mods = render_string_modifiers(&string_mods);
-    Some(format!("{id} = \"{}\"{}", escaped, render_mods))
+    RawSubsigLowering::String(format!("{id} = \"{}\"{}", escaped, render_mods))
 }
 
 #[derive(Default)]
@@ -480,6 +527,42 @@ fn render_string_modifiers(mods: &StringModifierSet) -> String {
     }
 
     out
+}
+
+fn parse_byte_comparison_trigger(raw: &str) -> Option<usize> {
+    let open = raw.find('(')?;
+    if open == 0 || !raw.ends_with(')') || !raw.contains('#') {
+        return None;
+    }
+
+    let trigger = &raw[..open];
+    if !trigger.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    trigger.parse::<usize>().ok()
+}
+
+fn parse_macro_reference(raw: &str) -> Option<usize> {
+    if !raw.starts_with("${") || !raw.ends_with('$') {
+        return None;
+    }
+
+    let close = raw.find('}')?;
+    if close + 2 > raw.len() {
+        return None;
+    }
+
+    let ref_part = &raw[close + 1..raw.len() - 1];
+    if ref_part.is_empty() || !ref_part.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    ref_part.parse::<usize>().ok()
+}
+
+fn is_fuzzy_img_pattern(raw: &str) -> bool {
+    raw.starts_with("fuzzy_img#")
 }
 
 struct ParsedPcre<'a> {
