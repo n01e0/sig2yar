@@ -604,9 +604,9 @@ fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> 
                 return Some(format!("[{start}-{end}]"));
             }
             notes.push(format!(
-                "ndb range jump with descending bounds {{{value}}} treated as [{end}-{start}]"
+                "ndb range jump with descending bounds {{{value}}} is unsupported for strict lowering"
             ));
-            return Some(format!("[{end}-{start}]"));
+            return None;
         }
 
         notes.push(format!(

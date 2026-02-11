@@ -236,6 +236,16 @@ fn ndb_rule_with_open_ended_jump_compiles_with_yara_x() {
 }
 
 #[test]
+fn ndb_rule_with_descending_positive_range_jump_fallback_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-5}BB").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile ndb descending-range fallback rule");
+}
+
+#[test]
 fn ndb_rule_with_complex_signed_range_jump_fallback_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-10-5}BB").unwrap();
     let ir = sig.to_ir();
