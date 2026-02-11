@@ -1519,15 +1519,33 @@ fn lower_byte_comparison_condition(
     }
 
     let base = byte_cmp.options.base.unwrap_or(ByteCmpBase::Auto);
-    if !matches!(base, ByteCmpBase::Raw) {
-        notes.push(format!(
-            "subsig[{idx}] byte_comparison base {:?} not fully supported (needs raw 'i')",
-            base
-        ));
-        return None;
+    let num_bytes = byte_cmp.options.num_bytes;
+
+    let core = trigger_id.strip_prefix('$').unwrap_or(&trigger_id);
+
+    let start_expr = if byte_cmp.offset >= 0 {
+        format!("@{core}[j] + {}", byte_cmp.offset)
+    } else {
+        format!("@{core}[j] - {}", byte_cmp.offset.unsigned_abs())
+    };
+
+    let mut base_guards = Vec::new();
+    if byte_cmp.offset < 0 {
+        base_guards.push(format!("@{core}[j] >= {}", byte_cmp.offset.unsigned_abs()));
     }
 
-    let num_bytes = byte_cmp.options.num_bytes;
+    if !matches!(base, ByteCmpBase::Raw) {
+        return lower_textual_byte_comparison_condition(
+            idx,
+            core,
+            &start_expr,
+            base,
+            byte_cmp,
+            &base_guards,
+            notes,
+        );
+    }
+
     let read_fn = match byte_cmp.options.endian.unwrap_or(ByteCmpEndian::Big) {
         ByteCmpEndian::Little => match num_bytes {
             1 => "uint8",
@@ -1555,23 +1573,8 @@ fn lower_byte_comparison_condition(
         },
     };
 
-    let core = trigger_id.strip_prefix('$').unwrap_or(&trigger_id);
-
-    let start_expr = if byte_cmp.offset >= 0 {
-        format!("@{core}[j] + {}", byte_cmp.offset)
-    } else {
-        format!("@{core}[j] - {}", byte_cmp.offset.unsigned_abs())
-    };
-
-    let mut guards = Vec::new();
-    if byte_cmp.offset < 0 {
-        guards.push(format!("@{core}[j] >= {}", byte_cmp.offset.unsigned_abs()));
-    }
-
-    let exact_required = byte_cmp.options.exact || matches!(base, ByteCmpBase::Raw);
-    if exact_required {
-        guards.push(format!("({start_expr}) + {num_bytes} <= filesize"));
-    }
+    let mut guards = base_guards;
+    guards.push(format!("({start_expr}) + {num_bytes} <= filesize"));
 
     let value_expr = format!("{read_fn}({start_expr})");
     let mut cmp_parts = Vec::new();
@@ -1591,6 +1594,152 @@ fn lower_byte_comparison_condition(
         "for any j in (1..#{core}) : ({})",
         clause_parts.join(" and ")
     ))
+}
+
+fn lower_textual_byte_comparison_condition(
+    idx: usize,
+    core: &str,
+    start_expr: &str,
+    base: ByteCmpBase,
+    byte_cmp: &ParsedByteComparison,
+    base_guards: &[String],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little)) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw little-endian is unsupported"
+        ));
+        return None;
+    }
+
+    if !byte_cmp.options.exact {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw currently requires exact ('e')"
+        ));
+        return None;
+    }
+
+    if byte_cmp.comparisons.len() != 1 || !matches!(byte_cmp.comparisons[0].op, ByteCmpOp::Eq) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw currently supports only single '=' comparison"
+        ));
+        return None;
+    }
+
+    let width = match usize::try_from(byte_cmp.options.num_bytes) {
+        Ok(v) if v > 0 && v <= 64 => v,
+        _ => {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison non-raw width {} unsupported",
+                byte_cmp.options.num_bytes
+            ));
+            return None;
+        }
+    };
+
+    let value = byte_cmp.comparisons[0].value;
+    let candidates = build_textual_eq_candidates(base, width, value);
+    if candidates.is_empty() {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}",
+            value, width
+        ));
+        return None;
+    }
+
+    let mut guards = base_guards.to_vec();
+    guards.push(format!("({start_expr}) + {width} <= filesize"));
+
+    let value_exprs: Vec<String> = candidates
+        .iter()
+        .map(|candidate| build_ascii_candidate_condition(start_expr, candidate))
+        .collect();
+
+    let value_check = if value_exprs.len() == 1 {
+        value_exprs[0].clone()
+    } else {
+        join_condition(value_exprs, "or")
+    };
+
+    guards.push(value_check);
+
+    Some(format!(
+        "for any j in (1..#{core}) : ({})",
+        guards.join(" and ")
+    ))
+}
+
+fn build_textual_eq_candidates(base: ByteCmpBase, width: usize, value: u64) -> Vec<Vec<Vec<u8>>> {
+    let mut out = Vec::new();
+
+    let push_unique = |items: &mut Vec<Vec<Vec<u8>>>, candidate: Option<Vec<Vec<u8>>>| {
+        if let Some(candidate) = candidate {
+            if !items.contains(&candidate) {
+                items.push(candidate);
+            }
+        }
+    };
+
+    match base {
+        ByteCmpBase::Hex => push_unique(&mut out, build_hex_ascii_candidate(width, value)),
+        ByteCmpBase::Decimal => push_unique(&mut out, build_decimal_ascii_candidate(width, value)),
+        ByteCmpBase::Auto => {
+            push_unique(&mut out, build_decimal_ascii_candidate(width, value));
+            push_unique(&mut out, build_hex_ascii_candidate(width, value));
+        }
+        ByteCmpBase::Raw => {}
+    }
+
+    out
+}
+
+fn build_decimal_ascii_candidate(width: usize, value: u64) -> Option<Vec<Vec<u8>>> {
+    let raw = value.to_string();
+    if raw.len() > width {
+        return None;
+    }
+
+    let text = format!("{value:0width$}");
+    Some(text.bytes().map(|b| vec![b]).collect())
+}
+
+fn build_hex_ascii_candidate(width: usize, value: u64) -> Option<Vec<Vec<u8>>> {
+    let raw = format!("{value:X}");
+    if raw.len() > width {
+        return None;
+    }
+
+    let text = format!("{raw:0>width$}");
+    Some(
+        text.bytes()
+            .map(|b| {
+                if b.is_ascii_alphabetic() {
+                    vec![b.to_ascii_uppercase(), b.to_ascii_lowercase()]
+                } else {
+                    vec![b]
+                }
+            })
+            .collect(),
+    )
+}
+
+fn build_ascii_candidate_condition(start_expr: &str, candidate: &[Vec<u8>]) -> String {
+    let mut parts = Vec::new();
+    for (pos, alts) in candidate.iter().enumerate() {
+        let lhs = format!("uint8(({start_expr}) + {pos})");
+        if alts.len() == 1 {
+            parts.push(format!("{lhs} == 0x{:02X}", alts[0]));
+        } else {
+            let alt_expr = alts
+                .iter()
+                .map(|v| format!("{lhs} == 0x{:02X}", v))
+                .collect::<Vec<_>>()
+                .join(" or ");
+            parts.push(format!("({alt_expr})"));
+        }
+    }
+
+    join_condition(parts, "and")
 }
 
 fn is_yara_string_identifier(value: &str) -> bool {
