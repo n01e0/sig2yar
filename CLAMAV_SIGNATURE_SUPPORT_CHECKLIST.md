@@ -53,7 +53,7 @@ Last update: 2026-02-11
 
 - [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `= + exact(e)` を条件式にlower済み。non-rawの`>/<`や非exactなどは fallback
 - [ ] `macro` (`${min-max}id$`) は位置関係条件にlower済み（macro group意味の厳密反映は未完）
-- [ ] `fuzzy_img` は literal fallback
+- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note）
 
 ### 2.3 未対応/不足
 
