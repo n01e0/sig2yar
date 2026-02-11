@@ -274,14 +274,16 @@ fn lowers_macro_subsignature_as_positional_constraint() {
 }
 
 #[test]
-fn lowers_fuzzy_img_as_literal_fallback() {
+fn lowers_fuzzy_img_as_safe_false() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "$s0");
-    assert!(rule.strings.iter().any(|s| matches!(
-        s,
-        YaraString::Raw(raw) if raw == "$s0 = \"fuzzy_img#af2ad01ed42993c7#0\""
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes" && value.contains("fuzzy_img")
     )));
 }
 

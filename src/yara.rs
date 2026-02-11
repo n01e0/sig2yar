@@ -1277,10 +1277,18 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Skip;
     }
 
-    if is_fuzzy_img_pattern(raw) {
+    if let Some(fuzzy) = parse_fuzzy_img_subsignature(raw) {
         notes.push(format!(
-            "subsig[{idx}] fuzzy_img lowering is approximate (literal fallback)"
+            "subsig[{idx}] fuzzy_img hash '{}' is not representable in YARA; lowered to false",
+            preview_for_meta(&fuzzy.hash, 16)
         ));
+        if fuzzy.distance != 0 {
+            notes.push(format!(
+                "subsig[{idx}] fuzzy_img distance={} unsupported; lowered to false",
+                fuzzy.distance
+            ));
+        }
+        return RawSubsigLowering::Expr("false".to_string());
     }
 
     let mut string_mods = StringModifierSet::default();
@@ -1936,8 +1944,29 @@ fn lower_macro_subsignature_condition(
     ))
 }
 
-fn is_fuzzy_img_pattern(raw: &str) -> bool {
-    raw.starts_with("fuzzy_img#")
+#[derive(Debug, Clone)]
+struct ParsedFuzzyImg {
+    hash: String,
+    distance: u64,
+}
+
+fn parse_fuzzy_img_subsignature(raw: &str) -> Option<ParsedFuzzyImg> {
+    let rest = raw.strip_prefix("fuzzy_img#")?;
+    let (hash, distance) = match rest.split_once('#') {
+        Some((hash, dist)) => (hash, dist),
+        None => (rest, "0"),
+    };
+
+    if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    let distance = distance.parse::<u64>().ok()?;
+
+    Some(ParsedFuzzyImg {
+        hash: hash.to_string(),
+        distance,
+    })
 }
 
 #[derive(Debug, Clone, Copy)]
