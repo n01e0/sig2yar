@@ -196,6 +196,17 @@ fn lowers_pcre_inline_flags_for_dotall_multiline() {
 }
 
 #[test]
+fn lowers_pcre_inline_flag_extended_mode() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a b c/x").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /(?x:a b c)/")));
+}
+
+#[test]
 fn lowers_byte_comparison_with_value_check() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#ib2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

@@ -39,6 +39,15 @@ fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_x_flag_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a b c/x").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre-x generated rule");
+}
+
+#[test]
 fn yara_rule_with_target_description_constraints_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1,FileSize:10-20,EntryPoint:100-200,NumberOfSections:2-4;0;41414141",
