@@ -320,6 +320,18 @@ fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_raw_unsupported_size_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#ib3#=12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("raw size 3 unsupported") && value.contains("lowered to false for safety"))));
+}
+
+#[test]
 fn lowers_macro_subsignature_as_positional_constraint() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
