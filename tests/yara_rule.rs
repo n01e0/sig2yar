@@ -28,8 +28,8 @@ fn build_yara_rule_from_logical_signature() {
     }
     assert!(has_target);
 
-    assert!(rule.strings.is_empty());
-    assert_eq!(rule.condition, "true");
+    assert_eq!(rule.strings.len(), 1);
+    assert_eq!(rule.condition, "$s0");
 }
 
 #[test]
@@ -37,4 +37,21 @@ fn logical_display_matches_yara_rule_display() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;41414141").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     assert_eq!(sig.to_string(), rule.to_string());
+}
+
+#[test]
+fn lowers_logical_ops_to_condition() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.strings.len(), 2);
+    assert_eq!(rule.condition, "($s0 and $s1)");
+}
+
+#[test]
+fn lowers_match_count_expression() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)=1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "1 of ($s0, $s1)");
 }
