@@ -78,3 +78,33 @@ fn lowers_pcre_subsignature_with_nocase() {
         .iter()
         .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /abc/ nocase")));
 }
+
+#[test]
+fn lowers_byte_comparison_as_trigger_alias() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#ib2#>512)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.strings.len(), 1);
+    assert_eq!(rule.condition, "($s0 and $s0)");
+}
+
+#[test]
+fn lowers_macro_subsignature_as_reference_alias() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.strings.len(), 1);
+    assert_eq!(rule.condition, "($s0 or $s0)");
+}
+
+#[test]
+fn lowers_fuzzy_img_as_literal_fallback() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule.strings.iter().any(|s| matches!(
+        s,
+        YaraString::Raw(raw) if raw == "$s0 = \"fuzzy_img#af2ad01ed42993c7#0\""
+    )));
+}
