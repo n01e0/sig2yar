@@ -983,17 +983,25 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Skip;
     }
 
-    if let Some(macro_idx) = parse_macro_reference(raw) {
-        if let Some(Some(alias)) = known_ids.get(macro_idx) {
+    if let Some(macro_sig) = parse_macro_subsignature(raw) {
+        if let Some(lowered) = lower_macro_subsignature_condition(idx, &macro_sig, known_ids, notes)
+        {
+            return RawSubsigLowering::Expr(lowered);
+        }
+
+        if let Some(Some(alias)) = known_ids.get(macro_sig.ref_idx) {
             notes.push(format!(
-                "subsig[{idx}] macro lowered as alias to subsig[{macro_idx}]"
+                "subsig[{idx}] macro fell back to alias subsig[{}]",
+                macro_sig.ref_idx
             ));
             return RawSubsigLowering::Alias(alias.clone());
         }
 
         notes.push(format!(
-            "subsig[{idx}] macro reference {macro_idx} unresolved; fallback to literal"
+            "subsig[{idx}] macro reference {} unresolved; lowered to false",
+            macro_sig.ref_idx
         ));
+        return RawSubsigLowering::Skip;
     }
 
     if is_fuzzy_img_pattern(raw) {
@@ -1374,7 +1382,14 @@ fn is_yara_string_identifier(value: &str) -> bool {
     !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn parse_macro_reference(raw: &str) -> Option<usize> {
+#[derive(Debug, Clone, Copy)]
+struct ParsedMacroSubsignature {
+    min: u64,
+    max: u64,
+    ref_idx: usize,
+}
+
+fn parse_macro_subsignature(raw: &str) -> Option<ParsedMacroSubsignature> {
     if !raw.starts_with("${") || !raw.ends_with('$') {
         return None;
     }
@@ -1384,12 +1399,78 @@ fn parse_macro_reference(raw: &str) -> Option<usize> {
         return None;
     }
 
+    let range = &raw[2..close];
+    let (min, max) = parse_macro_range(range)?;
+
     let ref_part = &raw[close + 1..raw.len() - 1];
     if ref_part.is_empty() || !ref_part.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
 
-    ref_part.parse::<usize>().ok()
+    let ref_idx = ref_part.parse::<usize>().ok()?;
+
+    Some(ParsedMacroSubsignature { min, max, ref_idx })
+}
+
+fn parse_macro_range(range: &str) -> Option<(u64, u64)> {
+    if let Some((lhs, rhs)) = range.split_once('-') {
+        let min = lhs.trim().parse::<u64>().ok()?;
+        let max = rhs.trim().parse::<u64>().ok()?;
+        return Some((min, max));
+    }
+
+    let fixed = range.trim().parse::<u64>().ok()?;
+    Some((fixed, fixed))
+}
+
+fn lower_macro_subsignature_condition(
+    idx: usize,
+    macro_sig: &ParsedMacroSubsignature,
+    known_ids: &[Option<String>],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    if idx == 0 {
+        notes.push(format!(
+            "subsig[{idx}] macro cannot be first subsig; falling back"
+        ));
+        return None;
+    }
+
+    let prev_id = known_ids.get(idx - 1).and_then(|v| v.as_ref())?.clone();
+    let ref_id = known_ids
+        .get(macro_sig.ref_idx)
+        .and_then(|v| v.as_ref())?
+        .clone();
+
+    if !is_yara_string_identifier(&prev_id) || !is_yara_string_identifier(&ref_id) {
+        notes.push(format!(
+            "subsig[{idx}] macro needs direct string ids for prev/ref subsigs"
+        ));
+        return None;
+    }
+
+    let (min, max) = if macro_sig.min <= macro_sig.max {
+        (macro_sig.min, macro_sig.max)
+    } else {
+        notes.push(format!(
+            "subsig[{idx}] macro range {}-{} reordered to {}-{}",
+            macro_sig.min, macro_sig.max, macro_sig.max, macro_sig.min
+        ));
+        (macro_sig.max, macro_sig.min)
+    };
+
+    let prev_core = prev_id.strip_prefix('$').unwrap_or(&prev_id);
+    let ref_core = ref_id.strip_prefix('$').unwrap_or(&ref_id);
+
+    notes.push(format!(
+        "subsig[{idx}] macro lowered as positional constraint from subsig[{}] to subsig[{}]",
+        idx - 1,
+        macro_sig.ref_idx
+    ));
+
+    Some(format!(
+        "for any i in (1..#{prev_core}) : (for any j in (1..#{ref_core}) : ( @{ref_core}[j] >= @{prev_core}[i] + {min} and @{ref_core}[j] <= @{prev_core}[i] + {max} ))"
+    ))
 }
 
 fn is_fuzzy_img_pattern(raw: &str) -> bool {

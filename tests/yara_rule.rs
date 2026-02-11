@@ -104,12 +104,14 @@ fn byte_comparison_non_raw_falls_back_to_alias() {
 }
 
 #[test]
-fn lowers_macro_subsignature_as_reference_alias() {
+fn lowers_macro_subsignature_as_positional_constraint() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.strings.len(), 1);
-    assert_eq!(rule.condition, "($s0 or $s0)");
+    assert!(rule.condition.contains("for any i in (1..#s0)"));
+    assert!(rule.condition.contains("@s0[j] >= @s0[i] + 6"));
+    assert!(rule.condition.contains("@s0[j] <= @s0[i] + 7"));
 }
 
 #[test]
