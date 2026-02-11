@@ -472,6 +472,8 @@ fn lowers_ndb_target_type_html_with_constraint() {
     assert!(rule.condition.contains("for all i"));
     assert!(rule.condition.contains("for any r in (0..511)")); // root marker in early window
     assert!(rule.condition.contains("uint8((c) + 1) == 0x2F")); // close-tag marker (</...)
+    assert!(rule.condition.contains("for any c in"));
+    assert!(rule.condition.contains("for any r in (0..c)")); // root marker must appear before close marker
     assert!(rule
         .meta
         .iter()
