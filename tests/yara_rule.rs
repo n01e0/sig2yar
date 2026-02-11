@@ -488,6 +488,7 @@ fn lowers_ndb_target_type_mail_with_constraint() {
     assert!(rule.condition.contains("0x52")); // R/r from Received:
     assert!(rule.condition.contains("for any h in")); // secondary headers required
     assert!(rule.condition.contains("for any s in")); // header/body separator required
+    assert!(rule.condition.contains("<= s")); // secondary header must appear before separator
     assert!(rule
         .meta
         .iter()
