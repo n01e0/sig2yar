@@ -324,14 +324,72 @@ fn ndb_ascii_target_condition() -> String {
 
 fn ndb_html_target_condition() -> String {
     let ascii_pred = ndb_ascii_predicate("uint8(i)");
+    let markers = ["<html", "<!doctype", "<script", "<body", "<head", "<iframe"];
+
+    let marker_small = ndb_any_prefix_in_window_condition(&markers, "j", "filesize", "filesize");
+    let marker_large = ndb_any_prefix_in_window_condition(&markers, "j", "4095", "4096");
+
     format!(
-        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E)) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E)))"
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E) and {marker_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E) and {marker_large}))"
     )
 }
 
 fn ndb_mail_target_condition() -> String {
-    "filesize > 5 and (uint32(0) == 0x6D6F7246 or uint32(0) == 0x65636552 or uint32(0) == 0x6A627553 or uint32(0) == 0x65746144 or uint32(0) == 0x454D494D or uint32(0) == 0x75746552)"
-        .to_string()
+    let headers = [
+        "From:",
+        "Received:",
+        "Subject:",
+        "Date:",
+        "MIME-Version:",
+        "Return-Path:",
+        "To:",
+        "Cc:",
+    ];
+
+    let header_exprs = headers
+        .iter()
+        .map(|header| ndb_ascii_prefix_at_offset_condition(header, "0"))
+        .collect::<Vec<_>>();
+
+    format!("({})", header_exprs.join(" or "))
+}
+
+fn ndb_any_prefix_in_window_condition(
+    prefixes: &[&str],
+    idx_var: &str,
+    window_end: &str,
+    size_limit: &str,
+) -> String {
+    let clauses = prefixes
+        .iter()
+        .map(|prefix| {
+            let len = prefix.len();
+            let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, idx_var);
+            format!("({idx_var} + {len} <= {size_limit} and {prefix_match})")
+        })
+        .collect::<Vec<_>>()
+        .join(" or ");
+
+    format!("for any {idx_var} in (0..{window_end}) : ({clauses})")
+}
+
+fn ndb_ascii_prefix_at_offset_condition(prefix: &str, offset_expr: &str) -> String {
+    let mut parts = Vec::new();
+
+    for (idx, b) in prefix.bytes().enumerate() {
+        let target = format!("uint8(({offset_expr}) + {idx})");
+        if b.is_ascii_alphabetic() {
+            let upper = b.to_ascii_uppercase();
+            let lower = b.to_ascii_lowercase();
+            parts.push(format!(
+                "({target} == 0x{upper:02X} or {target} == 0x{lower:02X})"
+            ));
+        } else {
+            parts.push(format!("{target} == 0x{b:02X}"));
+        }
+    }
+
+    join_condition(parts, "and")
 }
 
 fn ndb_graphics_target_condition() -> String {

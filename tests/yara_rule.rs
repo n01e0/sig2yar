@@ -326,6 +326,7 @@ fn lowers_ndb_target_type_html_with_constraint() {
 
     assert!(rule.condition.contains("uint8(j) == 0x3C"));
     assert!(rule.condition.contains("for all i"));
+    assert!(rule.condition.contains("0x68")); // h/H in <html marker checks
     assert!(rule
         .meta
         .iter()
@@ -337,7 +338,9 @@ fn lowers_ndb_target_type_mail_with_constraint() {
     let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("uint32(0) == 0x6D6F7246"));
+    assert!(rule.condition.contains("uint8((0) + 0) == 0x46"));
+    assert!(rule.condition.contains("uint8((0) + 4) == 0x3A"));
+    assert!(rule.condition.contains("0x52")); // R/r from Received:
 }
 
 #[test]
