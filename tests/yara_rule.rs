@@ -1,4 +1,4 @@
-use sig2yar::parser::logical::LogicalSignature;
+use sig2yar::parser::{logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
 #[test]
@@ -107,4 +107,39 @@ fn lowers_fuzzy_img_as_literal_fallback() {
         s,
         YaraString::Raw(raw) if raw == "$s0 = \"fuzzy_img#af2ad01ed42993c7#0\""
     )));
+}
+
+#[test]
+fn lowers_ndb_basic_offset() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:0:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.name, "Win_Trojan_Example_1");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$a = { 41 42 43 44 }")));
+    assert!(rule.condition.contains("$a at 0"));
+}
+
+#[test]
+fn lowers_ndb_entrypoint_with_pe_import() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP+0,15:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("import \"pe\""));
+    assert!(src.contains("pe.entry_point + 0"));
+    assert!(src.contains("<= pe.entry_point + 0 + 15"));
+}
+
+#[test]
+fn lowers_ndb_negative_jump_with_note() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-15}BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("$a = { AA [0-15] BB }"));
+    assert!(src.contains("ndb negative jump {-15} approximated to [0-15]"));
+    assert_eq!(rule.condition, "$a");
 }

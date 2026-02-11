@@ -16,7 +16,7 @@ Last update: 2026-02-11
 - [x] `msb` (hash)
 - [x] `imp` (hash)
 - [x] `ldb` (logical)
-- [x] `ndb` (extended/body signatures) ※最小実装（parse + fallback lower）
+- [x] `ndb` (extended/body signatures) ※parse + 実用lower（近似あり）
 
 ### 1.2 未サポート（parse/lower未対応）
 
@@ -67,7 +67,10 @@ Last update: 2026-02-11
 
 - [x] `DbType::Ndb` 追加（CLIから `ndb` 指定可能）
 - [x] parser + IR + renderer 実装
-- [ ] bodyパターン本体のYARA化（現状は metadata-only + `condition: false`）
+- [x] bodyパターン本体のYARA化（hex/wildcard/jump/alt の基本）
+- [x] offsetの主要形式をconditionへ反映（`*`, `n`, `n,m`, `EP±`, `Sx+`, `SL+`, `SE`, `EOF`）
+- [ ] 一部構文の近似（例: negative jump）を厳密化
+- [ ] target_type（3/4/5/7 など）の厳密条件化
 
 ---
 

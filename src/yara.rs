@@ -75,38 +75,478 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
 }
 
 pub fn render_ndb_signature(value: &ir::NdbSignature) -> String {
-    let rule_name = normalize_rule_name(&value.name);
-    let mut meta = format!("        original_ident = \"{}\"\n", value.name);
-    meta.push_str(&format!(
-        "        clamav_target_type = \"{}\"\n",
-        escape_yara_string(&value.target_type)
-    ));
-    meta.push_str(&format!(
-        "        clamav_offset = \"{}\"\n",
-        escape_yara_string(&value.offset)
-    ));
-    meta.push_str(&format!(
-        "        clamav_body_len = \"{}\"\n",
-        value.body.len()
-    ));
-    meta.push_str(&format!(
-        "        clamav_body_preview = \"{}\"\n",
-        escape_yara_string(&preview_for_meta(&value.body, 128))
-    ));
+    lower_ndb_signature(value).to_string()
+}
+
+pub fn lower_ndb_signature(value: &ir::NdbSignature) -> YaraRule {
+    let mut meta = Vec::new();
+    let mut notes = Vec::new();
+    let mut imports = Vec::new();
+
+    meta.push(YaraMeta::Entry {
+        key: "original_ident".to_string(),
+        value: value.name.to_string(),
+    });
+    meta.push(YaraMeta::Entry {
+        key: "clamav_target_type".to_string(),
+        value: value.target_type.to_string(),
+    });
+    meta.push(YaraMeta::Entry {
+        key: "clamav_offset".to_string(),
+        value: value.offset.to_string(),
+    });
+    meta.push(YaraMeta::Entry {
+        key: "clamav_body_len".to_string(),
+        value: value.body.len().to_string(),
+    });
+    meta.push(YaraMeta::Entry {
+        key: "clamav_body_preview".to_string(),
+        value: preview_for_meta(&value.body, 128),
+    });
 
     if let Some(min) = value.min_flevel {
-        meta.push_str(&format!("        min_flevel = \"{min}\"\n"));
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
     }
     if let Some(max) = value.max_flevel {
-        meta.push_str(&format!("        max_flevel = \"{max}\"\n"));
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
     }
 
-    meta.push_str("        clamav_unsupported = \"ndb_minimal\"\n");
+    let mut strings = Vec::new();
 
-    format!(
-        "rule {}\n{{\n    meta:\n{}\n    condition:\n        false\n}}",
-        rule_name, meta
-    )
+    let condition = match lower_ndb_body_pattern(&value.body, &mut notes) {
+        Some(body) => {
+            let id = "$a";
+            strings.push(YaraString::Raw(format!("{id} = {{ {body} }}")));
+
+            let mut parts = vec![id.to_string()];
+
+            if let Some(target_expr) = lower_ndb_target_condition(&value.target_type, &mut notes) {
+                parts.push(format!("({target_expr})"));
+            }
+
+            match lower_ndb_offset_condition(&value.offset, id, &mut imports, &mut notes) {
+                Some(offset_expr) => parts.push(format!("({offset_expr})")),
+                None if value.offset == "*" => {}
+                None => {
+                    notes.push(format!(
+                        "ndb offset unsupported: {} (forcing condition=false)",
+                        value.offset
+                    ));
+                    parts.push("false".to_string());
+                }
+            }
+
+            join_condition(parts, "and")
+        }
+        None => {
+            notes.push("ndb body lowering failed (forcing condition=false)".to_string());
+            "false".to_string()
+        }
+    };
+
+    if !notes.is_empty() {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: notes.join(" | "),
+        });
+    }
+
+    YaraRule {
+        name: normalize_rule_name(&value.name),
+        meta,
+        strings,
+        condition,
+        imports,
+    }
+}
+
+fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String> {
+    let chars: Vec<char> = body.chars().collect();
+    let mut tokens = Vec::new();
+    let mut i = 0usize;
+
+    while i < chars.len() {
+        let ch = chars[i];
+
+        if ch.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        if ch.is_ascii_hexdigit() || ch == '?' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_ascii_hexdigit() || chars[i] == '?') {
+                i += 1;
+            }
+
+            let run: String = chars[start..i].iter().collect();
+            if run.len() % 2 != 0 {
+                notes.push(format!("ndb body contains odd-length byte run: {run}"));
+                return None;
+            }
+
+            for chunk in run.as_bytes().chunks(2) {
+                let token = std::str::from_utf8(chunk).ok()?;
+                if !is_valid_ndb_byte_token(token) {
+                    notes.push(format!("ndb body contains invalid byte token: {token}"));
+                    return None;
+                }
+                tokens.push(token.to_ascii_uppercase());
+            }
+            continue;
+        }
+
+        match ch {
+            '*' => {
+                tokens.push("[-]".to_string());
+                i += 1;
+            }
+            '{' => {
+                let end = find_matching(&chars, i, '}')?;
+                let inner: String = chars[i + 1..end].iter().collect();
+                let jump = lower_ndb_curly_jump(inner.trim(), notes)?;
+                tokens.push(jump);
+                i = end + 1;
+            }
+            '[' => {
+                let end = find_matching(&chars, i, ']')?;
+                let inner: String = chars[i + 1..end].iter().collect();
+                if !is_valid_ndb_square(inner.trim()) {
+                    notes.push(format!(
+                        "ndb body contains unsupported [] token: [{}]",
+                        inner
+                    ));
+                    return None;
+                }
+                tokens.push(format!("[{}]", inner.trim()));
+                i = end + 1;
+            }
+            '(' | ')' | '|' => {
+                tokens.push(ch.to_string());
+                i += 1;
+            }
+            _ => {
+                notes.push(format!("ndb body contains unsupported character: {ch}"));
+                return None;
+            }
+        }
+    }
+
+    if tokens.is_empty() {
+        notes.push("ndb body is empty after tokenization".to_string());
+        return None;
+    }
+
+    if tokens
+        .first()
+        .is_some_and(|token| is_ndb_jump_token(token))
+        || tokens
+            .last()
+            .is_some_and(|token| is_ndb_jump_token(token))
+    {
+        notes.push("ndb body starts/ends with jump token unsupported by YARA".to_string());
+        return None;
+    }
+
+    Some(tokens.join(" "))
+}
+
+fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Option<String> {
+    match target_type {
+        "0" => None,
+        "1" => Some("uint16(0) == 0x5A4D".to_string()), // MZ/PE
+        "2" => Some("uint32(0) == 0xE011CFD0 and uint32(4) == 0xE11AB1A1".to_string()), // OLE2
+        "6" => Some("uint32(0) == 0x464C457F".to_string()), // ELF
+        "9" => Some(
+            "(uint32(0) == 0xCEFAEDFE or uint32(0) == 0xCFFAEDFE or uint32(0) == 0xFEEDFACE or uint32(0) == 0xFEEDFACF or uint32(0) == 0xBEBAFECA or uint32(0) == 0xCAFEBABE)".to_string(),
+        ), // Mach-O and FAT
+        "10" => Some("uint32(0) == 0x46445025".to_string()), // %PDF
+        "11" => Some(
+            "((uint8(0) == 0x46 or uint8(0) == 0x43 or uint8(0) == 0x5A) and uint8(1) == 0x57 and uint8(2) == 0x53)".to_string(),
+        ), // FWS/CWS/ZWS
+        "12" => Some("uint32(0) == 0xBEBAFECA".to_string()), // CAFEBABE
+        other => {
+            notes.push(format!(
+                "ndb target_type={other} is not yet constrained in condition"
+            ));
+            None
+        }
+    }
+}
+
+fn lower_ndb_offset_condition(
+    offset: &str,
+    id: &str,
+    imports: &mut Vec<String>,
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    if offset == "*" {
+        return None;
+    }
+
+    if let Some((start, end)) = parse_u64_pair(offset) {
+        return Some(format!("{id} in ({start}..{end})"));
+    }
+
+    if let Ok(value) = offset.parse::<u64>() {
+        return Some(format!("{id} at {value}"));
+    }
+
+    if let Some((delta, range)) = parse_ep_offset(offset) {
+        ensure_import(imports, "pe");
+        let start = apply_signed_delta("pe.entry_point", delta);
+        return Some(match range {
+            Some(width) => {
+                let end = apply_signed_delta(&start, width);
+                ndb_occurrence_in_expr(id, &start, &end)
+            }
+            None => ndb_occurrence_at_expr(id, &start),
+        });
+    }
+
+    if let Some((section_idx, delta, range)) = parse_section_offset(offset) {
+        ensure_import(imports, "pe");
+        let base = format!("pe.sections[{section_idx}].raw_data_offset");
+        let start = apply_unsigned_delta(&base, delta);
+        let match_expr = match range {
+            Some(width) => {
+                let end = apply_unsigned_delta(&start, width);
+                ndb_occurrence_in_expr(id, &start, &end)
+            }
+            None => ndb_occurrence_at_expr(id, &start),
+        };
+        return Some(format!(
+            "pe.number_of_sections > {section_idx} and ({match_expr})"
+        ));
+    }
+
+    if let Some((delta, range)) = parse_last_section_offset(offset) {
+        ensure_import(imports, "pe");
+        let base = "pe.sections[pe.number_of_sections - 1].raw_data_offset";
+        let start = apply_unsigned_delta(base, delta);
+        let match_expr = match range {
+            Some(width) => {
+                let end = apply_unsigned_delta(&start, width);
+                ndb_occurrence_in_expr(id, &start, &end)
+            }
+            None => ndb_occurrence_at_expr(id, &start),
+        };
+        return Some(format!("pe.number_of_sections > 0 and ({match_expr})"));
+    }
+
+    if let Some(section_idx) = parse_section_end_offset(offset) {
+        ensure_import(imports, "pe");
+        let at = format!(
+            "pe.sections[{section_idx}].raw_data_offset + pe.sections[{section_idx}].raw_data_size"
+        );
+        let match_expr = ndb_occurrence_at_expr(id, &at);
+        return Some(format!(
+            "pe.number_of_sections > {section_idx} and ({match_expr})"
+        ));
+    }
+
+    if let Some((delta, range)) = parse_eof_offset(offset) {
+        let start = apply_signed_delta("filesize", delta);
+        return Some(match range {
+            Some(width) => {
+                let end = apply_signed_delta(&start, width);
+                ndb_occurrence_in_expr(id, &start, &end)
+            }
+            None => ndb_occurrence_at_expr(id, &start),
+        });
+    }
+
+    notes.push(format!("ndb offset format is unsupported: {offset}"));
+    None
+}
+
+fn ensure_import(imports: &mut Vec<String>, name: &str) {
+    if !imports.iter().any(|v| v == name) {
+        imports.push(name.to_string());
+    }
+}
+
+fn ndb_occurrence_at_expr(id: &str, at: &str) -> String {
+    let core = id.strip_prefix('$').unwrap_or(id);
+    format!("for any i in (1..#{core}) : ( @{core}[i] == {at} )")
+}
+
+fn ndb_occurrence_in_expr(id: &str, start: &str, end: &str) -> String {
+    let core = id.strip_prefix('$').unwrap_or(id);
+    format!("for any i in (1..#{core}) : ( @{core}[i] >= {start} and @{core}[i] <= {end} )")
+}
+
+fn apply_signed_delta(base: &str, delta: i64) -> String {
+    if delta >= 0 {
+        format!("{base} + {delta}")
+    } else {
+        format!("{base} - {}", -delta)
+    }
+}
+
+fn apply_unsigned_delta(base: &str, delta: u64) -> String {
+    if delta == 0 {
+        base.to_string()
+    } else {
+        format!("{base} + {delta}")
+    }
+}
+
+fn is_valid_ndb_byte_token(token: &str) -> bool {
+    if token.len() != 2 {
+        return false;
+    }
+    token.chars().all(|c| c.is_ascii_hexdigit() || c == '?')
+}
+
+fn is_ndb_jump_token(token: &str) -> bool {
+    token.starts_with('[') && token.ends_with(']')
+}
+
+fn is_valid_ndb_square(value: &str) -> bool {
+    if value == "-" {
+        return true;
+    }
+
+    if let Some((lhs, rhs)) = value.split_once('-') {
+        if lhs.is_empty() && rhs.is_empty() {
+            return true;
+        }
+        if lhs.is_empty() {
+            return rhs.chars().all(|c| c.is_ascii_digit());
+        }
+        if rhs.is_empty() {
+            return lhs.chars().all(|c| c.is_ascii_digit());
+        }
+        return lhs.chars().all(|c| c.is_ascii_digit()) && rhs.chars().all(|c| c.is_ascii_digit());
+    }
+
+    value.chars().all(|c| c.is_ascii_digit())
+}
+
+fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> {
+    if let Ok(num) = value.parse::<i64>() {
+        if num >= 0 {
+            return Some(format!("[{num}]"));
+        }
+
+        let width = num.unsigned_abs();
+        notes.push(format!(
+            "ndb negative jump {{{num}}} approximated to [0-{width}]"
+        ));
+        return Some(format!("[0-{width}]"));
+    }
+
+    if let Some((lhs, rhs)) = value.split_once('-') {
+        let start = lhs.trim().parse::<i64>().ok()?;
+        let end = rhs.trim().parse::<i64>().ok()?;
+
+        if start >= 0 && end >= 0 {
+            if start <= end {
+                return Some(format!("[{start}-{end}]"));
+            }
+            notes.push(format!(
+                "ndb range jump with descending bounds {{{value}}} treated as [{end}-{start}]"
+            ));
+            return Some(format!("[{end}-{start}]"));
+        }
+
+        let width = start.unsigned_abs().max(end.unsigned_abs());
+        notes.push(format!(
+            "ndb negative range jump {{{value}}} approximated to [0-{width}]"
+        ));
+        return Some(format!("[0-{width}]"));
+    }
+
+    None
+}
+
+fn find_matching(chars: &[char], open_idx: usize, closing: char) -> Option<usize> {
+    for (idx, ch) in chars.iter().enumerate().skip(open_idx + 1) {
+        if *ch == closing {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+fn parse_u64_pair(input: &str) -> Option<(u64, u64)> {
+    let (lhs, rhs) = input.split_once(',')?;
+    let start = lhs.parse::<u64>().ok()?;
+    let end = rhs.parse::<u64>().ok()?;
+    Some((start.min(end), start.max(end)))
+}
+
+fn parse_ep_offset(input: &str) -> Option<(i64, Option<i64>)> {
+    let rest = input.strip_prefix("EP")?;
+    let (delta_str, range_str) = match rest.split_once(',') {
+        Some((delta, range)) => (delta, Some(range)),
+        None => (rest, None),
+    };
+
+    let delta = parse_signed_with_plus(delta_str)?;
+    let range = range_str.and_then(|v| v.parse::<i64>().ok());
+    Some((delta, range))
+}
+
+fn parse_section_offset(input: &str) -> Option<(u64, u64, Option<u64>)> {
+    let rest = input.strip_prefix('S')?;
+    if rest.starts_with('L') || rest.starts_with('E') {
+        return None;
+    }
+
+    let (idx, tail) = rest.split_once('+')?;
+    let section_idx = idx.parse::<u64>().ok()?;
+    let (delta, range) = match tail.split_once(',') {
+        Some((delta, range)) => (delta.parse::<u64>().ok()?, Some(range.parse::<u64>().ok()?)),
+        None => (tail.parse::<u64>().ok()?, None),
+    };
+
+    Some((section_idx, delta, range))
+}
+
+fn parse_last_section_offset(input: &str) -> Option<(u64, Option<u64>)> {
+    let rest = input.strip_prefix("SL+")?;
+    let (delta, range) = match rest.split_once(',') {
+        Some((delta, range)) => (delta.parse::<u64>().ok()?, Some(range.parse::<u64>().ok()?)),
+        None => (rest.parse::<u64>().ok()?, None),
+    };
+    Some((delta, range))
+}
+
+fn parse_section_end_offset(input: &str) -> Option<u64> {
+    let idx = input.strip_prefix("SE")?;
+    idx.parse::<u64>().ok()
+}
+
+fn parse_eof_offset(input: &str) -> Option<(i64, Option<i64>)> {
+    let rest = input.strip_prefix("EOF")?;
+    let (delta_str, range_str) = match rest.split_once(',') {
+        Some((delta, range)) => (delta, Some(range)),
+        None => (rest, None),
+    };
+
+    let delta = if delta_str.is_empty() {
+        0
+    } else {
+        parse_signed_with_plus(delta_str)?
+    };
+
+    let range = range_str.and_then(|v| v.parse::<i64>().ok());
+    Some((delta, range))
+}
+
+fn parse_signed_with_plus(input: &str) -> Option<i64> {
+    if let Some(value) = input.strip_prefix('+') {
+        return value.parse::<i64>().ok();
+    }
+    input.parse::<i64>().ok()
 }
 
 pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule> {
@@ -727,6 +1167,39 @@ impl<'p> TryFrom<LogicalSignature<'p>> for YaraRule {
     type Error = anyhow::Error;
 
     fn try_from(value: LogicalSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::NdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::NdbSignature) -> Result<Self> {
+        Ok(lower_ndb_signature(value))
+    }
+}
+
+impl TryFrom<ir::NdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::NdbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&NdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &NdbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<NdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: NdbSignature<'p>) -> Result<Self> {
         YaraRule::try_from(&value)
     }
 }
