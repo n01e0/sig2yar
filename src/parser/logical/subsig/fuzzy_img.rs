@@ -3,7 +3,7 @@ use nom::{
     character::complete::{char, digit1},
     combinator::{map_res, opt},
     sequence::preceded,
-    IResult,
+    IResult, Parser,
 };
 use std::str::FromStr;
 
@@ -15,14 +15,15 @@ pub struct FuzzyImg<'f> {
     pub distance: usize,
 }
 
-fn parse_fuzzy_img(input: &str) -> IResult<&str, FuzzyImg> {
+fn parse_fuzzy_img(input: &str) -> IResult<&str, FuzzyImg<'_>> {
     let (input, _) = tag("fuzzy_img#")(input)?;
     let (input, hash) = take_while1(|c: char| c.is_alphanumeric())(input)?;
 
     let (input, distance) = opt(preceded(
         char('#'),
         map_res(digit1, |dist_str: &str| usize::from_str(dist_str)),
-    ))(input)?;
+    ))
+    .parse(input)?;
 
     Ok((
         input,
