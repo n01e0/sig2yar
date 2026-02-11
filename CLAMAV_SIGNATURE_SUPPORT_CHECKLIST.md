@@ -51,7 +51,7 @@ Last update: 2026-02-12
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。unsupported ケース（non-rawの非exact/LE/表現不能値、rawの非1/2/4/8byte、矛盾した multi-clause）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。unsupported ケース（non-rawの非exact/LE/表現不能値、rawの非1/2/4/8byte・型幅超過閾値、矛盾した multi-clause）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は位置関係条件にlower済み（macro group意味の厳密反映は未完）
 - [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note）
 

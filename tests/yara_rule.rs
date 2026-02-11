@@ -332,6 +332,18 @@ fn lowers_byte_comparison_raw_unsupported_size_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_raw_out_of_range_threshold_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#ib1#<300)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("raw threshold 300 exceeds 1-byte range") && value.contains("lowered to false for safety"))));
+}
+
+#[test]
 fn lowers_byte_comparison_raw_contradictory_clauses_to_false_for_safety() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#ib2#>512,<100)").unwrap();
