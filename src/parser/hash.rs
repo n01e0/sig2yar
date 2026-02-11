@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use std::fmt::Display;
 
+use crate::{ir, yara};
+
 #[derive(Debug)]
 pub struct HashSignature<'p> {
     pub name: &'p str,
@@ -86,74 +88,39 @@ impl<'p> HashSignature<'p> {
 
         Err(anyhow!("Invalid hash signature format"))
     }
-}
 
-impl<'p> Display for HashSignature<'p> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let rule_name = self.name.replace('.', "_").replace('-', "_");
-        let mut meta = format!("        original_ident = \"{}\"\n", self.name);
-        if let Some(flevel) = self.min_flevel {
-            meta.push_str(&format!("        min_flevel = \"{flevel}\"\n"));
-        }
-
-        match self.source {
-            HashSource::File { size } => {
-                let size_expr = match size {
-                    Some(size) => size.to_string(),
-                    None => "filesize".to_string(),
-                };
-                write!(
-                    f,
-                    "import \"hash\"
-rule {}
-{{
-    meta:
-{}
-    condition:
-        hash.{}(0, {}) == \"{}\"
-}}",
-                    rule_name,
-                    meta,
-                    self.hash_type.yara_fn(),
-                    size_expr,
-                    self.hash
-                )
-            }
-            HashSource::Section { size } => {
-                let section_size = match size {
-                    Some(size) => size.to_string(),
-                    None => "*".to_string(),
-                };
-                meta.push_str(&format!(
-                    "        clamav_section_size = \"{section_size}\"\n"
-                ));
-                meta.push_str(&format!(
-                    "        clamav_hash_type = \"{}\"\n",
-                    self.hash_type.yara_fn()
-                ));
-                meta.push_str("        clamav_unsupported = \"section_hash\"\n");
-                write!(
-                    f,
-                    "rule {}
-{{
-    meta:
-{}
-    condition:
-        false
-}}",
-                    rule_name, meta
-                )
-            }
+    pub fn to_ir(&self) -> ir::HashSignature {
+        ir::HashSignature {
+            name: self.name.to_string(),
+            hash: self.hash.to_string(),
+            hash_type: self.hash_type.to_ir(),
+            source: self.source.to_ir(),
+            min_flevel: self.min_flevel,
         }
     }
 }
 
+impl<'p> Display for HashSignature<'p> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", yara::render_hash_signature(&self.to_ir()))
+    }
+}
+
 impl HashType {
-    fn yara_fn(&self) -> &'static str {
+    fn to_ir(&self) -> ir::HashType {
         match self {
-            HashType::Md5 => "md5",
-            HashType::Sha1 => "sha1",
-            HashType::Sha256 => "sha256",
+            HashType::Md5 => ir::HashType::Md5,
+            HashType::Sha1 => ir::HashType::Sha1,
+            HashType::Sha256 => ir::HashType::Sha256,
+        }
+    }
+}
+
+impl HashSource {
+    fn to_ir(&self) -> ir::HashSource {
+        match self {
+            HashSource::File { size } => ir::HashSource::File { size: *size },
+            HashSource::Section { size } => ir::HashSource::Section { size: *size },
         }
     }
 }
@@ -178,9 +145,7 @@ fn parse_optional_size(input: &str) -> Result<Option<u64>> {
         return Ok(None);
     }
     Ok(Some(
-        input
-            .parse::<u64>()
-            .with_context(|| "Can't parse size")?,
+        input.parse::<u64>().with_context(|| "Can't parse size")?,
     ))
 }
 
@@ -223,10 +188,16 @@ mod tests {
 
     #[test]
     fn parse_sha1_hsb_with_flevel() {
-        let sig = "0059ee2322c3301263c8006fd780d7fe95a30572:1705472:Win.Keylogger.Generic-7604980-0:73";
+        let sig =
+            "0059ee2322c3301263c8006fd780d7fe95a30572:1705472:Win.Keylogger.Generic-7604980-0:73";
         let parsed = HashSignature::parse(sig).unwrap();
         assert_eq!(parsed.hash_type, HashType::Sha1);
-        assert_eq!(parsed.source, HashSource::File { size: Some(1705472) });
+        assert_eq!(
+            parsed.source,
+            HashSource::File {
+                size: Some(1705472)
+            }
+        );
         assert_eq!(parsed.min_flevel, Some(73));
     }
 
@@ -259,12 +230,7 @@ mod tests {
         let sig = "45056:3ea7d00dedd30bcdf46191358c36ffa4:Eicar-Test-Signature";
         let parsed = HashSignature::parse(sig).unwrap();
         assert_eq!(parsed.hash_type, HashType::Md5);
-        assert_eq!(
-            parsed.source,
-            HashSource::Section {
-                size: Some(45056)
-            }
-        );
+        assert_eq!(parsed.source, HashSource::Section { size: Some(45056) });
         assert_eq!(parsed.min_flevel, None);
     }
 
@@ -273,12 +239,7 @@ mod tests {
         let sig = "91648:550a9b573224aa75418c852080b59af3:Win.Packer.Agent-6412293-0:73";
         let parsed = HashSignature::parse(sig).unwrap();
         assert_eq!(parsed.hash_type, HashType::Md5);
-        assert_eq!(
-            parsed.source,
-            HashSource::Section {
-                size: Some(91648)
-            }
-        );
+        assert_eq!(parsed.source, HashSource::Section { size: Some(91648) });
         assert_eq!(parsed.min_flevel, Some(73));
     }
 

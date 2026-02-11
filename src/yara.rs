@@ -2,7 +2,10 @@ use std::fmt::{self, Display};
 
 use anyhow::Result;
 
-use crate::parser::logical::LogicalSignature;
+use crate::{
+    ir,
+    parser::{hash::HashSignature, logical::LogicalSignature},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YaraRule {
@@ -22,6 +25,81 @@ pub enum YaraMeta {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum YaraString {
     Raw(String),
+}
+
+pub fn render_hash_signature(value: &ir::HashSignature) -> String {
+    let rule_name = normalize_rule_name(&value.name);
+    let mut meta = format!("        original_ident = \"{}\"\n", value.name);
+    if let Some(flevel) = value.min_flevel {
+        meta.push_str(&format!("        min_flevel = \"{flevel}\"\n"));
+    }
+
+    match &value.source {
+        ir::HashSource::File { size } => {
+            let size_expr = match size {
+                Some(size) => size.to_string(),
+                None => "filesize".to_string(),
+            };
+            format!(
+                "import \"hash\"\nrule {}\n{{\n    meta:\n{}\n    condition:\n        hash.{}(0, {}) == \"{}\"\n}}",
+                rule_name,
+                meta,
+                hash_fn(&value.hash_type),
+                size_expr,
+                value.hash
+            )
+        }
+        ir::HashSource::Section { size } => {
+            let section_size = match size {
+                Some(size) => size.to_string(),
+                None => "*".to_string(),
+            };
+            meta.push_str(&format!(
+                "        clamav_section_size = \"{section_size}\"\n"
+            ));
+            meta.push_str(&format!(
+                "        clamav_hash_type = \"{}\"\n",
+                hash_fn(&value.hash_type)
+            ));
+            meta.push_str("        clamav_unsupported = \"section_hash\"\n");
+
+            format!(
+                "rule {}\n{{\n    meta:\n{}\n    condition:\n        false\n}}",
+                rule_name, meta
+            )
+        }
+    }
+}
+
+pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule> {
+    let mut meta = Vec::new();
+    meta.push(YaraMeta::Entry {
+        key: "original_ident".to_string(),
+        value: value.name.to_string(),
+    });
+
+    if !value.target_description.raw.is_empty() {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_target_description".to_string(),
+            value: value.target_description.raw.to_string(),
+        });
+    }
+
+    let subsigs = compact_whitespace(&format!("{:?}", value.subsignatures));
+    if !subsigs.is_empty() {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_subsigs".to_string(),
+            value: subsigs,
+        });
+    }
+
+    Ok(YaraRule {
+        name: normalize_rule_name(&value.name),
+        meta,
+        strings: Vec::new(),
+        condition: "true".to_string(),
+        imports: Vec::new(),
+    })
 }
 
 impl Display for YaraRule {
@@ -71,39 +149,28 @@ impl Display for YaraRule {
     }
 }
 
+impl TryFrom<&ir::LogicalSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::LogicalSignature) -> Result<Self> {
+        lower_logical_signature(value)
+    }
+}
+
+impl TryFrom<ir::LogicalSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::LogicalSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl<'p> TryFrom<&LogicalSignature<'p>> for YaraRule {
     type Error = anyhow::Error;
 
     fn try_from(value: &LogicalSignature<'p>) -> Result<Self> {
-        let mut meta = Vec::new();
-        meta.push(YaraMeta::Entry {
-            key: "original_ident".to_string(),
-            value: value.name.to_string(),
-        });
-
-        let target_description = compact_whitespace(&value.target_description.to_string());
-        if !target_description.is_empty() {
-            meta.push(YaraMeta::Entry {
-                key: "clamav_target_description".to_string(),
-                value: target_description,
-            });
-        }
-
-        let subsigs = compact_whitespace(&format!("{:?}", value.subsigs));
-        if !subsigs.is_empty() {
-            meta.push(YaraMeta::Entry {
-                key: "clamav_subsigs".to_string(),
-                value: subsigs,
-            });
-        }
-
-        Ok(YaraRule {
-            name: value.name.replace('.', "_").replace('-', "_"),
-            meta,
-            strings: Vec::new(),
-            condition: "true".to_string(),
-            imports: Vec::new(),
-        })
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
     }
 }
 
@@ -112,6 +179,24 @@ impl<'p> TryFrom<LogicalSignature<'p>> for YaraRule {
 
     fn try_from(value: LogicalSignature<'p>) -> Result<Self> {
         YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> From<&HashSignature<'p>> for ir::HashSignature {
+    fn from(value: &HashSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+fn normalize_rule_name(input: &str) -> String {
+    input.replace('.', "_").replace('-', "_")
+}
+
+fn hash_fn(hash_type: &ir::HashType) -> &'static str {
+    match hash_type {
+        ir::HashType::Md5 => "md5",
+        ir::HashType::Sha1 => "sha1",
+        ir::HashType::Sha256 => "sha256",
     }
 }
 

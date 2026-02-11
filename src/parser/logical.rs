@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::fmt::Display;
 
-use crate::yara::YaraRule;
+use crate::{ir, yara};
 
 mod target_description;
 use target_description::TargetDescription;
@@ -52,6 +52,15 @@ impl<'p> LogicalSignature<'p> {
             subsigs,
         })
     }
+
+    pub fn to_ir(&self) -> ir::LogicalSignature {
+        ir::LogicalSignature {
+            name: self.name.to_string(),
+            target_description: self.target_description.to_ir(),
+            expression: self.logical_expression.to_ir(),
+            subsignatures: self.subsigs.iter().map(Subsignature::to_ir).collect(),
+        }
+    }
 }
 
 fn split_subsignatures<'p>(input: &'p str) -> Vec<&'p str> {
@@ -101,7 +110,7 @@ fn split_subsignatures<'p>(input: &'p str) -> Vec<&'p str> {
 
 impl<'p> Display for LogicalSignature<'p> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match YaraRule::try_from(self) {
+        match yara::lower_logical_signature(&self.to_ir()) {
             Ok(rule) => write!(f, "{}", rule),
             Err(_) => write!(f, "<invalid yara rule>"),
         }
