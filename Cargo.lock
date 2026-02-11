@@ -1805,9 +1805,9 @@ dependencies = [
 
 [[package]]
 name = "rsa"
-version = "0.9.9"
+version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a0376c50d0358279d9d643e4bf7b7be212f1f4ff1da9070a7b54d22ef75c88"
+checksum = "b8573f03f5883dcaebdfcf4725caa1ecb9c15b2ef50c43a07b816e06799bb12d"
 dependencies = [
  "const-oid",
  "digest",
@@ -2019,6 +2019,22 @@ name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
+
+[[package]]
+name = "simd_cesu8"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19e75ccd3404ef387c23d4cf34a30d49eab8f2aeb17e5ad575aacad434170daf"
+dependencies = [
+ "rustc_version",
+ "simdutf8",
+]
+
+[[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "smallvec"
@@ -2807,9 +2823,9 @@ dependencies = [
 
 [[package]]
 name = "yara-x"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23e52ec9e65a5d6110091731ed74971e68262311ef1659b826cca004ff365206"
+checksum = "b9c7c25bb1e1c2ae28d7e2af2231664557ad3c0bf1543003e7534c73e84b6a8f"
 dependencies = [
  "aho-corasick",
  "annotate-snippets",
@@ -2855,6 +2871,8 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "simd-adler32",
+ "simd_cesu8",
  "smallvec",
  "strum_macros",
  "thiserror 2.0.17",
@@ -2870,9 +2888,9 @@ dependencies = [
 
 [[package]]
 name = "yara-x-macros"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "926c3d5456d3c91fb67e55c47f25eefbf456bb5549bf272b1f27a2c512a2553a"
+checksum = "4d931755fd75614976ff2c009574ad981671bbd40a9e3fec65bc7d411cfa38d5"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2882,9 +2900,9 @@ dependencies = [
 
 [[package]]
 name = "yara-x-parser"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "737302dc499551357351b08d1d242447d1f58327653c17ca74b2d4e2a462bf61"
+checksum = "cecd3c0eac65a6801f37d2d899a07146eb3b775bf81cd442953989e9f2ec58f9"
 dependencies = [
  "ascii_tree",
  "bitflags",
@@ -2900,9 +2918,9 @@ dependencies = [
 
 [[package]]
 name = "yara-x-proto"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6316bff437b1291aa701a13119f2c3416382079a01e295733cc3e5255686e2c9"
+checksum = "59ccea4f3b4138af7599af4b7f69db02efb9238518816fadbbd2c865ab5dadf4"
 dependencies = [
  "protobuf",
  "protobuf-codegen",
