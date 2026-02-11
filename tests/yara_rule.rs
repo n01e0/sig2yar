@@ -440,6 +440,18 @@ fn lowers_ndb_open_ended_jump() {
 }
 
 #[test]
+fn rejects_ndb_descending_positive_range_jump_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-5}BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("descending bounds") && value.contains("strict lowering"))));
+}
+
+#[test]
 fn rejects_ndb_complex_signed_range_jump_for_strictness() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-10-5}BB").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
