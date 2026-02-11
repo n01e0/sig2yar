@@ -1642,12 +1642,77 @@ fn parse_clamav_numeric(input: &str) -> Option<u64> {
     None
 }
 
+fn byte_cmp_clauses_unsatisfiable(clauses: &[ByteCmpClause]) -> bool {
+    if clauses.is_empty() {
+        return true;
+    }
+
+    let mut eq_value: Option<u64> = None;
+    let mut lower_exclusive: Option<u64> = None;
+    let mut upper_exclusive: Option<u64> = None;
+
+    for clause in clauses {
+        match clause.op {
+            ByteCmpOp::Eq => {
+                if let Some(existing) = eq_value {
+                    if existing != clause.value {
+                        return true;
+                    }
+                } else {
+                    eq_value = Some(clause.value);
+                }
+            }
+            ByteCmpOp::Gt => {
+                lower_exclusive = Some(match lower_exclusive {
+                    Some(v) => v.max(clause.value),
+                    None => clause.value,
+                });
+            }
+            ByteCmpOp::Lt => {
+                upper_exclusive = Some(match upper_exclusive {
+                    Some(v) => v.min(clause.value),
+                    None => clause.value,
+                });
+            }
+        }
+    }
+
+    if let Some(eq) = eq_value {
+        if let Some(lower) = lower_exclusive {
+            if eq <= lower {
+                return true;
+            }
+        }
+        if let Some(upper) = upper_exclusive {
+            if eq >= upper {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if let (Some(lower), Some(upper)) = (lower_exclusive, upper_exclusive) {
+        if lower >= upper.saturating_sub(1) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn lower_byte_comparison_condition(
     idx: usize,
     byte_cmp: &ParsedByteComparison,
     known_ids: &[Option<String>],
     notes: &mut Vec<String>,
 ) -> Option<String> {
+    if byte_cmp_clauses_unsatisfiable(&byte_cmp.comparisons) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison clauses are contradictory; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     let Some(trigger_id) = known_ids
         .get(byte_cmp.trigger_idx)
         .and_then(|v| v.as_ref())
