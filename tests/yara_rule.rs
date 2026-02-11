@@ -207,6 +207,27 @@ fn lowers_byte_comparison_with_value_check() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_hex_exact_eq() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 0) == 0x31"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 1) == 0x41"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 1) == 0x61"));
+    assert!(rule.condition.contains("(@s0[j] + 4) + 4 <= filesize"));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_decimal_exact_eq() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#=12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 0) == 0x30"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 1) == 0x31"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 2) == 0x32"));
+}
+
+#[test]
 fn byte_comparison_non_raw_falls_back_to_alias() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#db2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
