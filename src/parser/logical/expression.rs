@@ -28,6 +28,32 @@ impl LogicalExpression {
             Err(e) => Err(anyhow::anyhow!("Can't parse LogicalExpression: {}", e)),
         }
     }
+
+    pub fn to_ir(&self) -> crate::ir::LogicalExpression {
+        use crate::ir::LogicalExpression as Ir;
+
+        match self {
+            LogicalExpression::SubExpression(n) => Ir::SubExpression(*n),
+            LogicalExpression::And(nodes) => {
+                Ir::And(nodes.iter().map(LogicalExpression::to_ir).collect())
+            }
+            LogicalExpression::Or(nodes) => {
+                Ir::Or(nodes.iter().map(LogicalExpression::to_ir).collect())
+            }
+            LogicalExpression::MatchCount(expr, n) => Ir::MatchCount(Box::new(expr.to_ir()), *n),
+            LogicalExpression::MultiMatchCount(expr, min, max) => {
+                Ir::MultiMatchCount(Box::new(expr.to_ir()), *min, *max)
+            }
+            LogicalExpression::Gt(expr, n) => Ir::Gt(Box::new(expr.to_ir()), *n),
+            LogicalExpression::MultiGt(expr, min, max) => {
+                Ir::MultiGt(Box::new(expr.to_ir()), *min, *max)
+            }
+            LogicalExpression::Lt(expr, n) => Ir::Lt(Box::new(expr.to_ir()), *n),
+            LogicalExpression::MultiLt(expr, min, max) => {
+                Ir::MultiLt(Box::new(expr.to_ir()), *min, *max)
+            }
+        }
+    }
 }
 
 fn parse_number<'i>(input: &'i str) -> IResult<&'i str, usize> {

@@ -266,6 +266,12 @@ impl<'t> TargetDescription<'t> {
             }
         })
     }
+
+    pub fn to_ir(&self) -> crate::ir::TargetDescription {
+        crate::ir::TargetDescription {
+            raw: compact_whitespace(&self.to_string()),
+        }
+    }
 }
 
 impl<'t> Display for TargetDescription<'t> {
@@ -381,6 +387,14 @@ impl TryFrom<u8> for TargetType {
             _ => Err(anyhow::anyhow!("Invalid TargetType")),
         }
     }
+}
+
+fn compact_whitespace(input: &str) -> String {
+    input
+        .split_whitespace()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn parse_range<T>(s: &str) -> Result<Range<T>>

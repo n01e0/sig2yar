@@ -29,6 +29,20 @@ impl<'s> Subsignature<'s> {
         let (pattern, modifiers) = split_modifiers(input);
         Ok(Subsignature { pattern, modifiers })
     }
+
+    pub fn to_ir(&self) -> crate::ir::Subsignature {
+        let pattern = if is_hex_pattern(self.pattern) {
+            crate::ir::SubsignaturePattern::Hex(self.pattern.to_string())
+        } else {
+            crate::ir::SubsignaturePattern::Raw(self.pattern.to_string())
+        };
+
+        crate::ir::Subsignature {
+            raw: self.pattern.to_string(),
+            pattern,
+            modifiers: self.modifiers.iter().map(Modifier::to_ir).collect(),
+        }
+    }
 }
 
 fn parse_modifier_chars(input: &str) -> Vec<Modifier> {
@@ -45,6 +59,22 @@ fn parse_modifier_chars(input: &str) -> Vec<Modifier> {
     }
 
     modifiers
+}
+
+impl Modifier {
+    fn to_ir(&self) -> crate::ir::SubsignatureModifier {
+        match self {
+            Modifier::CaseInsensitive => crate::ir::SubsignatureModifier::CaseInsensitive,
+            Modifier::Wide => crate::ir::SubsignatureModifier::Wide,
+            Modifier::Fullword => crate::ir::SubsignatureModifier::Fullword,
+            Modifier::Ascii => crate::ir::SubsignatureModifier::Ascii,
+            Modifier::Unknown(value) => crate::ir::SubsignatureModifier::Unknown(*value),
+        }
+    }
+}
+
+fn is_hex_pattern(input: &str) -> bool {
+    !input.is_empty() && input.len() % 2 == 0 && input.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn split_modifiers<'s>(input: &'s str) -> (&'s str, Vec<Modifier>) {
