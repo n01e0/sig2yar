@@ -49,6 +49,30 @@ fn lowers_logical_ops_to_condition() {
 }
 
 #[test]
+fn reflects_target_description_filesize_range() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0,FileSize:10-20;0;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("filesize >= 10"));
+    assert!(rule.condition.contains("filesize <= 20"));
+}
+
+#[test]
+fn reflects_target_description_entrypoint_and_sections() {
+    let sig = LogicalSignature::parse(
+        "Foo.Bar-1;Target:1,EntryPoint:100-200,NumberOfSections:2-4;0;41414141",
+    )
+    .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.imports.iter().any(|i| i == "pe"));
+    assert!(rule.condition.contains("pe.entry_point >= 100"));
+    assert!(rule.condition.contains("pe.entry_point <= 200"));
+    assert!(rule.condition.contains("pe.number_of_sections >= 2"));
+    assert!(rule.condition.contains("pe.number_of_sections <= 4"));
+}
+
+#[test]
 fn lowers_match_count_expression() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)=1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

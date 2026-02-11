@@ -61,7 +61,7 @@ Last update: 2026-02-11
 - [ ] PCRE flags は `i/s/m/A` と ClamAV側 `r/e` を部分反映。`x/E/U` などは未対応
 - [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
 - [ ] hexに付くmodifierの厳密反映（現在 ignore note）
-- [ ] target description を conditionに反映
+- [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み（Container/Intermediates等は未対応）
 
 ### 2.4 ndb（extended/body）の現状
 

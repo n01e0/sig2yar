@@ -270,6 +270,10 @@ impl<'t> TargetDescription<'t> {
     pub fn to_ir(&self) -> crate::ir::TargetDescription {
         crate::ir::TargetDescription {
             raw: compact_whitespace(&self.to_string()),
+            target_type: Some(self.target.to_string()),
+            file_size: range_to_inclusive_u64(self.file_size.as_ref()),
+            entry_point: range_to_inclusive_u64(self.entry_point.as_ref()),
+            number_of_sections: range_to_inclusive_u64(self.number_of_sections.as_ref()),
         }
     }
 }
@@ -395,6 +399,14 @@ fn compact_whitespace(input: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn range_to_inclusive_u64(range: Option<&Range<usize>>) -> Option<(u64, u64)> {
+    let range = range?;
+    let start = u64::try_from(range.start).ok()?;
+    let end_exclusive = u64::try_from(range.end).ok()?;
+    let end_inclusive = end_exclusive.checked_sub(1)?;
+    Some((start, end_inclusive))
 }
 
 fn parse_range<T>(s: &str) -> Result<Range<T>>
