@@ -76,7 +76,7 @@ Last update: 2026-02-11
 
 ## 3) 次にやる順（提案）
 
-1. [ ] `ndb` の本lower（現在は `condition: false` fallback）
+1. [ ] `ndb` 近似の厳密化（negative jump / target_type 3,4,5,7 など）
 2. [ ] `byte_comparison` の厳密 lower
 3. [ ] `macro` の意味反映（範囲条件）
 4. [ ] `fuzzy_img` の専用 lower
