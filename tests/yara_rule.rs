@@ -80,6 +80,44 @@ fn lowers_pcre_subsignature_with_nocase() {
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_to_condition() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("$s1"));
+    assert!(rule.condition.contains("$s0"));
+    assert!(rule.condition.contains("and"));
+}
+
+#[test]
+fn lowers_pcre_offset_with_rolling_flag() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/r").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= 10"));
+}
+
+#[test]
+fn lowers_pcre_encompass_with_range_offset() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= 200"));
+    assert!(rule.condition.contains("@s1[j] <= 500"));
+}
+
+#[test]
+fn lowers_pcre_inline_flags_for_dotall_multiline() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/sm").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /(?sm:abc)/")));
+}
+
+#[test]
 fn lowers_byte_comparison_with_value_check() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#ib2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

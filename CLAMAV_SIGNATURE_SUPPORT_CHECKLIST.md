@@ -58,8 +58,8 @@ Last update: 2026-02-11
 ### 2.3 未対応/不足
 
 - [ ] `MultiGt` / `MultiLt` (`>x,y` / `<x,y`) の本実装
-- [ ] PCRE flags の本対応（現在 `i` 以外は noteのみ）
-- [ ] PCRE trigger prefix の意味反映（現在 ignore note）
+- [ ] PCRE flags は `i/s/m/A` と ClamAV側 `r/e` を部分反映。`x/E/U` などは未対応
+- [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
 - [ ] hexに付くmodifierの厳密反映（現在 ignore note）
 - [ ] target description を conditionに反映
 
@@ -82,7 +82,7 @@ Last update: 2026-02-11
 2. [ ] `byte_comparison` の未対応領域（non-raw base / rawの可変長）を厳密 lower
 3. [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映
 4. [ ] `fuzzy_img` の専用 lower
-5. [ ] PCRE flags / trigger prefix の本対応
+5. [ ] PCRE flags / trigger prefix の残課題（`x/E/U`, maxshift厳密意味）
 6. [ ] `idb/cdb/crb/cbc/pdb/wdb` の優先順決め
 
 ---
