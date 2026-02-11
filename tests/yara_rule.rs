@@ -359,6 +359,12 @@ fn lowers_ndb_target_type_ascii_with_constraint() {
 
     assert!(rule.condition.contains("for all i"));
     assert!(rule.condition.contains("uint8(i) >= 0x20"));
+    assert!(rule.condition.contains("for any j"));
+    assert!(rule.condition.contains("uint8(j) >= 0x41"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("target_type=7"))));
 }
 
 #[test]
