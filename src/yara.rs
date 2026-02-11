@@ -271,7 +271,8 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         }
         "4" => {
             notes.push(
-                "ndb target_type=4 (mail) lowered with header-prefix heuristic".to_string(),
+                "ndb target_type=4 (mail) lowered with strict multi-header heuristic"
+                    .to_string(),
             );
             Some(ndb_mail_target_condition())
         }
@@ -332,34 +333,56 @@ fn ndb_ascii_target_condition() -> String {
 
 fn ndb_html_target_condition() -> String {
     let ascii_pred = ndb_ascii_predicate("uint8(i)");
-    let markers = ["<html", "<!doctype", "<script", "<body", "<head", "<iframe"];
+    let root_markers = ["<html", "<!doctype"];
+    let close_markers = ["</html", "</body", "</head"];
 
-    let marker_small = ndb_any_prefix_in_window_condition(&markers, "j", "filesize", "filesize");
-    let marker_large = ndb_any_prefix_in_window_condition(&markers, "j", "4095", "4096");
+    let root_small =
+        ndb_any_prefix_in_window_condition(&root_markers, "r", "filesize-1", "filesize");
+    let root_large = ndb_any_prefix_in_window_condition(&root_markers, "r", "511", "512");
+
+    let close_small =
+        ndb_any_prefix_in_window_condition(&close_markers, "c", "filesize-1", "filesize");
+    let close_large = ndb_any_prefix_in_window_condition(&close_markers, "c", "4095", "4096");
 
     format!(
-        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E) and {marker_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E) and {marker_large}))"
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E) and {root_small} and {close_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E) and {root_large} and {close_large}))"
     )
 }
 
 fn ndb_mail_target_condition() -> String {
-    let headers = [
-        "From:",
-        "Received:",
+    let ascii_pred = ndb_ascii_predicate("uint8(i)");
+
+    let start_headers = ["From:", "Received:", "Return-Path:"];
+    let secondary_headers = [
         "Subject:",
         "Date:",
-        "MIME-Version:",
-        "Return-Path:",
         "To:",
         "Cc:",
+        "MIME-Version:",
+        "Content-Type:",
+        "Message-Id:",
     ];
+    let separators = ["\r\n\r\n", "\n\n"];
 
-    let header_exprs = headers
+    let header_exprs = start_headers
         .iter()
         .map(|header| ndb_ascii_prefix_at_offset_condition(header, "0"))
         .collect::<Vec<_>>();
 
-    format!("({})", header_exprs.join(" or "))
+    let secondary_small =
+        ndb_any_prefix_in_window_condition(&secondary_headers, "h", "filesize-1", "filesize");
+    let secondary_large =
+        ndb_any_prefix_in_window_condition(&secondary_headers, "h", "4095", "4096");
+
+    let separator_small =
+        ndb_any_prefix_in_window_condition(&separators, "s", "filesize-1", "filesize");
+    let separator_large = ndb_any_prefix_in_window_condition(&separators, "s", "4095", "4096");
+
+    format!(
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and ({}) and {secondary_small} and {separator_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and ({}) and {secondary_large} and {separator_large}))",
+        header_exprs.join(" or "),
+        header_exprs.join(" or "),
+    )
 }
 
 fn ndb_any_prefix_in_window_condition(
