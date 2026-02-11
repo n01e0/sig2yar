@@ -134,13 +134,23 @@ fn lowers_ndb_entrypoint_with_pe_import() {
 }
 
 #[test]
-fn lowers_ndb_negative_jump_with_note() {
+fn lowers_ndb_negative_jump_exactly() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-15}BB").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
     assert!(src.contains("$a = { AA [0-15] BB }"));
-    assert!(src.contains("ndb negative jump {-15} approximated to [0-15]"));
+    assert!(!src.contains("approximated"));
+    assert_eq!(rule.condition, "$a");
+}
+
+#[test]
+fn lowers_ndb_open_ended_jump() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-}BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("$a = { AA [10-] BB }"));
     assert_eq!(rule.condition, "$a");
 }
 

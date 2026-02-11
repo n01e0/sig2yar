@@ -77,3 +77,12 @@ fn ndb_rule_with_target_type_7_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=7 rule");
 }
+
+#[test]
+fn ndb_rule_with_open_ended_jump_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-}BB").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb open-ended jump rule");
+}

@@ -478,15 +478,20 @@ fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> 
         }
 
         let width = num.unsigned_abs();
-        notes.push(format!(
-            "ndb negative jump {{{num}}} approximated to [0-{width}]"
-        ));
         return Some(format!("[0-{width}]"));
     }
 
     if let Some((lhs, rhs)) = value.split_once('-') {
-        let start = lhs.trim().parse::<i64>().ok()?;
-        let end = rhs.trim().parse::<i64>().ok()?;
+        let lhs = lhs.trim();
+        let rhs = rhs.trim();
+
+        if !lhs.is_empty() && rhs.is_empty() {
+            let start = lhs.parse::<u64>().ok()?;
+            return Some(format!("[{start}-]"));
+        }
+
+        let start = lhs.parse::<i64>().ok()?;
+        let end = rhs.parse::<i64>().ok()?;
 
         if start >= 0 && end >= 0 {
             if start <= end {
