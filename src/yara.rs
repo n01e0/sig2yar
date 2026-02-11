@@ -573,10 +573,9 @@ fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> 
             let start = lhs.parse::<u64>().ok()?;
             return Some(format!("[{start}-]"));
         }
+    }
 
-        let start = lhs.parse::<i64>().ok()?;
-        let end = rhs.parse::<i64>().ok()?;
-
+    if let Some((start, end)) = parse_signed_range_pair(value) {
         if start >= 0 && end >= 0 {
             if start <= end {
                 return Some(format!("[{start}-{end}]"));
@@ -587,14 +586,37 @@ fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> 
             return Some(format!("[{end}-{start}]"));
         }
 
-        let width = start.unsigned_abs().max(end.unsigned_abs());
         notes.push(format!(
-            "ndb negative range jump {{{value}}} approximated to [0-{width}]"
+            "ndb signed range jump {{{value}}} is unsupported for strict lowering"
         ));
-        return Some(format!("[0-{width}]"));
+        return None;
     }
 
+    notes.push(format!("ndb jump token {{{value}}} is unsupported"));
     None
+}
+
+fn parse_signed_range_pair(value: &str) -> Option<(i64, i64)> {
+    let bytes = value.as_bytes();
+    let mut sep = None;
+
+    for idx in 1..bytes.len() {
+        if bytes[idx] == b'-' && bytes[idx - 1].is_ascii_digit() {
+            sep = Some(idx);
+            break;
+        }
+    }
+
+    let sep = sep?;
+    let lhs = value[..sep].trim();
+    let rhs = value[sep + 1..].trim();
+    if lhs.is_empty() || rhs.is_empty() {
+        return None;
+    }
+
+    let start = lhs.parse::<i64>().ok()?;
+    let end = rhs.parse::<i64>().ok()?;
+    Some((start, end))
 }
 
 fn find_matching(chars: &[char], open_idx: usize, closing: char) -> Option<usize> {
