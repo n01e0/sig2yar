@@ -63,6 +63,12 @@ impl<'p> LogicalSignature<'p> {
     }
 }
 
+pub(crate) fn parse_expression_to_ir(input: &str) -> Result<ir::LogicalExpression> {
+    LogicalExpression::parse(input.to_string())
+        .map(|expr| expr.to_ir())
+        .with_context(|| "Can't parse LogicalExpression")
+}
+
 fn split_subsignatures<'p>(input: &'p str) -> Vec<&'p str> {
     if input.is_empty() {
         return Vec::new();

@@ -7,7 +7,11 @@ use anyhow::Result;
 
 use crate::{
     ir,
-    parser::{hash::HashSignature, logical::LogicalSignature, ndb::NdbSignature},
+    parser::{
+        hash::HashSignature,
+        logical::{parse_expression_to_ir, LogicalSignature},
+        ndb::NdbSignature,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -674,6 +678,10 @@ fn lower_subsignatures(
                     strings.push(YaraString::Raw(line));
                     id_map.push(Some(id));
                 }
+                RawSubsigLowering::StringExpr { line, expr } => {
+                    strings.push(YaraString::Raw(line));
+                    id_map.push(Some(expr));
+                }
                 RawSubsigLowering::Alias(alias) => {
                     id_map.push(Some(alias));
                 }
@@ -945,6 +953,7 @@ fn subsig_modifier_codes(modifiers: &[ir::SubsignatureModifier]) -> String {
 
 enum RawSubsigLowering {
     String(String),
+    StringExpr { line: String, expr: String },
     Alias(String),
     Expr(String),
     Skip,
@@ -1024,19 +1033,36 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(pcre) = parse_pcre_like(raw) {
-        if pcre.has_trigger_prefix {
-            notes.push(format!(
-                "subsig[{idx}] pcre trigger prefix ignored during lowering"
-            ));
-        }
+        let mut inline_flags = String::new();
+        let mut anchored = false;
+        let mut rolling = false;
+        let mut encompass = false;
 
         for flag in pcre.flags.chars() {
             match flag {
                 'i' => string_mods.nocase = true,
-                // these need dedicated semantic mapping; keep explicit note for now
-                'g' | 'r' | 'E' | 's' | 'm' | 'e' | 'a' | 'd' | 'U' => notes.push(format!(
-                    "subsig[{idx}] pcre flag '{}' is not mapped yet",
-                    flag
+                's' | 'm' => {
+                    if !inline_flags.contains(flag) {
+                        inline_flags.push(flag);
+                    }
+                }
+                'A' => anchored = true,
+                'r' => rolling = true,
+                'e' => encompass = true,
+                'g' => notes.push(format!(
+                    "subsig[{idx}] pcre flag 'g' treated as no-op (YARA already searches globally)"
+                )),
+                'x' => notes.push(format!("subsig[{idx}] pcre flag 'x' is not mapped yet")),
+                'E' => notes.push(format!("subsig[{idx}] pcre flag 'E' is not mapped yet")),
+                'U' => notes.push(format!("subsig[{idx}] pcre flag 'U' is not mapped yet")),
+                'a' => {
+                    anchored = true;
+                    notes.push(format!(
+                        "subsig[{idx}] legacy pcre flag 'a' treated as anchored"
+                    ));
+                }
+                'd' => notes.push(format!(
+                    "subsig[{idx}] legacy pcre flag 'd' is not mapped yet"
                 )),
                 other => notes.push(format!(
                     "subsig[{idx}] unknown pcre flag '{}' ignored",
@@ -1045,8 +1071,24 @@ fn lower_raw_or_pcre_subsignature(
             }
         }
 
+        let mut rendered_pattern = pcre.pattern.to_string();
+        if anchored {
+            rendered_pattern = format!("\\A(?:{})", rendered_pattern);
+        }
+        if !inline_flags.is_empty() {
+            rendered_pattern = format!("(?{}:{})", inline_flags, rendered_pattern);
+        }
+
         let render_mods = render_string_modifiers(&string_mods);
-        return RawSubsigLowering::String(format!("{id} = /{}/{}", pcre.pattern, render_mods));
+        let line = format!("{id} = /{}/{render_mods}", rendered_pattern);
+
+        if let Some(expr) =
+            lower_pcre_trigger_condition(idx, id, pcre.prefix, rolling, encompass, known_ids, notes)
+        {
+            return RawSubsigLowering::StringExpr { line, expr };
+        }
+
+        return RawSubsigLowering::String(line);
     }
 
     let escaped = escape_yara_string(raw);
@@ -1477,54 +1519,205 @@ fn is_fuzzy_img_pattern(raw: &str) -> bool {
     raw.starts_with("fuzzy_img#")
 }
 
+#[derive(Debug, Clone, Copy)]
+enum PcreOffsetSpec {
+    Exact(u64),
+    Range { start: u64, maxshift: u64 },
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ParsedPcrePrefix<'a> {
+    trigger: &'a str,
+    offset: Option<PcreOffsetSpec>,
+}
+
 struct ParsedPcre<'a> {
     pattern: &'a str,
     flags: &'a str,
-    has_trigger_prefix: bool,
+    prefix: Option<&'a str>,
+}
+
+fn lower_pcre_trigger_condition(
+    idx: usize,
+    id: &str,
+    prefix: Option<&str>,
+    rolling: bool,
+    encompass: bool,
+    known_ids: &[Option<String>],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    let prefix = prefix?.trim();
+    if prefix.is_empty() {
+        return None;
+    }
+
+    let parsed_prefix = match parse_pcre_trigger_prefix(prefix) {
+        Some(v) => v,
+        None => {
+            notes.push(format!(
+                "subsig[{idx}] pcre trigger prefix parse failed; ignored"
+            ));
+            return None;
+        }
+    };
+
+    let trigger_ir = match parse_expression_to_ir(parsed_prefix.trigger) {
+        Ok(v) => v,
+        Err(_) => {
+            notes.push(format!(
+                "subsig[{idx}] pcre trigger expression parse failed; ignored"
+            ));
+            return None;
+        }
+    };
+
+    let trigger_expr = lower_condition(&trigger_ir, known_ids, notes);
+    if trigger_expr == "false" {
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression resolved to false; trigger constraint ignored"
+        ));
+        return None;
+    }
+
+    let mut parts = vec![id.to_string(), format!("({trigger_expr})")];
+
+    if let Some(offset_expr) =
+        lower_pcre_offset_condition(idx, id, parsed_prefix.offset, rolling, encompass, notes)
+    {
+        parts.push(format!("({offset_expr})"));
+    }
+
+    Some(join_condition(parts, "and"))
+}
+
+fn parse_pcre_trigger_prefix(prefix: &str) -> Option<ParsedPcrePrefix<'_>> {
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return None;
+    }
+
+    if let Some((lhs, rhs)) = prefix.split_once(':') {
+        if let Some(offset) = parse_pcre_offset_spec(lhs.trim()) {
+            let trigger = rhs.trim();
+            if trigger.is_empty() {
+                return None;
+            }
+            return Some(ParsedPcrePrefix {
+                trigger,
+                offset: Some(offset),
+            });
+        }
+    }
+
+    Some(ParsedPcrePrefix {
+        trigger: prefix,
+        offset: None,
+    })
+}
+
+fn parse_pcre_offset_spec(input: &str) -> Option<PcreOffsetSpec> {
+    if let Some((start, maxshift)) = input.split_once(',') {
+        return Some(PcreOffsetSpec::Range {
+            start: parse_clamav_numeric(start.trim())?,
+            maxshift: parse_clamav_numeric(maxshift.trim())?,
+        });
+    }
+
+    Some(PcreOffsetSpec::Exact(parse_clamav_numeric(input.trim())?))
+}
+
+fn lower_pcre_offset_condition(
+    idx: usize,
+    id: &str,
+    offset: Option<PcreOffsetSpec>,
+    rolling: bool,
+    encompass: bool,
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    let core = id.strip_prefix('$').unwrap_or(id);
+
+    let Some(offset) = offset else {
+        if rolling {
+            notes.push(format!(
+                "subsig[{idx}] pcre flag 'r' ignored: no offset prefix"
+            ));
+        }
+        if encompass {
+            notes.push(format!(
+                "subsig[{idx}] pcre flag 'e' ignored: no maxshift in offset prefix"
+            ));
+        }
+        return None;
+    };
+
+    match offset {
+        PcreOffsetSpec::Exact(start) => {
+            if encompass {
+                notes.push(format!(
+                    "subsig[{idx}] pcre flag 'e' ignored on exact offset"
+                ));
+            }
+
+            if rolling {
+                Some(format!(
+                    "for any j in (1..#{core}) : (@{core}[j] >= {start})"
+                ))
+            } else {
+                Some(format!(
+                    "for any j in (1..#{core}) : (@{core}[j] == {start})"
+                ))
+            }
+        }
+        PcreOffsetSpec::Range { start, maxshift } => {
+            if rolling {
+                notes.push(format!(
+                    "subsig[{idx}] pcre flag 'r' ignored when maxshift is present"
+                ));
+            }
+
+            if encompass {
+                Some(format!(
+                    "for any j in (1..#{core}) : (@{core}[j] >= {start} and @{core}[j] <= {})",
+                    start.saturating_add(maxshift)
+                ))
+            } else {
+                notes.push(format!(
+                    "subsig[{idx}] pcre maxshift present without 'e'; using lower-bound-only offset"
+                ));
+                Some(format!(
+                    "for any j in (1..#{core}) : (@{core}[j] >= {start})"
+                ))
+            }
+        }
+    }
 }
 
 fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
     let start = raw.find('/')?;
     let prefix = raw[..start].trim();
 
-    let mut escaped = false;
-    let mut end = None;
-    for (offset, ch) in raw[start + 1..].char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
+    let tail = &raw[start + 1..];
+    let end_rel = tail.rfind('/')?;
+    let end = start + 1 + end_rel;
 
-        match ch {
-            '\\' => escaped = true,
-            '/' => {
-                end = Some(start + 1 + offset);
-                break;
-            }
-            _ => {}
-        }
-    }
-
-    let end = end?;
     let pattern = &raw[start + 1..end];
-    let flags = raw[end + 1..].trim();
-
-    if flags.is_empty() {
-        return Some(ParsedPcre {
-            pattern,
-            flags: "",
-            has_trigger_prefix: !prefix.is_empty(),
-        });
+    if pattern.is_empty() {
+        return None;
     }
 
-    if !flags.chars().all(|c| c.is_ascii_alphabetic()) {
+    let flags = raw[end + 1..].trim();
+    if !flags.is_empty() && !flags.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
     }
 
     Some(ParsedPcre {
         pattern,
         flags,
-        has_trigger_prefix: !prefix.is_empty(),
+        prefix: if prefix.is_empty() {
+            None
+        } else {
+            Some(prefix)
+        },
     })
 }
 
