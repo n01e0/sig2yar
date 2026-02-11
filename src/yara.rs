@@ -677,6 +677,9 @@ fn lower_subsignatures(
                 RawSubsigLowering::Alias(alias) => {
                     id_map.push(Some(alias));
                 }
+                RawSubsigLowering::Expr(expr) => {
+                    id_map.push(Some(expr));
+                }
                 RawSubsigLowering::Skip => {
                     id_map.push(None);
                 }
@@ -803,7 +806,19 @@ fn collect_subexpr_terms(
     match expr {
         ir::LogicalExpression::SubExpression(idx) => {
             let id = id_for(*idx, id_map, notes);
-            if id != "false" && !out.contains(&id) {
+            if id == "false" {
+                return true;
+            }
+
+            if !is_yara_string_identifier(&id) {
+                notes.push(format!(
+                    "count expression references non-string subsig index {}; lowered to false",
+                    idx
+                ));
+                return false;
+            }
+
+            if !out.contains(&id) {
                 out.push(id);
             }
             true
@@ -931,6 +946,7 @@ fn subsig_modifier_codes(modifiers: &[ir::SubsignatureModifier]) -> String {
 enum RawSubsigLowering {
     String(String),
     Alias(String),
+    Expr(String),
     Skip,
 }
 
@@ -947,17 +963,24 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Skip;
     }
 
-    if let Some(trigger_idx) = parse_byte_comparison_trigger(raw) {
-        if let Some(Some(alias)) = known_ids.get(trigger_idx) {
+    if let Some(byte_cmp) = parse_byte_comparison(raw) {
+        if let Some(lowered) = lower_byte_comparison_condition(idx, &byte_cmp, known_ids, notes) {
+            return RawSubsigLowering::Expr(lowered);
+        }
+
+        if let Some(Some(alias)) = known_ids.get(byte_cmp.trigger_idx) {
             notes.push(format!(
-                "subsig[{idx}] byte_comparison lowered as alias to subsig[{trigger_idx}]"
+                "subsig[{idx}] byte_comparison fell back to trigger alias subsig[{}]",
+                byte_cmp.trigger_idx
             ));
             return RawSubsigLowering::Alias(alias.clone());
         }
 
         notes.push(format!(
-            "subsig[{idx}] byte_comparison trigger {trigger_idx} unresolved; fallback to literal"
+            "subsig[{idx}] byte_comparison trigger {} unresolved; lowered to false",
+            byte_cmp.trigger_idx
         ));
+        return RawSubsigLowering::Skip;
     }
 
     if let Some(macro_idx) = parse_macro_reference(raw) {
@@ -1050,7 +1073,50 @@ fn render_string_modifiers(mods: &StringModifierSet) -> String {
     out
 }
 
-fn parse_byte_comparison_trigger(raw: &str) -> Option<usize> {
+#[derive(Debug, Clone, Copy)]
+enum ByteCmpBase {
+    Hex,
+    Decimal,
+    Auto,
+    Raw,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ByteCmpEndian {
+    Little,
+    Big,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ByteCmpOp {
+    Gt,
+    Lt,
+    Eq,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ByteCmpOptions {
+    base: Option<ByteCmpBase>,
+    endian: Option<ByteCmpEndian>,
+    exact: bool,
+    num_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ByteCmpClause {
+    op: ByteCmpOp,
+    value: u64,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedByteComparison {
+    trigger_idx: usize,
+    offset: i64,
+    options: ByteCmpOptions,
+    comparisons: Vec<ByteCmpClause>,
+}
+
+fn parse_byte_comparison(raw: &str) -> Option<ParsedByteComparison> {
     let open = raw.find('(')?;
     if open == 0 || !raw.ends_with(')') || !raw.contains('#') {
         return None;
@@ -1060,8 +1126,252 @@ fn parse_byte_comparison_trigger(raw: &str) -> Option<usize> {
     if !trigger.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
+    let trigger_idx = trigger.parse::<usize>().ok()?;
 
-    trigger.parse::<usize>().ok()
+    let inner = &raw[open + 1..raw.len() - 1];
+    let mut parts = inner.split('#');
+    let offset_part = parts.next()?.trim();
+    let options_part = parts.next()?.trim();
+    let comparisons_part = parts.next()?.trim();
+    if parts.next().is_some() {
+        return None;
+    }
+
+    let offset = parse_byte_comparison_offset(offset_part)?;
+    let options = parse_byte_comparison_options(options_part)?;
+    let comparisons = parse_byte_comparison_clauses(comparisons_part)?;
+    if comparisons.is_empty() {
+        return None;
+    }
+
+    Some(ParsedByteComparison {
+        trigger_idx,
+        offset,
+        options,
+        comparisons,
+    })
+}
+
+fn parse_byte_comparison_offset(input: &str) -> Option<i64> {
+    let (sign, rest) = if let Some(rest) = input.strip_prefix(">>") {
+        (1i64, rest)
+    } else if let Some(rest) = input.strip_prefix("<<") {
+        (-1i64, rest)
+    } else {
+        return None;
+    };
+
+    let value = parse_clamav_numeric(rest)? as i64;
+    Some(sign * value)
+}
+
+fn parse_byte_comparison_options(input: &str) -> Option<ByteCmpOptions> {
+    if input.is_empty() {
+        return None;
+    }
+
+    let chars: Vec<char> = input.chars().collect();
+    let mut idx = 0usize;
+
+    let base = if idx < chars.len() {
+        match chars[idx] {
+            'h' => {
+                idx += 1;
+                Some(ByteCmpBase::Hex)
+            }
+            'd' => {
+                idx += 1;
+                Some(ByteCmpBase::Decimal)
+            }
+            'a' => {
+                idx += 1;
+                Some(ByteCmpBase::Auto)
+            }
+            'i' => {
+                idx += 1;
+                Some(ByteCmpBase::Raw)
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let endian = if idx < chars.len() {
+        match chars[idx] {
+            'l' => {
+                idx += 1;
+                Some(ByteCmpEndian::Little)
+            }
+            'b' => {
+                idx += 1;
+                Some(ByteCmpEndian::Big)
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let exact = if idx < chars.len() && chars[idx] == 'e' {
+        idx += 1;
+        true
+    } else {
+        false
+    };
+
+    if idx >= chars.len() {
+        return None;
+    }
+
+    let num_bytes = parse_clamav_numeric(&input[idx..])?;
+
+    Some(ByteCmpOptions {
+        base,
+        endian,
+        exact,
+        num_bytes,
+    })
+}
+
+fn parse_byte_comparison_clauses(input: &str) -> Option<Vec<ByteCmpClause>> {
+    let mut out = Vec::new();
+
+    for token in input.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            return None;
+        }
+
+        let (op, value_str) = match token.as_bytes().first().copied() {
+            Some(b'>') => (ByteCmpOp::Gt, &token[1..]),
+            Some(b'<') => (ByteCmpOp::Lt, &token[1..]),
+            Some(b'=') => (ByteCmpOp::Eq, &token[1..]),
+            _ => return None,
+        };
+
+        let value = parse_clamav_numeric(value_str)?;
+        out.push(ByteCmpClause { op, value });
+    }
+
+    Some(out)
+}
+
+fn parse_clamav_numeric(input: &str) -> Option<u64> {
+    if input.is_empty() {
+        return None;
+    }
+
+    if input.chars().all(|c| c.is_ascii_digit()) {
+        return input.parse::<u64>().ok();
+    }
+
+    if input.chars().all(|c| c.is_ascii_hexdigit()) {
+        return u64::from_str_radix(input, 16).ok();
+    }
+
+    None
+}
+
+fn lower_byte_comparison_condition(
+    idx: usize,
+    byte_cmp: &ParsedByteComparison,
+    known_ids: &[Option<String>],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    let trigger_id = known_ids
+        .get(byte_cmp.trigger_idx)
+        .and_then(|v| v.as_ref())
+        .cloned()?;
+
+    if !is_yara_string_identifier(&trigger_id) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison trigger {} is not a direct string id",
+            byte_cmp.trigger_idx
+        ));
+        return None;
+    }
+
+    let base = byte_cmp.options.base.unwrap_or(ByteCmpBase::Auto);
+    if !matches!(base, ByteCmpBase::Raw) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison base {:?} not fully supported (needs raw 'i')",
+            base
+        ));
+        return None;
+    }
+
+    let num_bytes = byte_cmp.options.num_bytes;
+    let read_fn = match byte_cmp.options.endian.unwrap_or(ByteCmpEndian::Big) {
+        ByteCmpEndian::Little => match num_bytes {
+            1 => "uint8",
+            2 => "uint16",
+            4 => "uint32",
+            8 => "uint64",
+            _ => {
+                notes.push(format!(
+                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8)"
+                ));
+                return None;
+            }
+        },
+        ByteCmpEndian::Big => match num_bytes {
+            1 => "uint8",
+            2 => "uint16be",
+            4 => "uint32be",
+            8 => "uint64be",
+            _ => {
+                notes.push(format!(
+                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8)"
+                ));
+                return None;
+            }
+        },
+    };
+
+    let core = trigger_id.strip_prefix('$').unwrap_or(&trigger_id);
+
+    let start_expr = if byte_cmp.offset >= 0 {
+        format!("@{core}[j] + {}", byte_cmp.offset)
+    } else {
+        format!("@{core}[j] - {}", byte_cmp.offset.unsigned_abs())
+    };
+
+    let mut guards = Vec::new();
+    if byte_cmp.offset < 0 {
+        guards.push(format!("@{core}[j] >= {}", byte_cmp.offset.unsigned_abs()));
+    }
+
+    let exact_required = byte_cmp.options.exact || matches!(base, ByteCmpBase::Raw);
+    if exact_required {
+        guards.push(format!("({start_expr}) + {num_bytes} <= filesize"));
+    }
+
+    let value_expr = format!("{read_fn}({start_expr})");
+    let mut cmp_parts = Vec::new();
+    for cmp in &byte_cmp.comparisons {
+        let expr = match cmp.op {
+            ByteCmpOp::Gt => format!("{value_expr} > {}", cmp.value),
+            ByteCmpOp::Lt => format!("{value_expr} < {}", cmp.value),
+            ByteCmpOp::Eq => format!("{value_expr} == {}", cmp.value),
+        };
+        cmp_parts.push(expr);
+    }
+
+    let mut clause_parts = guards;
+    clause_parts.extend(cmp_parts);
+
+    Some(format!(
+        "for any j in (1..#{core}) : ({})",
+        clause_parts.join(" and ")
+    ))
+}
+
+fn is_yara_string_identifier(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix('$') else {
+        return false;
+    };
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn parse_macro_reference(raw: &str) -> Option<usize> {
