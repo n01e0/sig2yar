@@ -121,6 +121,18 @@ fn lowers_raw_subsignature_with_modifiers() {
 }
 
 #[test]
+fn lowers_hex_subsignature_with_nocase_modifier() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = { (41|61) (42|62) (43|63) }")));
+}
+
+#[test]
 fn lowers_multilt_for_group_as_distinct_approximation() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

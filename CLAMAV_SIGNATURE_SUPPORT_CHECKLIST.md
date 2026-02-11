@@ -60,7 +60,7 @@ Last update: 2026-02-11
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は distinct-count近似で暫定対応
 - [ ] PCRE flags は `i/s/m/A` と ClamAV側 `r/e` を部分反映。`x/E/U` などは未対応
 - [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
-- [ ] hexに付くmodifierの厳密反映（現在 ignore note）
+- [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み（Container/Intermediates等は未対応）
 
 ### 2.4 ndb（extended/body）の現状
