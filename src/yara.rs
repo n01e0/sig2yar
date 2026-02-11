@@ -1788,6 +1788,24 @@ fn lower_byte_comparison_condition(
         },
     };
 
+    let max_raw_value = match num_bytes {
+        1 => u8::MAX as u64,
+        2 => u16::MAX as u64,
+        4 => u32::MAX as u64,
+        8 => u64::MAX,
+        _ => unreachable!(),
+    };
+
+    for cmp in &byte_cmp.comparisons {
+        if cmp.value > max_raw_value {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison raw threshold {} exceeds {}-byte range; lowered to false for safety",
+                cmp.value, num_bytes
+            ));
+            return Some("false".to_string());
+        }
+    }
+
     let mut guards = base_guards;
     guards.push(format!("({start_expr}) + {num_bytes} <= filesize"));
 
