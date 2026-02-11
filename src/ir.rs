@@ -52,6 +52,8 @@ pub struct TargetDescription {
     pub file_size: Option<(u64, u64)>,
     pub entry_point: Option<(u64, u64)>,
     pub number_of_sections: Option<(u64, u64)>,
+    pub container: Option<String>,
+    pub intermediates: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 # ClamAV Signature Support Checklist
 
-Last update: 2026-02-11
+Last update: 2026-02-12
 
 このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
 
@@ -61,7 +61,7 @@ Last update: 2026-02-11
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。`E` などは未対応
 - [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
 - [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
-- [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み（Container/Intermediates等は未対応）
+- [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
 ### 2.4 ndb（extended/body）の現状
 

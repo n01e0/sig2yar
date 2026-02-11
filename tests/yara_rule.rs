@@ -73,6 +73,31 @@ fn reflects_target_description_entrypoint_and_sections() {
 }
 
 #[test]
+fn lowers_target_description_container_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1,Container:CL_TYPE_ZIP;0;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("Container=CL_TYPE_ZIP"))));
+}
+
+#[test]
+fn lowers_target_description_intermediates_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1,Intermediates:1;0;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("Intermediates=1"))));
+}
+
+#[test]
 fn lowers_match_count_expression() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)=1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
