@@ -295,16 +295,28 @@ fn lowers_byte_comparison_non_raw_hex_exact_lt() {
 }
 
 #[test]
-fn byte_comparison_non_raw_falls_back_to_alias() {
+fn lowers_byte_comparison_non_raw_non_exact_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#db2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.strings.len(), 1);
-    assert_eq!(rule.condition, "($s0 and $s0)");
+    assert_eq!(rule.condition, "($s0 and false)");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("fell back to trigger alias"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("non-exact unsupported; lowered to false for safety"))));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle2#=12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("little-endian unsupported; lowered to false for safety"))));
 }
 
 #[test]

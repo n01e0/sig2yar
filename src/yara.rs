@@ -1750,26 +1750,26 @@ fn lower_textual_byte_comparison_condition(
 ) -> Option<String> {
     if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little)) {
         notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw little-endian is unsupported"
+            "subsig[{idx}] byte_comparison non-raw little-endian unsupported; lowered to false for safety"
         ));
-        return None;
+        return Some("false".to_string());
     }
 
     if !byte_cmp.options.exact {
         notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw currently requires exact ('e')"
+            "subsig[{idx}] byte_comparison non-raw non-exact unsupported; lowered to false for safety"
         ));
-        return None;
+        return Some("false".to_string());
     }
 
     let width = match usize::try_from(byte_cmp.options.num_bytes) {
         Ok(v) if v > 0 && v <= 64 => v,
         _ => {
             notes.push(format!(
-                "subsig[{idx}] byte_comparison non-raw width {} unsupported",
+                "subsig[{idx}] byte_comparison non-raw width {} unsupported; lowered to false for safety",
                 byte_cmp.options.num_bytes
             ));
-            return None;
+            return Some("false".to_string());
         }
     };
 
@@ -1781,10 +1781,10 @@ fn lower_textual_byte_comparison_condition(
         let threshold_specs = build_textual_threshold_specs(base, width, cmp.value);
         if threshold_specs.is_empty() {
             notes.push(format!(
-                "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}",
+                "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}; lowered to false for safety",
                 cmp.value, width
             ));
-            return None;
+            return Some("false".to_string());
         }
 
         let mut exprs = Vec::new();

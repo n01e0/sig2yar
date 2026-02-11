@@ -140,6 +140,16 @@ fn yara_rule_with_non_raw_byte_comparison_lt_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_byte_comparison_non_exact_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#db2#>512)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile non-raw byte-compare non-exact fallback(false) rule");
+}
+
+#[test]
 fn ndb_rule_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:41424344:73").unwrap();
     let ir = sig.to_ir();
