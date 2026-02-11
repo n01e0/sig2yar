@@ -1228,7 +1228,11 @@ fn lower_raw_or_pcre_subsignature(
                 'g' => notes.push(format!(
                     "subsig[{idx}] pcre flag 'g' treated as no-op (YARA already searches globally)"
                 )),
-                'x' => notes.push(format!("subsig[{idx}] pcre flag 'x' is not mapped yet")),
+                'x' => {
+                    if !inline_flags.contains('x') {
+                        inline_flags.push('x');
+                    }
+                }
                 'E' => notes.push(format!("subsig[{idx}] pcre flag 'E' is not mapped yet")),
                 'U' => notes.push(format!("subsig[{idx}] pcre flag 'U' is not mapped yet")),
                 'a' => {
