@@ -1,5 +1,5 @@
-use sig2yar::parser::logical::LogicalSignature;
-use sig2yar::yara::YaraRule;
+use sig2yar::parser::{logical::LogicalSignature, ndb::NdbSignature};
+use sig2yar::yara::{self, YaraRule};
 
 #[test]
 fn yara_rule_compiles_with_yara_x() {
@@ -30,4 +30,32 @@ fn yara_rule_with_byte_macro_fuzzy_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile byte/macro/fuzzy generated rule");
+}
+
+#[test]
+fn ndb_rule_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:41424344:73").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile generated ndb rule");
+}
+
+#[test]
+fn ndb_rule_with_ep_offset_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP+0,15:83e0038935{4}893d{4}").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb EP-offset rule");
+}
+
+#[test]
+fn ndb_rule_with_alternatives_and_wildcards_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:2e0064006c006c00??003a005c00(45|65)00")
+        .unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb complex hex rule");
 }

@@ -16,10 +16,10 @@ Last update: 2026-02-11
 - [x] `msb` (hash)
 - [x] `imp` (hash)
 - [x] `ldb` (logical)
+- [x] `ndb` (extended/body signatures) ※parse + 実用lower（近似あり）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `ndb` (extended/body signatures)
 - [ ] `idb`
 - [ ] `cdb`
 - [ ] `crb`
@@ -63,11 +63,20 @@ Last update: 2026-02-11
 - [ ] hexに付くmodifierの厳密反映（現在 ignore note）
 - [ ] target description を conditionに反映
 
+### 2.4 ndb（extended/body）の現状
+
+- [x] `DbType::Ndb` 追加（CLIから `ndb` 指定可能）
+- [x] parser + IR + renderer 実装
+- [x] bodyパターン本体のYARA化（hex/wildcard/jump/alt の基本）
+- [x] offsetの主要形式をconditionへ反映（`*`, `n`, `n,m`, `EP±`, `Sx+`, `SL+`, `SE`, `EOF`）
+- [ ] 一部構文の近似（例: negative jump）を厳密化
+- [ ] target_type（3/4/5/7 など）の厳密条件化
+
 ---
 
 ## 3) 次にやる順（提案）
 
-1. [ ] `ndb` パーサ + IR + lower の最小実装
+1. [ ] `ndb` 近似の厳密化（negative jump / target_type 3,4,5,7 など）
 2. [ ] `byte_comparison` の厳密 lower
 3. [ ] `macro` の意味反映（範囲条件）
 4. [ ] `fuzzy_img` の専用 lower
