@@ -278,6 +278,13 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         "5" => Some(ndb_graphics_target_condition()),
         "6" => Some("uint32(0) == 0x464C457F".to_string()), // ELF
         "7" => Some(ndb_ascii_target_condition()),
+        "8" => {
+            notes.push(
+                "ndb target_type=8 is reserved/unused; constrained to false for safety"
+                    .to_string(),
+            );
+            Some("false".to_string())
+        }
         "9" => Some(
             "(uint32(0) == 0xCEFAEDFE or uint32(0) == 0xCFFAEDFE or uint32(0) == 0xFEEDFACE or uint32(0) == 0xFEEDFACF or uint32(0) == 0xBEBAFECA or uint32(0) == 0xCAFEBABE)".to_string(),
         ), // Mach-O and FAT
@@ -287,10 +294,17 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         ), // FWS/CWS/ZWS
         "12" => Some("uint32(0) == 0xBEBAFECA".to_string()), // CAFEBABE
         other => {
-            notes.push(format!(
-                "ndb target_type={other} is not yet constrained in condition"
-            ));
-            None
+            if other.parse::<u32>().is_ok_and(|v| v >= 13) {
+                notes.push(format!(
+                    "ndb target_type={other} unsupported (13+); constrained to false for safety"
+                ));
+                Some("false".to_string())
+            } else {
+                notes.push(format!(
+                    "ndb target_type={other} is invalid/unknown; constrained to false for safety"
+                ));
+                Some("false".to_string())
+            }
         }
     }
 }

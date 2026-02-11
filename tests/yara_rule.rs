@@ -313,3 +313,27 @@ fn lowers_ndb_target_type_ascii_with_constraint() {
     assert!(rule.condition.contains("for all i"));
     assert!(rule.condition.contains("uint8(i) >= 0x20"));
 }
+
+#[test]
+fn lowers_ndb_target_type_8_to_false_for_safety() {
+    let sig = NdbSignature::parse("Unknown.Test-1:8:*:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("target_type=8"))));
+}
+
+#[test]
+fn lowers_ndb_target_type_13_plus_to_false_for_safety() {
+    let sig = NdbSignature::parse("Unknown.Test-2:13:*:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("13+"))));
+}
