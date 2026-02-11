@@ -190,6 +190,16 @@ fn ndb_rule_compiles_with_yara_x() {
 }
 
 #[test]
+fn ndb_rule_with_descending_absolute_offset_range_fallback_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:100,10:41424344").unwrap();
+    let ir = sig.to_ir();
+    let src = yara::render_ndb_signature(&ir);
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile ndb descending absolute-range fallback rule");
+}
+
+#[test]
 fn ndb_rule_with_ep_offset_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP+0,15:83e0038935{4}893d{4}").unwrap();
     let ir = sig.to_ir();
