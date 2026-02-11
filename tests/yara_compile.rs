@@ -20,6 +20,15 @@ fn yara_rule_with_raw_and_pcre_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_hex_nocase_modifier_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile hex-nocase generated rule");
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/sme").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

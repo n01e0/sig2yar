@@ -711,13 +711,32 @@ fn lower_subsignatures(
         let id = format!("$s{idx}");
         match &subsig.pattern {
             ir::SubsignaturePattern::Hex(hex) if is_even_hex(hex) => {
-                if !subsig.modifiers.is_empty() {
+                let mut hex_nocase = false;
+                let mut ignored = Vec::new();
+                for modifier in &subsig.modifiers {
+                    match modifier {
+                        ir::SubsignatureModifier::CaseInsensitive => hex_nocase = true,
+                        other => ignored.push(match other {
+                            ir::SubsignatureModifier::Wide => "w".to_string(),
+                            ir::SubsignatureModifier::Fullword => "f".to_string(),
+                            ir::SubsignatureModifier::Ascii => "a".to_string(),
+                            ir::SubsignatureModifier::Unknown(c) => c.to_string(),
+                            ir::SubsignatureModifier::CaseInsensitive => unreachable!(),
+                        }),
+                    }
+                }
+
+                if !ignored.is_empty() {
                     notes.push(format!(
-                        "subsig[{idx}] ignored modifiers on hex: {}",
-                        subsig_modifier_codes(&subsig.modifiers)
+                        "subsig[{idx}] ignored non-nocase modifiers on hex: {}",
+                        ignored.join("")
                     ));
                 }
-                let line = format!("{id} = {{ {} }}", format_hex_bytes(hex));
+
+                let line = format!(
+                    "{id} = {{ {} }}",
+                    format_hex_bytes_with_ascii_nocase(hex, hex_nocase)
+                );
                 strings.push(YaraString::Raw(line));
                 id_map.push(Some(id));
             }
@@ -1067,6 +1086,33 @@ fn format_hex_bytes(input: &str) -> String {
     out
 }
 
+fn format_hex_bytes_with_ascii_nocase(input: &str, nocase: bool) -> String {
+    if !nocase {
+        return format_hex_bytes(input);
+    }
+
+    let mut out = Vec::new();
+    for chunk in input.as_bytes().chunks(2) {
+        let token = String::from_utf8_lossy(chunk).to_string();
+        let Ok(byte) = u8::from_str_radix(&token, 16) else {
+            out.push(token.to_uppercase());
+            continue;
+        };
+
+        let upper = byte.to_ascii_uppercase();
+        let lower = byte.to_ascii_lowercase();
+
+        if byte.is_ascii_alphabetic() && upper != lower {
+            out.push(format!("({:02X}|{:02X})", upper, lower));
+        } else {
+            out.push(format!("{:02X}", byte));
+        }
+    }
+
+    out.join(" ")
+}
+
+#[allow(dead_code)]
 fn subsig_modifier_codes(modifiers: &[ir::SubsignatureModifier]) -> String {
     modifiers
         .iter()
