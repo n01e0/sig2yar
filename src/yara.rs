@@ -800,14 +800,61 @@ fn lower_condition(
                 "false".to_string()
             }
         }
-        ir::LogicalExpression::MultiGt(inner, _, _)
-        | ir::LogicalExpression::MultiLt(inner, _, _) => {
-            notes.push(
-                "multi-threshold comparator (>x,y / <x,y) not implemented yet; lowered to false"
-                    .to_string(),
-            );
-            let _ = lower_count_set(inner, id_map, notes);
-            "false".to_string()
+        ir::LogicalExpression::MultiGt(inner, count, distinct) => {
+            if let Some(single) = lower_single_string_ref(inner, id_map, notes) {
+                if *distinct > 1 {
+                    notes.push(format!(
+                        "multi-gt distinct threshold {distinct} ignored for single-subsig expression"
+                    ));
+                }
+                return format!("#{single} > {count}");
+            }
+
+            if let Some(set) = lower_count_set(inner, id_map, notes) {
+                let distinct_needed = *distinct;
+                let count_needed = count.saturating_add(1);
+                let set_expr = set.join(", ");
+                notes.push(
+                    "multi-gt on grouped expression approximated with distinct-match counts"
+                        .to_string(),
+                );
+                format!("({distinct_needed} of ({set_expr})) and ({count_needed} of ({set_expr}))")
+            } else {
+                "false".to_string()
+            }
+        }
+        ir::LogicalExpression::MultiLt(inner, count, distinct) => {
+            if *count == 0 {
+                notes.push("expression '<0,y' is impossible; lowered to false".to_string());
+                return "false".to_string();
+            }
+
+            if let Some(single) = lower_single_string_ref(inner, id_map, notes) {
+                if *distinct > 1 {
+                    notes.push(format!(
+                        "multi-lt distinct threshold {distinct} ignored for single-subsig expression"
+                    ));
+                }
+                return format!("#{single} < {count}");
+            }
+
+            if *distinct >= *count {
+                notes.push(format!(
+                    "multi-lt distinct threshold {distinct} is incompatible with <{count}; lowered to false"
+                ));
+                return "false".to_string();
+            }
+
+            if let Some(set) = lower_count_set(inner, id_map, notes) {
+                let set_expr = set.join(", ");
+                notes.push(
+                    "multi-lt on grouped expression approximated with distinct-match counts"
+                        .to_string(),
+                );
+                format!("({distinct} of ({set_expr})) and not ({count} of ({set_expr}))")
+            } else {
+                "false".to_string()
+            }
         }
     }
 }
@@ -827,6 +874,30 @@ fn lower_count_at_least(
     } else {
         "false".to_string()
     }
+}
+
+fn lower_single_string_ref(
+    expr: &ir::LogicalExpression,
+    id_map: &[Option<String>],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    let ir::LogicalExpression::SubExpression(idx) = expr else {
+        return None;
+    };
+
+    let id = id_for(*idx, id_map, notes);
+    if id == "false" {
+        return None;
+    }
+    if !is_yara_string_identifier(&id) {
+        notes.push(format!(
+            "single-count comparator references non-string subsig index {}; lowered to false",
+            idx
+        ));
+        return None;
+    }
+
+    Some(id.trim_start_matches('$').to_string())
 }
 
 fn lower_count_set(
