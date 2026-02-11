@@ -81,6 +81,35 @@ fn lowers_match_count_expression() {
 }
 
 #[test]
+fn lowers_multigt_for_single_subsig_with_occurrence_count() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0>2,1;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "#s0 > 2");
+}
+
+#[test]
+fn lowers_multilt_for_single_subsig_with_occurrence_count() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0<3,1;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "#s0 < 3");
+}
+
+#[test]
+fn lowers_multigt_for_group_as_distinct_approximation() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)>2,1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("1 of ($s0, $s1)"));
+    assert!(rule.condition.contains("3 of ($s0, $s1)"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-gt on grouped expression approximated"))));
+}
+
+#[test]
 fn lowers_raw_subsignature_with_modifiers() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;hello::iwf").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -89,6 +118,19 @@ fn lowers_raw_subsignature_with_modifiers() {
     assert!(rule.strings.iter().any(
         |s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = \"hello\" nocase wide fullword")
     ));
+}
+
+#[test]
+fn lowers_multilt_for_group_as_distinct_approximation() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("1 of ($s0, $s1)"));
+    assert!(rule.condition.contains("not (3 of ($s0, $s1))"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt on grouped expression approximated"))));
 }
 
 #[test]

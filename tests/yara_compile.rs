@@ -43,6 +43,15 @@ fn yara_rule_with_target_description_constraints_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_multithreshold_expression_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)>2,1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile multithreshold generated rule");
+}
+
+#[test]
 fn yara_rule_with_byte_macro_fuzzy_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1;0&1&2&3;41414141;0(>>26#ib2#>512);${6-7}0$;fuzzy_img#af2ad01ed42993c7#0",

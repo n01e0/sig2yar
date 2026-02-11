@@ -57,7 +57,7 @@ Last update: 2026-02-11
 
 ### 2.3 未対応/不足
 
-- [ ] `MultiGt` / `MultiLt` (`>x,y` / `<x,y`) の本実装
+- [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は distinct-count近似で暫定対応
 - [ ] PCRE flags は `i/s/m/A` と ClamAV側 `r/e` を部分反映。`x/E/U` などは未対応
 - [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
 - [ ] hexに付くmodifierの厳密反映（現在 ignore note）
