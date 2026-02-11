@@ -1,5 +1,6 @@
 pub mod hash;
 pub mod logical;
+pub mod ndb;
 
 use clap::ValueEnum;
 
@@ -7,4 +8,5 @@ use clap::ValueEnum;
 pub enum DbType {
     Hash,
     Logical,
+    Ndb,
 }

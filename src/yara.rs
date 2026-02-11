@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::{
     ir,
-    parser::{hash::HashSignature, logical::LogicalSignature},
+    parser::{hash::HashSignature, logical::LogicalSignature, ndb::NdbSignature},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +72,41 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
             )
         }
     }
+}
+
+pub fn render_ndb_signature(value: &ir::NdbSignature) -> String {
+    let rule_name = normalize_rule_name(&value.name);
+    let mut meta = format!("        original_ident = \"{}\"\n", value.name);
+    meta.push_str(&format!(
+        "        clamav_target_type = \"{}\"\n",
+        escape_yara_string(&value.target_type)
+    ));
+    meta.push_str(&format!(
+        "        clamav_offset = \"{}\"\n",
+        escape_yara_string(&value.offset)
+    ));
+    meta.push_str(&format!(
+        "        clamav_body_len = \"{}\"\n",
+        value.body.len()
+    ));
+    meta.push_str(&format!(
+        "        clamav_body_preview = \"{}\"\n",
+        escape_yara_string(&preview_for_meta(&value.body, 128))
+    ));
+
+    if let Some(min) = value.min_flevel {
+        meta.push_str(&format!("        min_flevel = \"{min}\"\n"));
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push_str(&format!("        max_flevel = \"{max}\"\n"));
+    }
+
+    meta.push_str("        clamav_unsupported = \"ndb_minimal\"\n");
+
+    format!(
+        "rule {}\n{{\n    meta:\n{}\n    condition:\n        false\n}}",
+        rule_name, meta
+    )
 }
 
 pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule> {
@@ -702,6 +737,12 @@ impl<'p> From<&HashSignature<'p>> for ir::HashSignature {
     }
 }
 
+impl<'p> From<&NdbSignature<'p>> for ir::NdbSignature {
+    fn from(value: &NdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
 fn normalize_rule_name(input: &str) -> String {
     input.replace('.', "_").replace('-', "_")
 }
@@ -726,6 +767,22 @@ fn escape_yara_string(input: &str) -> String {
             _ => out.push(ch),
         }
     }
+    out
+}
+
+fn preview_for_meta(input: &str, max_chars: usize) -> String {
+    if input.chars().count() <= max_chars {
+        return input.to_string();
+    }
+
+    let mut out = String::with_capacity(max_chars + 16);
+    for (i, ch) in input.chars().enumerate() {
+        if i >= max_chars {
+            break;
+        }
+        out.push(ch);
+    }
+    out.push_str("...(truncated)");
     out
 }
 

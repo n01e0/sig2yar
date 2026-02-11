@@ -1,4 +1,4 @@
-use sig2yar::parser::{hash::HashSignature, logical::LogicalSignature};
+use sig2yar::parser::{hash::HashSignature, logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::YaraRule;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -180,12 +180,7 @@ fn parse_hash_signatures_from_clamav_db() {
                 Err(err) => {
                     failures += 1;
                     if samples.len() < MAX_ERROR_SAMPLES {
-                        samples.push(format!(
-                            "{}:{}: {}",
-                            path.display(),
-                            line_no + 1,
-                            err
-                        ));
+                        samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
                     }
                 }
             }
@@ -243,12 +238,7 @@ fn parse_logical_signatures_from_clamav_db() {
                 Err(err) => {
                     failures += 1;
                     if samples.len() < MAX_ERROR_SAMPLES {
-                        samples.push(format!(
-                            "{}:{}: {}",
-                            path.display(),
-                            line_no + 1,
-                            err
-                        ));
+                        samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
                     }
                 }
             }
@@ -261,6 +251,59 @@ fn parse_logical_signatures_from_clamav_db() {
     if failures > 0 {
         panic!(
             "Failed to parse {failures} of {total} logical signatures. Samples:\n{}",
+            samples.join("\n")
+        );
+    }
+}
+
+#[test]
+fn parse_ndb_signatures_from_clamav_db() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let files = collect_files(&db_dir, &["ndb"]);
+    if files.is_empty() {
+        if clamav_db_required() {
+            panic!("No .ndb files found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut total = 0usize;
+    let mut failures = 0usize;
+    let mut samples: Vec<String> = Vec::new();
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            total += 1;
+            if let Err(err) = NdbSignature::parse(line) {
+                failures += 1;
+                if samples.len() < MAX_ERROR_SAMPLES {
+                    samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
+                }
+            }
+        }
+    }
+
+    if total == 0 {
+        panic!("No ndb signatures found under {:?}", db_dir);
+    }
+    if failures > 0 {
+        panic!(
+            "Failed to parse {failures} of {total} ndb signatures. Samples:\n{}",
             samples.join("\n")
         );
     }
