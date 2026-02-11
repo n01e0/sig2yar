@@ -332,6 +332,32 @@ fn lowers_byte_comparison_raw_unsupported_size_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_raw_contradictory_clauses_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#ib2#>512,<100)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("clauses are contradictory") && value.contains("lowered to false for safety"))));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_contradictory_clauses_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>3#de3#>200,<100)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("clauses are contradictory") && value.contains("lowered to false for safety"))));
+}
+
+#[test]
 fn lowers_macro_subsignature_as_positional_constraint() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
