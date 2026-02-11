@@ -331,6 +331,18 @@ fn lowers_ndb_open_ended_jump() {
 }
 
 #[test]
+fn rejects_ndb_complex_signed_range_jump_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-10-5}BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("signed range jump"))));
+}
+
+#[test]
 fn lowers_ndb_target_type_html_with_constraint() {
     let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
