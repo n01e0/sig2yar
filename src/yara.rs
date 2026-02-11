@@ -369,17 +369,25 @@ fn ndb_mail_target_condition() -> String {
         .map(|header| ndb_ascii_prefix_at_offset_condition(header, "0"))
         .collect::<Vec<_>>();
 
-    let secondary_small =
-        ndb_any_prefix_in_window_condition(&secondary_headers, "h", "filesize-1", "filesize");
-    let secondary_large =
-        ndb_any_prefix_in_window_condition(&secondary_headers, "h", "4095", "4096");
-
-    let separator_small =
-        ndb_any_prefix_in_window_condition(&separators, "s", "filesize-1", "filesize");
-    let separator_large = ndb_any_prefix_in_window_condition(&separators, "s", "4095", "4096");
+    let secondary_before_separator_small = ndb_any_prefix_before_separator_in_window_condition(
+        &secondary_headers,
+        &separators,
+        "h",
+        "s",
+        "filesize-1",
+        "filesize",
+    );
+    let secondary_before_separator_large = ndb_any_prefix_before_separator_in_window_condition(
+        &secondary_headers,
+        &separators,
+        "h",
+        "s",
+        "4095",
+        "4096",
+    );
 
     format!(
-        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and ({}) and {secondary_small} and {separator_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and ({}) and {secondary_large} and {separator_large}))",
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and ({}) and {secondary_before_separator_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and ({}) and {secondary_before_separator_large}))",
         header_exprs.join(" or "),
         header_exprs.join(" or "),
     )
@@ -402,6 +410,39 @@ fn ndb_any_prefix_in_window_condition(
         .join(" or ");
 
     format!("for any {idx_var} in (0..{window_end}) : ({clauses})")
+}
+
+fn ndb_any_prefix_before_separator_in_window_condition(
+    prefixes: &[&str],
+    separators: &[&str],
+    prefix_var: &str,
+    separator_var: &str,
+    window_end: &str,
+    size_limit: &str,
+) -> String {
+    let prefix_clauses = prefixes
+        .iter()
+        .map(|prefix| {
+            let len = prefix.len();
+            let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, prefix_var);
+            format!("({prefix_var} + {len} <= {separator_var} and {prefix_match})")
+        })
+        .collect::<Vec<_>>()
+        .join(" or ");
+
+    let separator_clauses = separators
+        .iter()
+        .map(|separator| {
+            let len = separator.len();
+            let separator_match = ndb_ascii_prefix_at_offset_condition(separator, separator_var);
+            format!(
+                "({separator_var} + {len} <= {size_limit} and {separator_match} and for any {prefix_var} in (0..{separator_var}) : ({prefix_clauses}))"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" or ");
+
+    format!("for any {separator_var} in (0..{window_end}) : ({separator_clauses})")
 }
 
 fn ndb_ascii_prefix_at_offset_condition(prefix: &str, offset_expr: &str) -> String {

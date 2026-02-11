@@ -72,7 +72,7 @@ Last update: 2026-02-12
 - [x] target_typeの主要条件化（`1,2,3,4,5,6,7,9,10,11,12`）
 - [x] DB feature coverageテスト（target/offset/body各カテゴリの代表サンプルを固定検証）
 - [ ] 複合range jump は安全側（lower失敗→condition false）へ厳密化を継続中（負数レンジ・降順レンジは safety false 化済み）。残る近似構文を継続整理
-- [ ] target_type は 8/13+ を safety false 化済み。3/4 は heuristic を追加強化（HTML: root+close tag、MAIL: multi-header+separator）、7 は printable+alpha。残は edge-case 詰めと更なる厳密化
+- [ ] target_type は 8/13+ を safety false 化済み。3/4 は heuristic を追加強化（HTML: root+close tag、MAIL: start-header + secondary-header-before-separator）、7 は printable+alpha。残は edge-case 詰めと更なる厳密化
 
 ---
 
