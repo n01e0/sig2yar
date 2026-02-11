@@ -142,11 +142,15 @@ fn lower_subsignatures(
                 id_map.push(None);
             }
             ir::SubsignaturePattern::Raw(raw) => {
-                notes.push(format!(
-                    "subsig[{idx}] skipped: unsupported raw/pcre pattern ({})",
-                    compact_whitespace(raw)
-                ));
-                id_map.push(None);
+                match lower_raw_or_pcre_subsignature(idx, &id, raw, &subsig.modifiers, &mut notes) {
+                    Some(line) => {
+                        strings.push(YaraString::Raw(line));
+                        id_map.push(Some(id));
+                    }
+                    None => {
+                        id_map.push(None);
+                    }
+                }
             }
         }
     }
@@ -393,6 +397,140 @@ fn subsig_modifier_codes(modifiers: &[ir::SubsignatureModifier]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+fn lower_raw_or_pcre_subsignature(
+    idx: usize,
+    id: &str,
+    raw: &str,
+    modifiers: &[ir::SubsignatureModifier],
+    notes: &mut Vec<String>,
+) -> Option<String> {
+    if raw.trim().is_empty() {
+        notes.push(format!("subsig[{idx}] skipped: empty raw pattern"));
+        return None;
+    }
+
+    let mut string_mods = StringModifierSet::default();
+    for modifier in modifiers {
+        match modifier {
+            ir::SubsignatureModifier::CaseInsensitive => string_mods.nocase = true,
+            ir::SubsignatureModifier::Wide => string_mods.wide = true,
+            ir::SubsignatureModifier::Fullword => string_mods.fullword = true,
+            ir::SubsignatureModifier::Ascii => string_mods.ascii = true,
+            ir::SubsignatureModifier::Unknown(ch) => {
+                notes.push(format!("subsig[{idx}] ignored unknown modifier '{}'", ch));
+            }
+        }
+    }
+
+    if let Some(pcre) = parse_pcre_like(raw) {
+        if pcre.has_trigger_prefix {
+            notes.push(format!(
+                "subsig[{idx}] pcre trigger prefix ignored during lowering"
+            ));
+        }
+
+        for flag in pcre.flags.chars() {
+            match flag {
+                'i' => string_mods.nocase = true,
+                // these need dedicated semantic mapping; keep explicit note for now
+                'g' | 'r' | 'E' | 's' | 'm' | 'e' | 'a' | 'd' | 'U' => notes.push(format!(
+                    "subsig[{idx}] pcre flag '{}' is not mapped yet",
+                    flag
+                )),
+                other => notes.push(format!(
+                    "subsig[{idx}] unknown pcre flag '{}' ignored",
+                    other
+                )),
+            }
+        }
+
+        let render_mods = render_string_modifiers(&string_mods);
+        return Some(format!("{id} = /{}/{}", pcre.pattern, render_mods));
+    }
+
+    let escaped = escape_yara_string(raw);
+    let render_mods = render_string_modifiers(&string_mods);
+    Some(format!("{id} = \"{}\"{}", escaped, render_mods))
+}
+
+#[derive(Default)]
+struct StringModifierSet {
+    nocase: bool,
+    wide: bool,
+    ascii: bool,
+    fullword: bool,
+}
+
+fn render_string_modifiers(mods: &StringModifierSet) -> String {
+    let mut out = String::new();
+
+    if mods.nocase {
+        out.push_str(" nocase");
+    }
+    if mods.wide {
+        out.push_str(" wide");
+    }
+    if mods.ascii {
+        out.push_str(" ascii");
+    }
+    if mods.fullword {
+        out.push_str(" fullword");
+    }
+
+    out
+}
+
+struct ParsedPcre<'a> {
+    pattern: &'a str,
+    flags: &'a str,
+    has_trigger_prefix: bool,
+}
+
+fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
+    let start = raw.find('/')?;
+    let prefix = raw[..start].trim();
+
+    let mut escaped = false;
+    let mut end = None;
+    for (offset, ch) in raw[start + 1..].char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escaped = true,
+            '/' => {
+                end = Some(start + 1 + offset);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    let end = end?;
+    let pattern = &raw[start + 1..end];
+    let flags = raw[end + 1..].trim();
+
+    if flags.is_empty() {
+        return Some(ParsedPcre {
+            pattern,
+            flags: "",
+            has_trigger_prefix: !prefix.is_empty(),
+        });
+    }
+
+    if !flags.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+
+    Some(ParsedPcre {
+        pattern,
+        flags,
+        has_trigger_prefix: !prefix.is_empty(),
+    })
 }
 
 impl Display for YaraRule {

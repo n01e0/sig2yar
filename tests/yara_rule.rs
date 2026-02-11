@@ -1,5 +1,5 @@
 use sig2yar::parser::logical::LogicalSignature;
-use sig2yar::yara::{YaraMeta, YaraRule};
+use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
 #[test]
 fn build_yara_rule_from_logical_signature() {
@@ -54,4 +54,27 @@ fn lowers_match_count_expression() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "1 of ($s0, $s1)");
+}
+
+#[test]
+fn lowers_raw_subsignature_with_modifiers() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;hello::iwf").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule.strings.iter().any(
+        |s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = \"hello\" nocase wide fullword")
+    ));
+}
+
+#[test]
+fn lowers_pcre_subsignature_with_nocase() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /abc/ nocase")));
 }
