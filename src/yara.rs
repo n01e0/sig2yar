@@ -1762,13 +1762,6 @@ fn lower_textual_byte_comparison_condition(
         return None;
     }
 
-    if byte_cmp.comparisons.len() != 1 || !matches!(byte_cmp.comparisons[0].op, ByteCmpOp::Eq) {
-        notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw currently supports only single '=' comparison"
-        ));
-        return None;
-    }
-
     let width = match usize::try_from(byte_cmp.options.num_bytes) {
         Ok(v) if v > 0 && v <= 64 => v,
         _ => {
@@ -1780,42 +1773,67 @@ fn lower_textual_byte_comparison_condition(
         }
     };
 
-    let value = byte_cmp.comparisons[0].value;
-    let candidates = build_textual_eq_candidates(base, width, value);
-    if candidates.is_empty() {
-        notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}",
-            value, width
-        ));
-        return None;
-    }
-
     let mut guards = base_guards.to_vec();
     guards.push(format!("({start_expr}) + {width} <= filesize"));
 
-    let value_exprs: Vec<String> = candidates
-        .iter()
-        .map(|candidate| build_ascii_candidate_condition(start_expr, candidate))
-        .collect();
+    let mut cmp_parts = Vec::new();
+    for cmp in &byte_cmp.comparisons {
+        let threshold_specs = build_textual_threshold_specs(base, width, cmp.value);
+        if threshold_specs.is_empty() {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}",
+                cmp.value, width
+            ));
+            return None;
+        }
 
-    let value_check = if value_exprs.len() == 1 {
-        value_exprs[0].clone()
-    } else {
-        join_condition(value_exprs, "or")
-    };
+        let mut exprs = Vec::new();
+        for spec in &threshold_specs {
+            let expr = build_textual_clause_condition(start_expr, spec, cmp.op);
+            if !exprs.contains(&expr) {
+                exprs.push(expr);
+            }
+        }
 
-    guards.push(value_check);
+        let clause = if exprs.len() == 1 {
+            exprs[0].clone()
+        } else {
+            join_condition(exprs, "or")
+        };
+
+        cmp_parts.push(clause);
+    }
+
+    let mut clause_parts = guards;
+    clause_parts.extend(cmp_parts);
 
     Some(format!(
         "for any j in (1..#{core}) : ({})",
-        guards.join(" and ")
+        clause_parts.join(" and ")
     ))
 }
 
-fn build_textual_eq_candidates(base: ByteCmpBase, width: usize, value: u64) -> Vec<Vec<Vec<u8>>> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextualRadix {
+    Decimal,
+    Hex,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TextualThresholdSpec {
+    radix: TextualRadix,
+    digits: Vec<u8>,
+}
+
+fn build_textual_threshold_specs(
+    base: ByteCmpBase,
+    width: usize,
+    value: u64,
+) -> Vec<TextualThresholdSpec> {
     let mut out = Vec::new();
 
-    let push_unique = |items: &mut Vec<Vec<Vec<u8>>>, candidate: Option<Vec<Vec<u8>>>| {
+    let push_unique = |items: &mut Vec<TextualThresholdSpec>,
+                       candidate: Option<TextualThresholdSpec>| {
         if let Some(candidate) = candidate {
             if !items.contains(&candidate) {
                 items.push(candidate);
@@ -1824,11 +1842,13 @@ fn build_textual_eq_candidates(base: ByteCmpBase, width: usize, value: u64) -> V
     };
 
     match base {
-        ByteCmpBase::Hex => push_unique(&mut out, build_hex_ascii_candidate(width, value)),
-        ByteCmpBase::Decimal => push_unique(&mut out, build_decimal_ascii_candidate(width, value)),
+        ByteCmpBase::Hex => push_unique(&mut out, build_hex_textual_threshold(width, value)),
+        ByteCmpBase::Decimal => {
+            push_unique(&mut out, build_decimal_textual_threshold(width, value))
+        }
         ByteCmpBase::Auto => {
-            push_unique(&mut out, build_decimal_ascii_candidate(width, value));
-            push_unique(&mut out, build_hex_ascii_candidate(width, value));
+            push_unique(&mut out, build_decimal_textual_threshold(width, value));
+            push_unique(&mut out, build_hex_textual_threshold(width, value));
         }
         ByteCmpBase::Raw => {}
     }
@@ -1836,53 +1856,262 @@ fn build_textual_eq_candidates(base: ByteCmpBase, width: usize, value: u64) -> V
     out
 }
 
-fn build_decimal_ascii_candidate(width: usize, value: u64) -> Option<Vec<Vec<u8>>> {
+fn build_decimal_textual_threshold(width: usize, value: u64) -> Option<TextualThresholdSpec> {
     let raw = value.to_string();
     if raw.len() > width {
         return None;
     }
 
     let text = format!("{value:0width$}");
-    Some(text.bytes().map(|b| vec![b]).collect())
+    let mut digits = Vec::with_capacity(width);
+    for b in text.bytes() {
+        if !b.is_ascii_digit() {
+            return None;
+        }
+        digits.push(b - b'0');
+    }
+
+    Some(TextualThresholdSpec {
+        radix: TextualRadix::Decimal,
+        digits,
+    })
 }
 
-fn build_hex_ascii_candidate(width: usize, value: u64) -> Option<Vec<Vec<u8>>> {
+fn build_hex_textual_threshold(width: usize, value: u64) -> Option<TextualThresholdSpec> {
     let raw = format!("{value:X}");
     if raw.len() > width {
         return None;
     }
 
     let text = format!("{raw:0>width$}");
-    Some(
-        text.bytes()
-            .map(|b| {
-                if b.is_ascii_alphabetic() {
-                    vec![b.to_ascii_uppercase(), b.to_ascii_lowercase()]
-                } else {
-                    vec![b]
-                }
-            })
-            .collect(),
-    )
-}
-
-fn build_ascii_candidate_condition(start_expr: &str, candidate: &[Vec<u8>]) -> String {
-    let mut parts = Vec::new();
-    for (pos, alts) in candidate.iter().enumerate() {
-        let lhs = format!("uint8(({start_expr}) + {pos})");
-        if alts.len() == 1 {
-            parts.push(format!("{lhs} == 0x{:02X}", alts[0]));
-        } else {
-            let alt_expr = alts
-                .iter()
-                .map(|v| format!("{lhs} == 0x{:02X}", v))
-                .collect::<Vec<_>>()
-                .join(" or ");
-            parts.push(format!("({alt_expr})"));
-        }
+    let mut digits = Vec::with_capacity(width);
+    for b in text.bytes() {
+        let digit = match b {
+            b'0'..=b'9' => b - b'0',
+            b'A'..=b'F' => 10 + (b - b'A'),
+            _ => return None,
+        };
+        digits.push(digit);
     }
 
+    Some(TextualThresholdSpec {
+        radix: TextualRadix::Hex,
+        digits,
+    })
+}
+
+fn build_textual_clause_condition(
+    start_expr: &str,
+    threshold: &TextualThresholdSpec,
+    op: ByteCmpOp,
+) -> String {
+    let all_valid = build_textual_all_valid_condition(start_expr, threshold);
+
+    let cmp_expr = match op {
+        ByteCmpOp::Eq => {
+            let mut parts = Vec::new();
+            for (pos, digit) in threshold.digits.iter().enumerate() {
+                parts.push(build_textual_digit_eq_condition(
+                    start_expr,
+                    pos,
+                    threshold.radix,
+                    *digit,
+                ));
+            }
+            join_condition(parts, "and")
+        }
+        ByteCmpOp::Gt | ByteCmpOp::Lt => {
+            let mut branches = Vec::new();
+            for pos in 0..threshold.digits.len() {
+                let mut parts = Vec::new();
+                for prev in 0..pos {
+                    parts.push(build_textual_digit_eq_condition(
+                        start_expr,
+                        prev,
+                        threshold.radix,
+                        threshold.digits[prev],
+                    ));
+                }
+
+                let boundary = match op {
+                    ByteCmpOp::Gt => build_textual_digit_gt_condition(
+                        start_expr,
+                        pos,
+                        threshold.radix,
+                        threshold.digits[pos],
+                    ),
+                    ByteCmpOp::Lt => build_textual_digit_lt_condition(
+                        start_expr,
+                        pos,
+                        threshold.radix,
+                        threshold.digits[pos],
+                    ),
+                    ByteCmpOp::Eq => unreachable!(),
+                };
+
+                let Some(boundary) = boundary else {
+                    continue;
+                };
+
+                parts.push(boundary);
+                branches.push(join_condition(parts, "and"));
+            }
+
+            if branches.is_empty() {
+                "false".to_string()
+            } else {
+                join_condition(branches, "or")
+            }
+        }
+    };
+
+    format!("({all_valid} and {cmp_expr})")
+}
+
+fn build_textual_all_valid_condition(start_expr: &str, threshold: &TextualThresholdSpec) -> String {
+    let mut parts = Vec::new();
+    for pos in 0..threshold.digits.len() {
+        parts.push(build_textual_digit_valid_condition(
+            start_expr,
+            pos,
+            threshold.radix,
+        ));
+    }
     join_condition(parts, "and")
+}
+
+fn build_textual_digit_valid_condition(
+    start_expr: &str,
+    pos: usize,
+    radix: TextualRadix,
+) -> String {
+    let lhs = format!("uint8(({start_expr}) + {pos})");
+    match radix {
+        TextualRadix::Decimal => format!("({lhs} >= 0x30 and {lhs} <= 0x39)"),
+        TextualRadix::Hex => format!(
+            "(({lhs} >= 0x30 and {lhs} <= 0x39) or ({lhs} >= 0x41 and {lhs} <= 0x46) or ({lhs} >= 0x61 and {lhs} <= 0x66))"
+        ),
+    }
+}
+
+fn build_textual_digit_eq_condition(
+    start_expr: &str,
+    pos: usize,
+    radix: TextualRadix,
+    digit: u8,
+) -> String {
+    let lhs = format!("uint8(({start_expr}) + {pos})");
+
+    match radix {
+        TextualRadix::Decimal => format!("{lhs} == 0x{:02X}", b'0' + digit),
+        TextualRadix::Hex => {
+            if digit < 10 {
+                format!("{lhs} == 0x{:02X}", b'0' + digit)
+            } else {
+                let upper = b'A' + (digit - 10);
+                let lower = b'a' + (digit - 10);
+                format!("({lhs} == 0x{upper:02X} or {lhs} == 0x{lower:02X})")
+            }
+        }
+    }
+}
+
+fn build_textual_digit_gt_condition(
+    start_expr: &str,
+    pos: usize,
+    radix: TextualRadix,
+    digit: u8,
+) -> Option<String> {
+    let lhs = format!("uint8(({start_expr}) + {pos})");
+
+    match radix {
+        TextualRadix::Decimal => {
+            if digit >= 9 {
+                None
+            } else {
+                let min = b'0' + digit + 1;
+                Some(format!("({lhs} >= 0x{min:02X} and {lhs} <= 0x39)"))
+            }
+        }
+        TextualRadix::Hex => {
+            if digit >= 15 {
+                return None;
+            }
+
+            let mut alts = Vec::new();
+            if digit < 9 {
+                let min = b'0' + digit + 1;
+                alts.push(format!("({lhs} >= 0x{min:02X} and {lhs} <= 0x39)"));
+                alts.push(format!("({lhs} >= 0x41 and {lhs} <= 0x46)"));
+                alts.push(format!("({lhs} >= 0x61 and {lhs} <= 0x66)"));
+            } else if digit == 9 {
+                alts.push(format!("({lhs} >= 0x41 and {lhs} <= 0x46)"));
+                alts.push(format!("({lhs} >= 0x61 and {lhs} <= 0x66)"));
+            } else {
+                for next in (digit + 1)..=15 {
+                    alts.push(build_textual_digit_eq_condition(
+                        start_expr,
+                        pos,
+                        TextualRadix::Hex,
+                        next,
+                    ));
+                }
+            }
+
+            if alts.is_empty() {
+                None
+            } else {
+                Some(join_condition(alts, "or"))
+            }
+        }
+    }
+}
+
+fn build_textual_digit_lt_condition(
+    start_expr: &str,
+    pos: usize,
+    radix: TextualRadix,
+    digit: u8,
+) -> Option<String> {
+    let lhs = format!("uint8(({start_expr}) + {pos})");
+
+    match radix {
+        TextualRadix::Decimal => {
+            if digit == 0 {
+                None
+            } else {
+                let max = b'0' + digit - 1;
+                Some(format!("({lhs} >= 0x30 and {lhs} <= 0x{max:02X})"))
+            }
+        }
+        TextualRadix::Hex => {
+            if digit == 0 {
+                return None;
+            }
+
+            let mut alts = Vec::new();
+            if digit <= 10 {
+                let max = b'0' + (digit - 1);
+                alts.push(format!("({lhs} >= 0x30 and {lhs} <= 0x{max:02X})"));
+            } else {
+                alts.push(format!("({lhs} >= 0x30 and {lhs} <= 0x39)"));
+                for prev in 10..digit {
+                    alts.push(build_textual_digit_eq_condition(
+                        start_expr,
+                        pos,
+                        TextualRadix::Hex,
+                        prev,
+                    ));
+                }
+            }
+
+            if alts.is_empty() {
+                None
+            } else {
+                Some(join_condition(alts, "or"))
+            }
+        }
+    }
 }
 
 fn is_yara_string_identifier(value: &str) -> bool {

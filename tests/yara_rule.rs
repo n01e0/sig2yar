@@ -275,6 +275,26 @@ fn lowers_byte_comparison_non_raw_decimal_exact_eq() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_decimal_exact_gt() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 4) + 3 <= filesize"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 0)"));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_hex_exact_lt() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 2) + 2 <= filesize"));
+    assert!(rule.condition.contains("0x41") || rule.condition.contains("0x61"));
+}
+
+#[test]
 fn byte_comparison_non_raw_falls_back_to_alias() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>26#db2#>512)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

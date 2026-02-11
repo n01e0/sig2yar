@@ -122,6 +122,24 @@ fn yara_rule_with_non_raw_byte_comparison_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_byte_comparison_gt_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile non-raw byte-compare GT rule");
+}
+
+#[test]
+fn yara_rule_with_non_raw_byte_comparison_lt_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile non-raw byte-compare LT rule");
+}
+
+#[test]
 fn ndb_rule_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:41424344:73").unwrap();
     let ir = sig.to_ir();
