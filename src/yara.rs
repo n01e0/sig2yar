@@ -344,8 +344,25 @@ fn ndb_html_target_condition() -> String {
         ndb_any_prefix_in_window_condition(&close_markers, "c", "filesize-1", "filesize");
     let close_large = ndb_any_prefix_in_window_condition(&close_markers, "c", "4095", "4096");
 
+    let root_before_close_small = ndb_any_prefix_before_separator_in_window_condition(
+        &root_markers,
+        &close_markers,
+        "r",
+        "c",
+        "filesize-1",
+        "filesize",
+    );
+    let root_before_close_large = ndb_any_prefix_before_separator_in_window_condition(
+        &root_markers,
+        &close_markers,
+        "r",
+        "c",
+        "4095",
+        "4096",
+    );
+
     format!(
-        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E) and {root_small} and {close_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E) and {root_large} and {close_large}))"
+        "filesize > 0 and ((filesize <= 4096 and for all i in (0..filesize-1) : ({ascii_pred}) and for any j in (0..filesize-1) : (uint8(j) == 0x3C) and for any k in (0..filesize-1) : (uint8(k) == 0x3E) and {root_small} and {close_small} and {root_before_close_small}) or (filesize > 4096 and for all i in (0..4095) : ({ascii_pred}) and for any j in (0..4095) : (uint8(j) == 0x3C) and for any k in (0..4095) : (uint8(k) == 0x3E) and {root_large} and {close_large} and {root_before_close_large}))"
     )
 }
 
