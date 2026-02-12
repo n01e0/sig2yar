@@ -83,7 +83,13 @@ Last update: 2026-02-12
 3. [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映
 4. [ ] `fuzzy_img` の専用 lower
 5. [ ] PCRE flags / trigger prefix の残課題（未対応flag、複雑trigger-prefix厳密化）
-6. [ ] `idb/cdb/crb/cbc/pdb/wdb` の優先順決め
+6. [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
+   - 6.1 `idb`（件数: 223）
+   - 6.2 `cdb`（件数: 137）
+   - 6.3 `crb`（件数: 32）
+   - 6.4 `pdb`（件数: 263）
+   - 6.5 `wdb`（件数: 185）
+   - 6.6 `cbc`（件数: 8425, bytecodeで実装難度が高いため最後）
 
 ---
 
