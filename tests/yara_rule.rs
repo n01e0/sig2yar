@@ -924,6 +924,66 @@ fn lowers_ndb_square_exact_range_jump_within_clamav_maxdist() {
 }
 
 #[test]
+fn lowers_ndb_square_right_flank_structure_when_representable() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (`[]` allows core `[n-m]` single-byte-right-flank form)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AABB[1-2]CC").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("$a = { AA BB [1-2] CC }"));
+    assert_eq!(rule.condition, "$a");
+}
+
+#[test]
+fn lowers_ndb_square_dual_flank_structure_when_representable() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (each `[]` must bind to a single-byte flank while leaving a core)
+    // - libclamav/matcher-ac.c:1286-1304,1365-1381 (`ch[0]`/`ch[1]` enforce left/right distance checks around core)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[1-2]BBCC[3-4]DD").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("$a = { AA [1-2] BB CC [3-4] DD }"));
+    assert_eq!(rule.condition, "$a");
+}
+
+#[test]
+fn rejects_ndb_square_jump_without_single_byte_flank_for_strictness() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (invalid when neither side of `[]` is a single-byte flank)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AABB[1-2]CCDD").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("[] jump positional structure")
+                && value.contains("single-byte flank")
+                && value.contains("strict lowering")
+    )));
+}
+
+#[test]
+fn rejects_ndb_square_jump_with_more_than_two_constraints_for_strictness() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2768-2838 (`for (i = 0; i < 2; i++)` limits processing to at most 2 square-jump constraints)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[1]BB[2]CC[3]DD").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("more than 2 [] jumps")
+                && value.contains("strict lowering")
+    )));
+}
+
+#[test]
 fn rejects_ndb_square_descending_range_jump_for_strictness() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[10-5]BB").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

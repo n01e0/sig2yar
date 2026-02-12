@@ -179,6 +179,7 @@ pub fn lower_ndb_signature(value: &ir::NdbSignature) -> YaraRule {
 fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String> {
     let chars: Vec<char> = body.chars().collect();
     let mut tokens = Vec::new();
+    let mut square_jump_indices = Vec::new();
     let mut i = 0usize;
 
     while i < chars.len() {
@@ -228,6 +229,7 @@ fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String>
                 let end = find_matching(&chars, i, ']')?;
                 let inner: String = chars[i + 1..end].iter().collect();
                 let jump = lower_ndb_square_jump(inner.trim(), notes)?;
+                square_jump_indices.push(tokens.len());
                 tokens.push(jump);
                 i = end + 1;
             }
@@ -251,6 +253,10 @@ fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String>
         || tokens.last().is_some_and(|token| is_ndb_jump_token(token))
     {
         notes.push("ndb body starts/ends with jump token unsupported by YARA".to_string());
+        return None;
+    }
+
+    if !validate_ndb_square_jump_structure(&tokens, &square_jump_indices, notes) {
         return None;
     }
 
@@ -726,6 +732,62 @@ fn is_valid_ndb_byte_token(token: &str) -> bool {
 
 fn is_ndb_jump_token(token: &str) -> bool {
     token.starts_with('[') && token.ends_with(']')
+}
+
+fn validate_ndb_square_jump_structure(
+    tokens: &[String],
+    square_jump_indices: &[usize],
+    notes: &mut Vec<String>,
+) -> bool {
+    if square_jump_indices.is_empty() {
+        return true;
+    }
+
+    if square_jump_indices.len() > 2 {
+        notes.push(
+            "ndb [] jump positional structure with more than 2 [] jumps is unsupported for strict lowering"
+                .to_string(),
+        );
+        return false;
+    }
+
+    if square_jump_indices.len() == 1 {
+        let idx = square_jump_indices[0];
+        let left = &tokens[..idx];
+        let right = &tokens[idx + 1..];
+
+        let left_flank = left.len() == 1 && is_valid_ndb_byte_token(&left[0]);
+        let right_flank = right.len() == 1 && is_valid_ndb_byte_token(&right[0]);
+
+        if left_flank || right_flank {
+            return true;
+        }
+
+        notes.push(
+            "ndb [] jump positional structure is unsupported for strict lowering (requires single-byte flank + core pattern, per ClamAV matcher)"
+                .to_string(),
+        );
+        return false;
+    }
+
+    let first = square_jump_indices[0];
+    let second = square_jump_indices[1];
+    let left = &tokens[..first];
+    let core = &tokens[first + 1..second];
+    let right = &tokens[second + 1..];
+
+    let left_flank = left.len() == 1 && is_valid_ndb_byte_token(&left[0]);
+    let right_flank = right.len() == 1 && is_valid_ndb_byte_token(&right[0]);
+
+    if left_flank && right_flank && !core.is_empty() {
+        return true;
+    }
+
+    notes.push(
+        "ndb [] jump positional structure is unsupported for strict lowering (requires single-byte flank/core/single-byte flank form for dual-[] patterns, per ClamAV matcher)"
+            .to_string(),
+    );
+    false
 }
 
 const NDB_SQUARE_JUMP_MAXDIST: u64 = 32;
