@@ -1363,24 +1363,15 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(macro_sig) = parse_macro_subsignature(raw) {
-        if let Some(lowered) = lower_macro_subsignature_condition(idx, &macro_sig, known_ids, notes)
-        {
-            return RawSubsigLowering::Expr(lowered);
-        }
+        let lowered = lower_macro_subsignature_condition(idx, &macro_sig, known_ids, notes);
+        return RawSubsigLowering::Expr(lowered);
+    }
 
-        if let Some(Some(alias)) = known_ids.get(macro_sig.ref_idx) {
-            notes.push(format!(
-                "subsig[{idx}] macro fell back to alias subsig[{}]",
-                macro_sig.ref_idx
-            ));
-            return RawSubsigLowering::Alias(alias.clone());
-        }
-
+    if looks_like_macro_subsignature(raw) {
         notes.push(format!(
-            "subsig[{idx}] macro reference {} unresolved; lowered to false",
-            macro_sig.ref_idx
+            "subsig[{idx}] macro subsignature format unsupported/invalid (expected `${{min-max}}group$`); lowered to false for safety"
         ));
-        return RawSubsigLowering::Skip;
+        return RawSubsigLowering::Expr("false".to_string());
     }
 
     if let Some(fuzzy) = parse_fuzzy_img_subsignature(raw) {
@@ -2343,11 +2334,15 @@ fn is_yara_string_identifier(value: &str) -> bool {
 struct ParsedMacroSubsignature {
     min: u64,
     max: u64,
-    ref_idx: usize,
+    group_id: u32,
+}
+
+fn looks_like_macro_subsignature(raw: &str) -> bool {
+    raw.starts_with("${") && raw.ends_with('$')
 }
 
 fn parse_macro_subsignature(raw: &str) -> Option<ParsedMacroSubsignature> {
-    if !raw.starts_with("${") || !raw.ends_with('$') {
+    if !looks_like_macro_subsignature(raw) {
         return None;
     }
 
@@ -2359,51 +2354,35 @@ fn parse_macro_subsignature(raw: &str) -> Option<ParsedMacroSubsignature> {
     let range = &raw[2..close];
     let (min, max) = parse_macro_range(range)?;
 
-    let ref_part = &raw[close + 1..raw.len() - 1];
-    if ref_part.is_empty() || !ref_part.chars().all(|c| c.is_ascii_digit()) {
+    let group_part = &raw[close + 1..raw.len() - 1];
+    if group_part.is_empty() || !group_part.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
 
-    let ref_idx = ref_part.parse::<usize>().ok()?;
+    let group_id = group_part.parse::<u32>().ok()?;
 
-    Some(ParsedMacroSubsignature { min, max, ref_idx })
+    Some(ParsedMacroSubsignature { min, max, group_id })
 }
 
 fn parse_macro_range(range: &str) -> Option<(u64, u64)> {
-    if let Some((lhs, rhs)) = range.split_once('-') {
-        let min = lhs.trim().parse::<u64>().ok()?;
-        let max = rhs.trim().parse::<u64>().ok()?;
-        return Some((min, max));
-    }
-
-    let fixed = range.trim().parse::<u64>().ok()?;
-    Some((fixed, fixed))
+    let (lhs, rhs) = range.split_once('-')?;
+    let min = lhs.trim().parse::<u64>().ok()?;
+    let max = rhs.trim().parse::<u64>().ok()?;
+    Some((min, max))
 }
 
 fn lower_macro_subsignature_condition(
     idx: usize,
     macro_sig: &ParsedMacroSubsignature,
-    known_ids: &[Option<String>],
+    _known_ids: &[Option<String>],
     notes: &mut Vec<String>,
-) -> Option<String> {
-    if idx == 0 {
+) -> String {
+    if macro_sig.group_id >= 32 {
         notes.push(format!(
-            "subsig[{idx}] macro cannot be first subsig; falling back"
+            "subsig[{idx}] macro group {} out of range (ClamAV supports 0..31); lowered to false for safety",
+            macro_sig.group_id
         ));
-        return None;
-    }
-
-    let prev_id = known_ids.get(idx - 1).and_then(|v| v.as_ref())?.clone();
-    let ref_id = known_ids
-        .get(macro_sig.ref_idx)
-        .and_then(|v| v.as_ref())?
-        .clone();
-
-    if !is_yara_string_identifier(&prev_id) || !is_yara_string_identifier(&ref_id) {
-        notes.push(format!(
-            "subsig[{idx}] macro needs direct string ids for prev/ref subsigs"
-        ));
-        return None;
+        return "false".to_string();
     }
 
     if macro_sig.min > macro_sig.max {
@@ -2411,23 +2390,21 @@ fn lower_macro_subsignature_condition(
             "subsig[{idx}] macro descending range {}-{} unsupported; lowered to false for safety",
             macro_sig.min, macro_sig.max
         ));
-        return Some("false".to_string());
+        return "false".to_string();
     }
 
-    let (min, max) = (macro_sig.min, macro_sig.max);
-
-    let prev_core = prev_id.strip_prefix('$').unwrap_or(&prev_id);
-    let ref_core = ref_id.strip_prefix('$').unwrap_or(&ref_id);
+    if idx == 0 {
+        notes.push(format!(
+            "subsig[{idx}] macro cannot be first subsig (no preceding anchor subsig); lowered to false for safety"
+        ));
+    }
 
     notes.push(format!(
-        "subsig[{idx}] macro lowered as positional constraint from subsig[{}] to subsig[{}]",
-        idx - 1,
-        macro_sig.ref_idx
+        "subsig[{idx}] macro-group `${}$` semantics depend on CLI_OFF_MACRO anchors and matcher-ac macro_lastmatch state; lowered to false for safety",
+        macro_sig.group_id
     ));
 
-    Some(format!(
-        "for any i in (1..#{prev_core}) : (for any j in (1..#{ref_core}) : ( @{ref_core}[j] >= @{prev_core}[i] + {min} and @{ref_core}[j] <= @{prev_core}[i] + {max} ))"
-    ))
+    "false".to_string()
 }
 
 #[derive(Debug, Clone)]
@@ -2455,13 +2432,15 @@ fn parse_fuzzy_img_subsignature(raw: &str) -> Option<ParsedFuzzyImg> {
     })
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum PcreOffsetSpec {
     Exact(u64),
     Range { start: u64, maxshift: u64 },
+    MacroGroup(u32),
+    Unsupported(String),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct ParsedPcrePrefix<'a> {
     trigger: &'a str,
     offset: Option<PcreOffsetSpec>,
@@ -2488,12 +2467,12 @@ fn lower_pcre_trigger_condition(
     }
 
     let parsed_prefix = match parse_pcre_trigger_prefix(prefix) {
-        Some(v) => v,
-        None => {
+        Ok(v) => v,
+        Err(reason) => {
             notes.push(format!(
-                "subsig[{idx}] pcre trigger prefix parse failed; ignored"
+                "subsig[{idx}] pcre trigger prefix parse failed ({reason}); lowered to false for safety"
             ));
-            return None;
+            return Some("false".to_string());
         }
     };
 
@@ -2501,9 +2480,9 @@ fn lower_pcre_trigger_condition(
         Ok(v) => v,
         Err(_) => {
             notes.push(format!(
-                "subsig[{idx}] pcre trigger expression parse failed; ignored"
+                "subsig[{idx}] pcre trigger expression parse failed; lowered to false for safety"
             ));
-            return None;
+            return Some("false".to_string());
         }
     };
 
@@ -2526,40 +2505,62 @@ fn lower_pcre_trigger_condition(
     Some(join_condition(parts, "and"))
 }
 
-fn parse_pcre_trigger_prefix(prefix: &str) -> Option<ParsedPcrePrefix<'_>> {
+fn parse_pcre_trigger_prefix(prefix: &str) -> Result<ParsedPcrePrefix<'_>, String> {
     let prefix = prefix.trim();
     if prefix.is_empty() {
-        return None;
+        return Err("empty trigger prefix".to_string());
     }
 
     if let Some((lhs, rhs)) = prefix.split_once(':') {
-        if let Some(offset) = parse_pcre_offset_spec(lhs.trim()) {
-            let trigger = rhs.trim();
-            if trigger.is_empty() {
-                return None;
-            }
-            return Some(ParsedPcrePrefix {
-                trigger,
-                offset: Some(offset),
-            });
+        let trigger = rhs.trim();
+        if trigger.is_empty() {
+            return Err("missing trigger expression after ':'".to_string());
         }
+
+        return Ok(ParsedPcrePrefix {
+            trigger,
+            offset: Some(parse_pcre_offset_spec(lhs.trim())),
+        });
     }
 
-    Some(ParsedPcrePrefix {
+    Ok(ParsedPcrePrefix {
         trigger: prefix,
         offset: None,
     })
 }
 
-fn parse_pcre_offset_spec(input: &str) -> Option<PcreOffsetSpec> {
-    if let Some((start, maxshift)) = input.split_once(',') {
-        return Some(PcreOffsetSpec::Range {
-            start: parse_clamav_numeric(start.trim())?,
-            maxshift: parse_clamav_numeric(maxshift.trim())?,
-        });
+fn parse_pcre_macro_group_offset(input: &str) -> Option<u32> {
+    let inner = input.strip_prefix('$')?.strip_suffix('$')?;
+    if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_digit()) {
+        return None;
     }
 
-    Some(PcreOffsetSpec::Exact(parse_clamav_numeric(input.trim())?))
+    inner.parse::<u32>().ok()
+}
+
+fn parse_pcre_offset_spec(input: &str) -> PcreOffsetSpec {
+    let input = input.trim();
+
+    if let Some(group_id) = parse_pcre_macro_group_offset(input) {
+        return PcreOffsetSpec::MacroGroup(group_id);
+    }
+
+    if let Some((start, maxshift)) = input.split_once(',') {
+        if let (Some(start), Some(maxshift)) = (
+            parse_clamav_numeric(start.trim()),
+            parse_clamav_numeric(maxshift.trim()),
+        ) {
+            return PcreOffsetSpec::Range { start, maxshift };
+        }
+
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
+    if let Some(value) = parse_clamav_numeric(input) {
+        return PcreOffsetSpec::Exact(value);
+    }
+
+    PcreOffsetSpec::Unsupported(input.to_string())
 }
 
 fn lower_pcre_offset_condition(
@@ -2622,6 +2623,24 @@ fn lower_pcre_offset_condition(
                 ));
                 Some("false".to_string())
             }
+        }
+        PcreOffsetSpec::MacroGroup(group_id) => {
+            if group_id >= 32 {
+                notes.push(format!(
+                    "subsig[{idx}] pcre macro-group offset `${group_id}$` out of range (ClamAV supports 0..31); lowered to false for safety"
+                ));
+            } else {
+                notes.push(format!(
+                    "subsig[{idx}] pcre offset `${group_id}$` depends on CLI_OFF_MACRO runtime state; lowered to false for safety"
+                ));
+            }
+            Some("false".to_string())
+        }
+        PcreOffsetSpec::Unsupported(raw) => {
+            notes.push(format!(
+                "subsig[{idx}] pcre offset prefix '{raw}' unsupported (ClamAV supports richer cli_caloff forms); lowered to false for safety"
+            ));
+            Some("false".to_string())
         }
     }
 }

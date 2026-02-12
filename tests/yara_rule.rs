@@ -213,6 +213,18 @@ fn lowers_pcre_exact_offset_as_equality_from_clamav_regex_fixture() {
 }
 
 #[test]
+fn lowers_pcre_exact_offset_match_fixture_with_same_equality_constraint() {
+    // ClamAV reference:
+    // - unit_tests/clamscan/regex_test.py:170-183 (`5:0/llo blee/` expected match)
+    // - unit_tests/clamscan/regex_test.py:152-166 (`5:0/hello blee/` expected non-match)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;68656c6c6f20;5:0/llo blee/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] == 5"));
+    assert!(!rule.condition.contains("@s1[j] >= 5"));
+}
+
+#[test]
 fn lowers_pcre_re_range_ignores_r_and_keeps_encompass_window_from_clamav_matcher_fixture() {
     // ClamAV reference:
     // - unit_tests/check_matchers.c:146-149 (Test10 uses `/atre/re` with offset `2,6`)
@@ -227,6 +239,55 @@ fn lowers_pcre_re_range_ignores_r_and_keeps_encompass_window_from_clamav_matcher
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("pcre flag 'r' ignored when maxshift is present")
+    )));
+}
+
+#[test]
+fn lowers_pcre_re_range_nonmatch_fixture_to_narrow_encompass_window() {
+    // ClamAV reference:
+    // - unit_tests/check_matchers.c:146-149 (Test8: `/apie/re` with offset `2,2`, expected CL_SUCCESS)
+    // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= 2"));
+    assert!(rule.condition.contains("@s1[j] <= 4"));
+    assert!(!rule.condition.contains("@s1[j] <= 8"));
+}
+
+#[test]
+fn lowers_pcre_non_numeric_offset_prefix_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:348-454 (`cli_caloff` supports richer non-numeric prefixes like `EP+`).
+    // We don't implement those in YARA lowering yet, so keep strict safety-false.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.condition.contains("$s1"));
+    assert!(rule.condition.contains("$s0"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset prefix 'EP+10' unsupported")
+    )));
+}
+
+#[test]
+fn lowers_pcre_macro_group_offset_prefix_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:431-442 (`$n$` parsed as CLI_OFF_MACRO) and
+    // libclamav/matcher-ac.c:1908-1909 (runtime macro_lastmatch state).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$1$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.condition.contains("$s1"));
+    assert!(rule.condition.contains("$s0"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset `$1$` depends on CLI_OFF_MACRO runtime state")
     )));
 }
 
@@ -467,18 +528,21 @@ fn lowers_byte_comparison_non_raw_contradictory_clauses_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_macro_subsignature_as_positional_constraint() {
-    // No official macro-group fixture was found in Cisco-Talos/clamav unit_tests while mining
-    // `unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`,
-    // `unit_tests/clamscan/fuzzy_img_hash_test.py`, and `git grep '\$\{[0-9]' unit_tests`.
-    // Keep this as a local positional-lowering regression without inventing extra semantics.
+fn lowers_macro_subsignature_to_false_for_safety_with_macro_group_note() {
+    // ClamAV reference (source semantics):
+    // - libclamav/readdb.c:442-512 parses `${min-max}group$` and stores group id (not subsig index)
+    // - libclamav/matcher-ac.c:1757-1796 resolves macro via runtime `macro_lastmatch[group]`
+    // We cannot represent that runtime macro-group state in standalone YARA, so keep safety-false.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.strings.len(), 1);
-    assert!(rule.condition.contains("for any i in (1..#s0)"));
-    assert!(rule.condition.contains("@s0[j] >= @s0[i] + 6"));
-    assert!(rule.condition.contains("@s0[j] <= @s0[i] + 7"));
+    assert_eq!(rule.condition, "($s0 or false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro-group `$0$` semantics depend on CLI_OFF_MACRO")
+    )));
 }
 
 #[test]
@@ -492,6 +556,36 @@ fn lowers_macro_descending_range_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("macro descending range 7-6 unsupported; lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_macro_invalid_format_to_false_for_safety() {
+    // ClamAV reference: libclamav/readdb.c:463 rejects invalid macro format unless `${min-max}group$`.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6}0$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 or false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro subsignature format unsupported/invalid")
+    )));
+}
+
+#[test]
+fn lowers_macro_group_out_of_range_to_false_for_safety() {
+    // ClamAV reference: libclamav/readdb.c:469, libclamav/matcher.c:438 (only 32 macro groups).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}32$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 or false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro group 32 out of range")
     )));
 }
 
