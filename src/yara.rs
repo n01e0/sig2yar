@@ -1836,39 +1836,22 @@ fn lower_byte_comparison_condition(
         );
     }
 
-    let read_fn = match byte_cmp.options.endian.unwrap_or(ByteCmpEndian::Big) {
-        ByteCmpEndian::Little => match num_bytes {
-            1 => "uint8",
-            2 => "uint16",
-            4 => "uint32",
-            8 => "uint64",
-            _ => {
-                notes.push(format!(
-                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8); lowered to false for safety"
-                ));
-                return Some("false".to_string());
-            }
-        },
-        ByteCmpEndian::Big => match num_bytes {
-            1 => "uint8",
-            2 => "uint16be",
-            4 => "uint32be",
-            8 => "uint64be",
-            _ => {
-                notes.push(format!(
-                    "subsig[{idx}] byte_comparison raw size {num_bytes} unsupported (use 1/2/4/8); lowered to false for safety"
-                ));
-                return Some("false".to_string());
-            }
-        },
+    let endian = byte_cmp.options.endian.unwrap_or(ByteCmpEndian::Big);
+    let num_bytes = match usize::try_from(num_bytes) {
+        Ok(v) if (1..=8).contains(&v) => v,
+        _ => {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison raw size {} unsupported (use 1..8); lowered to false for safety",
+                byte_cmp.options.num_bytes
+            ));
+            return Some("false".to_string());
+        }
     };
 
-    let max_raw_value = match num_bytes {
-        1 => u8::MAX as u64,
-        2 => u16::MAX as u64,
-        4 => u32::MAX as u64,
-        8 => u64::MAX,
-        _ => unreachable!(),
+    let max_raw_value = if num_bytes == 8 {
+        u64::MAX
+    } else {
+        ((1u128 << (num_bytes * 8)) - 1) as u64
     };
 
     for cmp in &byte_cmp.comparisons {
@@ -1884,7 +1867,17 @@ fn lower_byte_comparison_condition(
     let mut guards = base_guards;
     guards.push(format!("({start_expr}) + {num_bytes} <= filesize"));
 
-    let value_expr = format!("{read_fn}({start_expr})");
+    let value_expr = match (endian, num_bytes) {
+        (ByteCmpEndian::Little, 1) => format!("uint8({start_expr})"),
+        (ByteCmpEndian::Little, 2) => format!("uint16({start_expr})"),
+        (ByteCmpEndian::Little, 4) => format!("uint32({start_expr})"),
+        (ByteCmpEndian::Little, 8) => format!("uint64({start_expr})"),
+        (ByteCmpEndian::Big, 1) => format!("uint8({start_expr})"),
+        (ByteCmpEndian::Big, 2) => format!("uint16be({start_expr})"),
+        (ByteCmpEndian::Big, 4) => format!("uint32be({start_expr})"),
+        (ByteCmpEndian::Big, 8) => format!("uint64be({start_expr})"),
+        _ => build_raw_byte_comparison_value_expr(&start_expr, num_bytes, endian),
+    };
     let mut cmp_parts = Vec::new();
     for cmp in &byte_cmp.comparisons {
         let expr = match cmp.op {
@@ -1902,6 +1895,35 @@ fn lower_byte_comparison_condition(
         "for any j in (1..#{core}) : ({})",
         clause_parts.join(" and ")
     ))
+}
+
+fn build_raw_byte_comparison_value_expr(
+    start_expr: &str,
+    num_bytes: usize,
+    endian: ByteCmpEndian,
+) -> String {
+    if num_bytes == 1 {
+        return format!("uint8({start_expr})");
+    }
+
+    let mut terms = Vec::with_capacity(num_bytes);
+
+    for idx in 0..num_bytes {
+        let (offset, shift_bits) = match endian {
+            ByteCmpEndian::Big => (idx, 8 * (num_bytes - 1 - idx)),
+            ByteCmpEndian::Little => (idx, 8 * idx),
+        };
+
+        let byte_expr = format!("uint8(({start_expr}) + {offset})");
+        let term = if shift_bits == 0 {
+            byte_expr
+        } else {
+            format!("(({byte_expr}) << {shift_bits})")
+        };
+        terms.push(term);
+    }
+
+    format!("({})", terms.join(" | "))
 }
 
 fn lower_textual_byte_comparison_condition(
