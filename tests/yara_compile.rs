@@ -499,6 +499,48 @@ fn ndb_rule_with_target_type_3_rejects_close_tag_without_terminator() {
 }
 
 #[test]
+fn ndb_rule_with_target_type_4_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=4 rule");
+}
+
+#[test]
+fn ndb_rule_with_target_type_4_matches_line_start_header_before_separator() {
+    // ClamAV reference:
+    // - libclamav/mbox.c:1173-1183 (blank line marks end-of-header/start-of-body)
+    // - libclamav/mbox.c:1263-1268,1330-1391 (header lines parsed before body as header entries)
+    let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"From: sender@example.com\r\nSubject: hello\r\nDate: Thu, 12 Feb 2026 21:42:00 +0900\r\n\r\nbody";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_target_type_4_rejects_secondary_header_not_at_line_start() {
+    // Strict-side non-match case: header token inside a line (`X-Subject:`) must not be treated
+    // as a canonical header line before separator.
+    let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"From: sender@example.com\r\nX-Subject: hello\r\n\r\nbody";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_target_type_4_rejects_secondary_header_after_separator() {
+    // Strict-side non-match case: canonical header appearing only after header/body separator
+    // must not satisfy pre-separator header constraints.
+    let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"From: sender@example.com\r\n\r\nSubject: hello\r\nbody";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn ndb_rule_with_target_type_7_compiles_with_yara_x() {
     // ClamAV reference:
     // - libclamav/textnorm.c:64-68 (text normalization contract)
