@@ -447,6 +447,66 @@ fn ndb_rule_with_descending_absolute_offset_range_fallback_compiles_with_yara_x(
 }
 
 #[test]
+fn ndb_rule_with_absolute_range_offset_boundary_matches_representable_fixture() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:1,1:4142").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"XABY";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_absolute_range_offset_boundary_rejects_nonmatch_fixture() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:1,1:4142").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABXY";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_malformed_absolute_offset_range_strict_false_rejects_scan() {
+    // ClamAV reference: libclamav/matcher.c:365-381 (`cli_caloff` allows only numeric `n[,maxshift]`).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:1,:4142").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"XABY";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_ep_offset_without_sign_strict_false_rejects_scan() {
+    // ClamAV reference: libclamav/matcher.c:384-395 (`cli_caloff` accepts `EP+<num>` / `EP-<num>` only).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP10:41424344").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABCD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_eof_plus_offset_strict_false_rejects_scan() {
+    // ClamAV reference: libclamav/matcher.c:422-428 (`cli_caloff` accepts `EOF-<num>` only).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:EOF+10:41424344").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABCD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_relative_offset_on_generic_target_strict_false_rejects_scan() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:453-457 (`cli_caloff`: EP/Sx/SE/SL require PE/ELF/Mach-O target)
+    // - libclamav/matcher.h:205-213 (`TARGET_GENERIC=0`; executable targets are 1/6/9)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:EP+10:41424344").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABCD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn ndb_rule_with_ep_offset_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP+0,15:83e0038935{4}893d{4}").unwrap();
     let ir = sig.to_ir();
@@ -622,6 +682,7 @@ fn ndb_rule_with_square_open_or_signed_bounds_strict_false_compiles_with_yara_x(
 
 #[test]
 fn ndb_rule_with_target_type_8_compiles_with_yara_x() {
+    // ClamAV reference: libclamav/matcher.h:205-219 (`TARGET_NOT_USED = 8`).
     let sig = NdbSignature::parse("Unknown.Test-1:8:*:41424344").unwrap();
     let ir = sig.to_ir();
     let src = yara::render_ndb_signature(&ir);
@@ -631,9 +692,29 @@ fn ndb_rule_with_target_type_8_compiles_with_yara_x() {
 
 #[test]
 fn ndb_rule_with_target_type_13_compiles_with_yara_x() {
+    // ClamAV reference: libclamav/matcher.h:218-219 (`TARGET_INTERNAL = 13`, `TARGET_OTHER = 14`).
     let sig = NdbSignature::parse("Unknown.Test-2:13:*:41424344").unwrap();
     let ir = sig.to_ir();
     let src = yara::render_ndb_signature(&ir);
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=13 rule");
+}
+
+#[test]
+fn ndb_rule_with_target_type_14_strict_false_rejects_scan() {
+    let sig = NdbSignature::parse("Unknown.Test-3:14:*:41424344").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABCD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_non_numeric_target_type_strict_false_rejects_scan() {
+    // ClamAV reference: libclamav/readdb.c:1714-1716 (target must be `*` or numeric).
+    let sig = NdbSignature::parse("Unknown.Test-4:foo:*:41424344").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"ABCD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
 }

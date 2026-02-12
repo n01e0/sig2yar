@@ -787,6 +787,79 @@ fn lowers_ndb_basic_offset() {
 }
 
 #[test]
+fn lowers_ndb_absolute_range_offset_at_boundary_when_representable() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:1,1:4142").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("$a in (1..1)"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
+fn lowers_ndb_malformed_absolute_range_offset_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:365-381 (`cli_caloff` only accepts numeric `n[,maxshift]`).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:1,:4142").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($a and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("offset format is unsupported: 1,")
+                && value.contains("forcing condition=false")
+    )));
+}
+
+#[test]
+fn lowers_ndb_ep_offset_without_explicit_sign_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:384-395 (`cli_caloff` accepts only `EP+<num>` / `EP-<num>`).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:1:EP10:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("offset format is unsupported: EP10")
+    )));
+}
+
+#[test]
+fn lowers_ndb_eof_plus_offset_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:422-428 (`cli_caloff` accepts only `EOF-<num>`).
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:EOF+10:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($a and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("offset format is unsupported: EOF+10")
+    )));
+}
+
+#[test]
+fn lowers_ndb_relative_offset_on_non_exec_target_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:453-457 (`cli_caloff`: EP/Sx/SE/SL offsets require PE/ELF/Mach-O target)
+    // - libclamav/matcher.h:205-213 (`TARGET_GENERIC=0`, executable targets are 1/6/9)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:EP+10:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($a and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("invalid for target_type=0")
+                && value.contains("PE/ELF/MachO")
+    )));
+}
+
+#[test]
 fn rejects_ndb_descending_absolute_offset_range_for_strictness() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:100,10:41424344").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1015,6 +1088,7 @@ fn lowers_ndb_target_type_ascii_with_constraint() {
 
 #[test]
 fn lowers_ndb_target_type_8_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.h:205-219 (`TARGET_NOT_USED = 8`).
     let sig = NdbSignature::parse("Unknown.Test-1:8:*:41424344").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -1027,6 +1101,7 @@ fn lowers_ndb_target_type_8_to_false_for_safety() {
 
 #[test]
 fn lowers_ndb_target_type_13_plus_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.h:218-219 (`TARGET_INTERNAL = 13`, `TARGET_OTHER = 14`).
     let sig = NdbSignature::parse("Unknown.Test-2:13:*:41424344").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -1035,4 +1110,36 @@ fn lowers_ndb_target_type_13_plus_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("13+"))));
+}
+
+#[test]
+fn lowers_ndb_target_type_14_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.h:218-219 (`TARGET_INTERNAL` / `TARGET_OTHER` are not user DB targets).
+    let sig = NdbSignature::parse("Unknown.Test-3:14:*:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("target_type=14")
+                && value.contains("13+")
+    )));
+}
+
+#[test]
+fn lowers_ndb_non_numeric_target_type_to_false_for_safety() {
+    // ClamAV reference: libclamav/readdb.c:1714-1716 (`target` field must be `*` or numeric).
+    let sig = NdbSignature::parse("Unknown.Test-4:foo:*:41424344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("target_type=foo")
+                && value.contains("invalid/unknown")
+    )));
 }
