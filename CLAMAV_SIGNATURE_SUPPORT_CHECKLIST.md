@@ -74,15 +74,15 @@ Last update: 2026-02-12
 - [x] target_typeの主要条件化（`1,2,3,4,5,6,7,9,10,11,12`）
 - [x] DB feature coverageテスト（target/offset/body各カテゴリの代表サンプルを固定検証）
 - [ ] 複合range jump は安全側（lower失敗→condition false）へ厳密化を継続中（負数レンジ・降順レンジ、絶対offset降順rangeは safety false 化済み）。残る近似構文を継続整理
-- [ ] target_type は 8/13+ を safety false 化済み。3/4 は heuristic を追加強化（HTML: root+close tag + root-before-close、MAIL: start-header + secondary-header-before-separator）。7 は **normalized-text strictness**（printable + lowercase alpha + no-uppercase）を追加済み。残は 3/4 edge-case 詰めと fixture 拡張
+- [ ] target_type は 8/13+ を safety false 化済み。3/4 は heuristic を追加強化（HTML: root+close tag + root-before-close、MAIL: start-header + secondary-header-before-separator）。7 は **normalized-text strictness**（printable + lowercase alpha + no-uppercase）を追加済み。3 は tag terminator/order の strictness を追加済み。残は 4 edge-case（header line-start）と fixture 拡張
 
 ---
 
 ## 3) 次にやる順（提案 / NDB breakdown）
 
 - [x] **NDB-1**: target_type=7（ASCII正規化）の edge-case 厳密化（uppercase を safety false 相当に弾く lower 条件 + fixture test）
-- [ ] **NDB-2**: target_type=4（MAIL）で header 行頭制約（line-start）を追加して誤検知側をさらに抑制
-- [ ] **NDB-3**: target_type=3（HTML）で root/close tag の境界条件（tag terminator / order）を stricter に整理
+- [x] **NDB-2**: target_type=3（HTML）で root/close tag の境界条件（tag terminator / order）を stricter に整理
+- [ ] **NDB-3**: target_type=4（MAIL）で header 行頭制約（line-start）を追加して誤検知側をさらに抑制
 - [ ] **NDB-4**: complex range-jump の残近似（特に `[]` / signed-range 派生）を safety false + note へ寄せる
 - [ ] **NDB-5**: 未対応 target_type（8/13+以外の invalid 含む）と offset 端ケースの fixture 拡張（`yara_rule`/`yara_compile`）
 
@@ -103,6 +103,7 @@ Last update: 2026-02-12
 
 ## 4) メモ（現状観測）
 
+- 2026-02-12 追記4: NDB-2（target_type=3 HTML edge-case strictness）として、root/close tag 判定に **tag terminator (`>`/ASCII空白) 境界** を必須化し、`root-before-close` 条件でも同境界を要求するよう更新。曖昧ケースは拡張せず strict 側（条件不成立）に寄せた。ClamAV source 参照は `libclamav/scanners.c:2563-2589`（normalized HTML scan）, `libclamav/htmlnorm.c:962-1000,1229-1249`（タグトークン境界/終端タグ処理）。`tests/yara_rule.rs` / `tests/yara_compile.rs` に sourceコメント付きで match/non-match（`</html>` vs `</htmlx>`）を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記3: NDB-1 として target_type=7 の strictness を更新。ClamAV `libclamav/textnorm.c`（uppercase→lowercase 正規化）に合わせ、条件を `printable + lowercase alpha 必須 + uppercase 不許可` へ寄せた。`tests/yara_rule.rs` / `tests/yara_compile.rs` に source参照コメント付き検証を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 進捗: Cisco-Talos/clamav 公式fixture（`unit_tests/check_matchers.c` の pcre_testdata、`unit_tests/clamscan/regex_test.py`、`unit_tests/clamscan/fuzzy_img_hash_test.py`）を根拠に、`tests/yara_rule.rs` / `tests/yara_compile.rs` を拡張。PCRE exact offset を `==` で固定するケース、`/atre/re` + `2,6`（`r`無視+encompass window）ケース、`fuzzy_img` 非表現要素（2nd subsig併用・distance!=0）を **safety false + note** で明示検証。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記: macro-group と complex PCRE trigger-prefix の残ブロッカーを source準拠で厳密化。macro は `${min-max}group$` を group解釈し、runtime `macro_lastmatch` 依存のため safety false 化（invalid format / group>=32 も false）。PCRE trigger-prefix は `check_matchers.c` Test8/Test10・`regex_test.py` offset fixture を追加検証し、unsupported offset prefix（`EP+...`）および `$n$` macro offset を safety false + note 化。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 再通過。
