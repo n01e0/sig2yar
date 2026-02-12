@@ -256,20 +256,156 @@ fn lowers_pcre_re_range_nonmatch_fixture_to_narrow_encompass_window() {
 }
 
 #[test]
-fn lowers_pcre_non_numeric_offset_prefix_to_false_for_safety() {
-    // ClamAV reference: libclamav/matcher.c:348-454 (`cli_caloff` supports richer non-numeric prefixes like `EP+`).
-    // We don't implement those in YARA lowering yet, so keep strict safety-false.
+fn lowers_pcre_ep_plus_offset_prefix_to_entry_point_constraint() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:355-367 (`EP+` parsed as CLI_OFF_EP_PLUS)
+    // - libclamav/matcher.c:469-475 (recalc base: `exeinfo.ep + offdata[1]`)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("(false)"));
+    assert!(rule.imports.iter().any(|import| import == "pe"));
+    assert!(rule.condition.contains("@s1[j] == pe.entry_point + 10"));
+}
+
+#[test]
+fn lowers_pcre_eof_minus_offset_prefix_to_filesize_constraint() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:393-400 (`EOF-` parsed as CLI_OFF_EOF_MINUS)
+    // - libclamav/matcher.c:465-468 (recalc base: `fsize - offdata[1]`)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] == filesize - 10"));
+}
+
+#[test]
+fn lowers_pcre_ep_minus_offset_prefix_to_entry_point_constraint() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:362-367 (`EP-` parsed as CLI_OFF_EP_MINUS)
+    // - libclamav/matcher.c:473-475 (recalc base: `exeinfo.ep - offdata[1]`)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP-4:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.imports.iter().any(|import| import == "pe"));
+    assert!(rule.condition.contains("@s1[j] == pe.entry_point - 4"));
+}
+
+#[test]
+fn lowers_pcre_star_offset_prefix_to_unbounded_condition_and_ignores_re_flags() {
+    // ClamAV reference: libclamav/matcher.c:350-354 (`*` parsed as CLI_OFF_ANY)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
     assert!(rule.condition.contains("$s1"));
     assert!(rule.condition.contains("$s0"));
+    assert!(!rule.condition.contains("@s1[j]"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("pcre offset prefix 'EP+10' unsupported")
+                && value.contains("flag 'r' ignored on '*' offset prefix")
+                && value.contains("flag 'e' ignored: '*' offset has no maxshift")
+    )));
+}
+
+#[test]
+fn lowers_pcre_section_offset_prefix_with_encompass_window() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:383-391 (`Sx+` parsed as CLI_OFF_SX_PLUS)
+    // - libclamav/matcher.c:481-485 (recalc base: `sections[n].raw + offdata[1]`)
+    // - libclamav/matcher-pcre.c:651-658 (`e` constrains scanning to offset..offset+maxshift)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S2+4,8:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.imports.iter().any(|import| import == "pe"));
+    assert!(rule.condition.contains("pe.number_of_sections > 2"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] >= pe.sections[2].raw_data_offset + 4"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] <= pe.sections[2].raw_data_offset + 4 + 8"));
+}
+
+#[test]
+fn lowers_pcre_last_section_offset_prefix_to_constraint() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:377-382 (`SL+` parsed as CLI_OFF_SL_PLUS)
+    // - libclamav/matcher.c:477-479 (recalc base: `sections[nsections-1].raw + offdata[1]`)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SL+16:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.imports.iter().any(|import| import == "pe"));
+    assert!(rule.condition.contains("pe.number_of_sections > 0"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] == pe.sections[pe.number_of_sections - 1].raw_data_offset + 16"));
+}
+
+#[test]
+fn lowers_pcre_section_end_offset_with_e_to_section_window() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:369-376 (`SEn` parsed as CLI_OFF_SE)
+    // - libclamav/matcher.c:487-495 (effective maxshift includes section raw size)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1,4:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.imports.iter().any(|import| import == "pe"));
+    assert!(rule.condition.contains("pe.number_of_sections > 1"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] >= pe.sections[1].raw_data_offset"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"));
+}
+
+#[test]
+fn lowers_pcre_section_end_offset_without_e_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:369-376 (`SEn` parsed as CLI_OFF_SE)
+    // - libclamav/matcher.c:487-495 (effective maxshift includes section raw size)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("maxshift present without 'e'; lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_pcre_versioninfo_offset_prefix_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:401-403 (`VI` parsed as CLI_OFF_VERSION)
+    // - libclamav/matcher-pcre.c:539 (`TODO - handle VI and Macro offset types`)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;VI:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("CLI_OFF_VERSION")
+    )));
+}
+
+#[test]
+fn lowers_pcre_non_numeric_offset_prefix_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:348-454 (`cli_caloff` accepts only numeric payloads for `EP+/-`, `Sx+`, `EOF-`).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+foo:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset prefix 'EP+foo' unsupported")
     )));
 }
 
