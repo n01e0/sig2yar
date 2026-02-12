@@ -889,6 +889,10 @@ fn lowers_ndb_target_type_html_with_constraint() {
 
 #[test]
 fn lowers_ndb_target_type_mail_with_constraint() {
+    // ClamAV reference:
+    // - libclamav/mbox.c:1173-1183 (blank line marks header/body boundary)
+    // - libclamav/mbox.c:1263-1268,1330-1391 (header lines are parsed as header entries before body)
+    // - libclamav/mbox.c:1310-1316 (no parsed headers => not treated as email)
     let sig = NdbSignature::parse("Mail.Test-1:4:*:46726f6d3a").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -899,9 +903,12 @@ fn lowers_ndb_target_type_mail_with_constraint() {
     assert!(rule.condition.contains("for any s in")); // header/body separator required
     assert!(rule.condition.contains("<= s")); // secondary header must appear before separator
     assert!(rule
+        .condition
+        .contains("(h) == 0 or ((h) > 0 and uint8((h) - 1) == 0x0A)")); // secondary header must be line-start
+    assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("strict multi-header heuristic"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("line-start + secondary-header-before-separator"))));
 }
 
 #[test]

@@ -271,7 +271,7 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         }
         "4" => {
             notes.push(
-                "ndb target_type=4 (mail) lowered with strict multi-header heuristic"
+                "ndb target_type=4 (mail) lowered with strict multi-header heuristic (line-start + secondary-header-before-separator)"
                     .to_string(),
             );
             Some(ndb_mail_target_condition())
@@ -332,6 +332,18 @@ fn ndb_ascii_upper_alpha_predicate(var: &str) -> String {
 
 fn ndb_ascii_space_predicate(var: &str) -> String {
     format!("({var} == 0x09 or {var} == 0x0A or {var} == 0x0D or {var} == 0x20)")
+}
+
+fn ndb_line_start_predicate(offset_expr: &str) -> String {
+    format!(
+        "(({offset_expr}) == 0 or (({offset_expr}) > 0 and uint8(({offset_expr}) - 1) == 0x0A))"
+    )
+}
+
+fn ndb_ascii_prefix_at_line_start_condition(prefix: &str, offset_expr: &str) -> String {
+    let line_start = ndb_line_start_predicate(offset_expr);
+    let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, offset_expr);
+    format!("({line_start} and {prefix_match})")
 }
 
 fn ndb_html_tag_terminator_predicate(var: &str) -> String {
@@ -501,7 +513,7 @@ fn ndb_any_prefix_before_separator_in_window_condition(
         .iter()
         .map(|prefix| {
             let len = prefix.len();
-            let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, prefix_var);
+            let prefix_match = ndb_ascii_prefix_at_line_start_condition(prefix, prefix_var);
             format!("({prefix_var} + {len} <= {separator_var} and {prefix_match})")
         })
         .collect::<Vec<_>>()
