@@ -2557,11 +2557,9 @@ fn lower_pcre_offset_condition(
                 ))
             } else {
                 notes.push(format!(
-                    "subsig[{idx}] pcre maxshift present without 'e'; using lower-bound-only offset"
+                    "subsig[{idx}] pcre maxshift present without 'e'; lowered to false for safety"
                 ));
-                Some(format!(
-                    "for any j in (1..#{core}) : (@{core}[j] >= {start})"
-                ))
+                Some("false".to_string())
             }
         }
     }
