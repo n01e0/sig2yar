@@ -562,22 +562,62 @@ fn ndb_rule_with_open_ended_jump_compiles_with_yara_x() {
 }
 
 #[test]
-fn ndb_rule_with_descending_positive_range_jump_fallback_compiles_with_yara_x() {
+fn ndb_rule_with_square_range_jump_matches_representable_fixture() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2751-2786 (`[n]` / `[n-m]` accepted only as ascending ranges)
+    // - libclamav/matcher-ac.h:32 (`AC_CH_MAXDIST` == 32)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[2-4]BB").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\x01\x02\xBB";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_square_range_jump_rejects_nonmatch_fixture() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[2-4]BB").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\x01\xBB";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_descending_positive_range_jump_strict_false_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-5}BB").unwrap();
     let ir = sig.to_ir();
     let src = yara::render_ndb_signature(&ir);
 
     yara_x::compile(src.as_str())
-        .expect("yara-x failed to compile ndb descending-range fallback rule");
+        .expect("yara-x failed to compile ndb descending-range strict-false rule");
 }
 
 #[test]
-fn ndb_rule_with_complex_signed_range_jump_fallback_compiles_with_yara_x() {
+fn ndb_rule_with_complex_signed_range_jump_strict_false_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-10-5}BB").unwrap();
     let ir = sig.to_ir();
     let src = yara::render_ndb_signature(&ir);
 
-    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb signed-range fallback rule");
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile ndb signed-range strict-false rule");
+}
+
+#[test]
+fn ndb_rule_with_signed_negative_jump_strict_false_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-15}BB").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile ndb signed-negative-jump strict-false rule");
+}
+
+#[test]
+fn ndb_rule_with_square_open_or_signed_bounds_strict_false_compiles_with_yara_x() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[-5]BB").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile ndb square-open-bounds strict-false rule");
 }
 
 #[test]

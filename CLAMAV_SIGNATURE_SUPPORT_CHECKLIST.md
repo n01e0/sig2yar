@@ -73,7 +73,7 @@ Last update: 2026-02-12
 - [x] offsetの主要形式をconditionへ反映（`*`, `n`, `n,m`, `EP±`, `Sx+`, `SL+`, `SE`, `EOF`）
 - [x] target_typeの主要条件化（`1,2,3,4,5,6,7,9,10,11,12`）
 - [x] DB feature coverageテスト（target/offset/body各カテゴリの代表サンプルを固定検証）
-- [ ] 複合range jump は安全側（lower失敗→condition false）へ厳密化を継続中（負数レンジ・降順レンジ、絶対offset降順rangeは safety false 化済み）。残る近似構文を継続整理
+- [x] 複合range jump の strict 化（NDB-4）: signed jump（例: `{-15}`）/ signed-range 派生 / `[]` の非表現構文（open/signed bounds・降順・`AC_CH_MAXDIST(32)`超過）を **safety false + lowering note** に統一。`[]` は ClamAV source準拠で `[n]` / `[n-m]`（昇順かつ `<=32`）のみ通す。
 - [ ] target_type は 8/13+ を safety false 化済み。3/4 は heuristic を追加強化（HTML: root+close tag + root-before-close、MAIL: start-header + secondary-header-before-separator + header line-start）。7 は **normalized-text strictness**（printable + lowercase alpha + no-uppercase）を追加済み。3/4 の strictness edge-case（tag/header境界・ordering）は反映済み。残は fixture 拡張
 
 ---
@@ -83,7 +83,7 @@ Last update: 2026-02-12
 - [x] **NDB-1**: target_type=7（ASCII正規化）の edge-case 厳密化（uppercase を safety false 相当に弾く lower 条件 + fixture test）
 - [x] **NDB-2**: target_type=3（HTML）で root/close tag の境界条件（tag terminator / order）を stricter に整理
 - [x] **NDB-3**: target_type=4（MAIL）で header 行頭制約（line-start）を追加して誤検知側をさらに抑制
-- [ ] **NDB-4**: complex range-jump の残近似（特に `[]` / signed-range 派生）を safety false + note へ寄せる
+- [x] **NDB-4**: complex range-jump の残近似（特に `[]` / signed-range 派生）を safety false + note へ寄せる
 - [ ] **NDB-5**: 未対応 target_type（8/13+以外の invalid 含む）と offset 端ケースの fixture 拡張（`yara_rule`/`yara_compile`）
 
 （継続トラック）
@@ -103,6 +103,8 @@ Last update: 2026-02-12
 
 ## 4) メモ（現状観測）
 
+- 2026-02-12 追記6: NDB-4（complex range-jump strictness）として、`src/yara.rs` の ndb jump lower を更新。`{-15}` のような **signed jump** は近似変換（`[0-15]`）を廃止して safety false + note 化。`[]` は ClamAV source（`libclamav/matcher-ac.c:2751-2786`, `libclamav/matcher-ac.h:32`）に合わせて `[n]` / `[n-m]`（昇順・`<=32`）のみ許可し、open/signed bounds・降順・`AC_CH_MAXDIST`超過は safety false + note 化。`tests/yara_rule.rs` / `tests/yara_compile.rs` に representable match/non-match と strict-false note 検証を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
+  - 残ギャップ（明示）: ClamAV `[]` の **位置制約**（single-byte flank / core pattern との構造制約）を現状lowerは完全再現していないため、構文妥当性の最終一致は未完（NDB-5でfixture拡張時に詰める）。
 - 2026-02-12 追記5: NDB-3（target_type=4 MAIL edge-case strictness）として、secondary header 判定を **line-start 必須**（`offset==0` または直前が `\n`）へ厳密化し、既存の `secondary-header-before-separator` 条件と組み合わせて header/body ordering を strict 側に寄せた。曖昧ケースは拡張せず条件不成立に倒す方針を維持。ClamAV source 参照は `libclamav/mbox.c:1173-1183`（空行で header/body を分離）, `libclamav/mbox.c:1263-1268,1330-1391`（header行の parse）, `libclamav/mbox.c:1310-1316`（header未検出は email扱いしない）。`tests/yara_rule.rs` / `tests/yara_compile.rs` に sourceコメント付きで match/non-match（line-start header / `X-Subject:` / separator後header）を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記4: NDB-2（target_type=3 HTML edge-case strictness）として、root/close tag 判定に **tag terminator (`>`/ASCII空白) 境界** を必須化し、`root-before-close` 条件でも同境界を要求するよう更新。曖昧ケースは拡張せず strict 側（条件不成立）に寄せた。ClamAV source 参照は `libclamav/scanners.c:2563-2589`（normalized HTML scan）, `libclamav/htmlnorm.c:962-1000,1229-1249`（タグトークン境界/終端タグ処理）。`tests/yara_rule.rs` / `tests/yara_compile.rs` に sourceコメント付きで match/non-match（`</html>` vs `</htmlx>`）を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記3: NDB-1 として target_type=7 の strictness を更新。ClamAV `libclamav/textnorm.c`（uppercase→lowercase 正規化）に合わせ、条件を `printable + lowercase alpha 必須 + uppercase 不許可` へ寄せた。`tests/yara_rule.rs` / `tests/yara_compile.rs` に source参照コメント付き検証を追加。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
