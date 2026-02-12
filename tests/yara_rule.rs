@@ -313,6 +313,20 @@ fn lowers_byte_comparison_non_raw_decimal_exact_gt() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_decimal_with_hex_alpha_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>A0)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("decimal base cannot use hex-alpha threshold token")
+    )));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_hex_exact_lt() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

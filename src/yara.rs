@@ -1550,6 +1550,7 @@ struct ByteCmpOptions {
 struct ByteCmpClause {
     op: ByteCmpOp,
     value: u64,
+    contains_hex_alpha: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1694,8 +1695,16 @@ fn parse_byte_comparison_clauses(input: &str) -> Option<Vec<ByteCmpClause>> {
             _ => return None,
         };
 
+        let value_str = value_str.trim();
         let value = parse_clamav_numeric(value_str)?;
-        out.push(ByteCmpClause { op, value });
+        let contains_hex_alpha = value_str
+            .bytes()
+            .any(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'));
+        out.push(ByteCmpClause {
+            op,
+            value,
+            contains_hex_alpha,
+        });
     }
 
     Some(out)
@@ -1945,6 +1954,18 @@ fn lower_textual_byte_comparison_condition(
     if !byte_cmp.options.exact {
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw non-exact unsupported; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
+    if matches!(base, ByteCmpBase::Decimal)
+        && byte_cmp
+            .comparisons
+            .iter()
+            .any(|cmp| cmp.contains_hex_alpha)
+    {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison decimal base cannot use hex-alpha threshold token; lowered to false for safety"
         ));
         return Some("false".to_string());
     }
