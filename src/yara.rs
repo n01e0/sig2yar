@@ -134,7 +134,13 @@ pub fn lower_ndb_signature(value: &ir::NdbSignature) -> YaraRule {
                 parts.push(format!("({target_expr})"));
             }
 
-            match lower_ndb_offset_condition(&value.offset, id, &mut imports, &mut notes) {
+            match lower_ndb_offset_condition(
+                &value.target_type,
+                &value.offset,
+                id,
+                &mut imports,
+                &mut notes,
+            ) {
                 Some(offset_expr) => parts.push(format!("({offset_expr})")),
                 None if value.offset == "*" => {}
                 None => {
@@ -553,6 +559,7 @@ fn ndb_graphics_target_condition() -> String {
 }
 
 fn lower_ndb_offset_condition(
+    target_type: &str,
     offset: &str,
     id: &str,
     imports: &mut Vec<String>,
@@ -577,11 +584,18 @@ fn lower_ndb_offset_condition(
     }
 
     if let Some((delta, range)) = parse_ep_offset(offset) {
+        if !ndb_target_type_supports_relative_offsets(target_type) {
+            notes.push(format!(
+                "ndb offset {offset} is invalid for target_type={target_type}; ClamAV allows EP/Sx/SE/SL offsets only for PE/ELF/MachO targets"
+            ));
+            return None;
+        }
+
         ensure_import(imports, "pe");
         let start = apply_signed_delta("pe.entry_point", delta);
         return Some(match range {
             Some(width) => {
-                let end = apply_signed_delta(&start, width);
+                let end = apply_unsigned_delta(&start, width);
                 ndb_occurrence_in_expr(id, &start, &end)
             }
             None => ndb_occurrence_at_expr(id, &start),
@@ -589,6 +603,13 @@ fn lower_ndb_offset_condition(
     }
 
     if let Some((section_idx, delta, range)) = parse_section_offset(offset) {
+        if !ndb_target_type_supports_relative_offsets(target_type) {
+            notes.push(format!(
+                "ndb offset {offset} is invalid for target_type={target_type}; ClamAV allows EP/Sx/SE/SL offsets only for PE/ELF/MachO targets"
+            ));
+            return None;
+        }
+
         ensure_import(imports, "pe");
         let base = format!("pe.sections[{section_idx}].raw_data_offset");
         let start = apply_unsigned_delta(&base, delta);
@@ -605,6 +626,13 @@ fn lower_ndb_offset_condition(
     }
 
     if let Some((delta, range)) = parse_last_section_offset(offset) {
+        if !ndb_target_type_supports_relative_offsets(target_type) {
+            notes.push(format!(
+                "ndb offset {offset} is invalid for target_type={target_type}; ClamAV allows EP/Sx/SE/SL offsets only for PE/ELF/MachO targets"
+            ));
+            return None;
+        }
+
         ensure_import(imports, "pe");
         let base = "pe.sections[pe.number_of_sections - 1].raw_data_offset";
         let start = apply_unsigned_delta(base, delta);
@@ -619,6 +647,13 @@ fn lower_ndb_offset_condition(
     }
 
     if let Some(section_idx) = parse_section_end_offset(offset) {
+        if !ndb_target_type_supports_relative_offsets(target_type) {
+            notes.push(format!(
+                "ndb offset {offset} is invalid for target_type={target_type}; ClamAV allows EP/Sx/SE/SL offsets only for PE/ELF/MachO targets"
+            ));
+            return None;
+        }
+
         ensure_import(imports, "pe");
         let at = format!(
             "pe.sections[{section_idx}].raw_data_offset + pe.sections[{section_idx}].raw_data_size"
@@ -633,7 +668,7 @@ fn lower_ndb_offset_condition(
         let start = apply_signed_delta("filesize", delta);
         return Some(match range {
             Some(width) => {
-                let end = apply_signed_delta(&start, width);
+                let end = apply_unsigned_delta(&start, width);
                 ndb_occurrence_in_expr(id, &start, &end)
             }
             None => ndb_occurrence_at_expr(id, &start),
@@ -642,6 +677,12 @@ fn lower_ndb_offset_condition(
 
     notes.push(format!("ndb offset format is unsupported: {offset}"));
     None
+}
+
+fn ndb_target_type_supports_relative_offsets(target_type: &str) -> bool {
+    // ClamAV reference: libclamav/matcher.c (`cli_caloff`) only permits EP/Sx/SE/SL
+    // relative offsets when target is PE/ELF/Mach-O.
+    matches!(target_type, "1" | "6" | "9")
 }
 
 fn ensure_import(imports: &mut Vec<String>, name: &str) {
@@ -838,15 +879,18 @@ fn parse_u64_pair(input: &str) -> Option<(u64, u64)> {
     Some((start, end))
 }
 
-fn parse_ep_offset(input: &str) -> Option<(i64, Option<i64>)> {
-    let rest = input.strip_prefix("EP")?;
-    let (delta_str, range_str) = match rest.split_once(',') {
-        Some((delta, range)) => (delta, Some(range)),
-        None => (rest, None),
+fn parse_ep_offset(input: &str) -> Option<(i64, Option<u64>)> {
+    let (delta, range) = if let Some(rest) = input.strip_prefix("EP+") {
+        let (delta, range) = parse_positive_delta_with_optional_range(rest)?;
+        (i64::try_from(delta).ok()?, range)
+    } else if let Some(rest) = input.strip_prefix("EP-") {
+        let (delta, range) = parse_positive_delta_with_optional_range(rest)?;
+        let signed = i64::try_from(delta).ok()?.checked_neg()?;
+        (signed, range)
+    } else {
+        return None;
     };
 
-    let delta = parse_signed_with_plus(delta_str)?;
-    let range = range_str.and_then(|v| v.parse::<i64>().ok());
     Some((delta, range))
 }
 
@@ -880,28 +924,22 @@ fn parse_section_end_offset(input: &str) -> Option<u64> {
     idx.parse::<u64>().ok()
 }
 
-fn parse_eof_offset(input: &str) -> Option<(i64, Option<i64>)> {
-    let rest = input.strip_prefix("EOF")?;
-    let (delta_str, range_str) = match rest.split_once(',') {
-        Some((delta, range)) => (delta, Some(range)),
-        None => (rest, None),
-    };
-
-    let delta = if delta_str.is_empty() {
-        0
-    } else {
-        parse_signed_with_plus(delta_str)?
-    };
-
-    let range = range_str.and_then(|v| v.parse::<i64>().ok());
-    Some((delta, range))
+fn parse_eof_offset(input: &str) -> Option<(i64, Option<u64>)> {
+    let rest = input.strip_prefix("EOF-")?;
+    let (delta, range) = parse_positive_delta_with_optional_range(rest)?;
+    let signed = i64::try_from(delta).ok()?.checked_neg()?;
+    Some((signed, range))
 }
 
-fn parse_signed_with_plus(input: &str) -> Option<i64> {
-    if let Some(value) = input.strip_prefix('+') {
-        return value.parse::<i64>().ok();
-    }
-    input.parse::<i64>().ok()
+fn parse_positive_delta_with_optional_range(input: &str) -> Option<(u64, Option<u64>)> {
+    let (delta_str, range_str) = match input.split_once(',') {
+        Some((delta, range)) => (delta, Some(range)),
+        None => (input, None),
+    };
+
+    let delta = delta_str.parse::<u64>().ok()?;
+    let range = range_str.and_then(|v| v.parse::<u64>().ok());
+    Some((delta, range))
 }
 
 pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule> {
