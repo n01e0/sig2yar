@@ -813,10 +813,10 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
         });
     }
 
-    let (strings, id_map, mut notes) = lower_subsignatures(&value.subsignatures);
+    let mut imports = Vec::new();
+    let (strings, id_map, mut notes) = lower_subsignatures(&value.subsignatures, &mut imports);
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
 
-    let mut imports = Vec::new();
     let mut condition_parts = vec![base_condition.clone()];
     condition_parts.extend(lower_target_description_conditions(
         &value.target_description,
@@ -896,6 +896,7 @@ fn range_condition(name: &str, min: u64, max: u64) -> String {
 
 fn lower_subsignatures(
     subsigs: &[ir::Subsignature],
+    imports: &mut Vec<String>,
 ) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>) {
     let mut strings = Vec::new();
     let mut id_map = Vec::with_capacity(subsigs.len());
@@ -944,6 +945,7 @@ fn lower_subsignatures(
                 raw,
                 &subsig.modifiers,
                 &id_map,
+                imports,
                 &mut notes,
             ) {
                 RawSubsigLowering::String(line) => {
@@ -1335,6 +1337,7 @@ fn lower_raw_or_pcre_subsignature(
     raw: &str,
     modifiers: &[ir::SubsignatureModifier],
     known_ids: &[Option<String>],
+    imports: &mut Vec<String>,
     notes: &mut Vec<String>,
 ) -> RawSubsigLowering {
     if raw.trim().is_empty() {
@@ -1477,9 +1480,16 @@ fn lower_raw_or_pcre_subsignature(
         let render_mods = render_string_modifiers(&string_mods);
         let line = format!("{id} = /{}/{render_mods}", rendered_pattern);
 
-        if let Some(expr) =
-            lower_pcre_trigger_condition(idx, id, pcre.prefix, rolling, encompass, known_ids, notes)
-        {
+        if let Some(expr) = lower_pcre_trigger_condition(
+            idx,
+            id,
+            pcre.prefix,
+            rolling,
+            encompass,
+            known_ids,
+            imports,
+            notes,
+        ) {
             return RawSubsigLowering::StringExpr { line, expr };
         }
 
@@ -2434,10 +2444,41 @@ fn parse_fuzzy_img_subsignature(raw: &str) -> Option<ParsedFuzzyImg> {
 
 #[derive(Debug, Clone)]
 enum PcreOffsetSpec {
-    Exact(u64),
-    Range { start: u64, maxshift: u64 },
+    Any,
+    Absolute {
+        start: u64,
+        maxshift: Option<u64>,
+    },
+    EntryPoint {
+        delta: i64,
+        maxshift: Option<u64>,
+    },
+    SectionStart {
+        section_idx: u64,
+        delta: u64,
+        maxshift: Option<u64>,
+    },
+    LastSectionStart {
+        delta: u64,
+        maxshift: Option<u64>,
+    },
+    SectionEntire {
+        section_idx: u64,
+        extra_maxshift: u64,
+    },
+    EofMinus {
+        delta: u64,
+        maxshift: Option<u64>,
+    },
+    VersionInfo(String),
     MacroGroup(u32),
     Unsupported(String),
+}
+
+#[derive(Debug, Clone)]
+enum PcreOffsetWindow {
+    Exact { start: String },
+    Range { start: String, end: String },
 }
 
 #[derive(Debug, Clone)]
@@ -2459,6 +2500,7 @@ fn lower_pcre_trigger_condition(
     rolling: bool,
     encompass: bool,
     known_ids: &[Option<String>],
+    imports: &mut Vec<String>,
     notes: &mut Vec<String>,
 ) -> Option<String> {
     let prefix = prefix?.trim();
@@ -2496,9 +2538,15 @@ fn lower_pcre_trigger_condition(
 
     let mut parts = vec![id.to_string(), format!("({trigger_expr})")];
 
-    if let Some(offset_expr) =
-        lower_pcre_offset_condition(idx, id, parsed_prefix.offset, rolling, encompass, notes)
-    {
+    if let Some(offset_expr) = lower_pcre_offset_condition(
+        idx,
+        id,
+        parsed_prefix.offset,
+        rolling,
+        encompass,
+        imports,
+        notes,
+    ) {
         parts.push(format!("({offset_expr})"));
     }
 
@@ -2529,6 +2577,13 @@ fn parse_pcre_trigger_prefix(prefix: &str) -> Result<ParsedPcrePrefix<'_>, Strin
     })
 }
 
+fn parse_ascii_u64(input: &str) -> Option<u64> {
+    if input.is_empty() || !input.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    input.parse::<u64>().ok()
+}
+
 fn parse_pcre_macro_group_offset(input: &str) -> Option<u32> {
     let inner = input.strip_prefix('$')?.strip_suffix('$')?;
     if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_digit()) {
@@ -2540,27 +2595,139 @@ fn parse_pcre_macro_group_offset(input: &str) -> Option<u32> {
 
 fn parse_pcre_offset_spec(input: &str) -> PcreOffsetSpec {
     let input = input.trim();
+    if input == "*" {
+        return PcreOffsetSpec::Any;
+    }
 
-    if let Some(group_id) = parse_pcre_macro_group_offset(input) {
+    let (base, maxshift) = match input.split_once(',') {
+        Some((lhs, rhs)) => {
+            let Some(maxshift) = parse_ascii_u64(rhs.trim()) else {
+                return PcreOffsetSpec::Unsupported(input.to_string());
+            };
+            (lhs.trim(), Some(maxshift))
+        }
+        None => (input, None),
+    };
+
+    if let Some(group_id) = parse_pcre_macro_group_offset(base) {
         return PcreOffsetSpec::MacroGroup(group_id);
     }
 
-    if let Some((start, maxshift)) = input.split_once(',') {
-        if let (Some(start), Some(maxshift)) = (
-            parse_clamav_numeric(start.trim()),
-            parse_clamav_numeric(maxshift.trim()),
-        ) {
-            return PcreOffsetSpec::Range { start, maxshift };
-        }
+    if base == "VI" {
+        return PcreOffsetSpec::VersionInfo(input.to_string());
+    }
 
+    if let Some(rest) = base.strip_prefix("EP+") {
+        if let Some(delta) = parse_ascii_u64(rest).and_then(|v| i64::try_from(v).ok()) {
+            return PcreOffsetSpec::EntryPoint { delta, maxshift };
+        }
         return PcreOffsetSpec::Unsupported(input.to_string());
     }
 
-    if let Some(value) = parse_clamav_numeric(input) {
-        return PcreOffsetSpec::Exact(value);
+    if let Some(rest) = base.strip_prefix("EP-") {
+        if let Some(delta) = parse_ascii_u64(rest).and_then(|v| i64::try_from(v).ok()) {
+            return PcreOffsetSpec::EntryPoint {
+                delta: -delta,
+                maxshift,
+            };
+        }
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
+    if let Some(rest) = base.strip_prefix("SL+") {
+        if let Some(delta) = parse_ascii_u64(rest) {
+            return PcreOffsetSpec::LastSectionStart { delta, maxshift };
+        }
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
+    if let Some(rest) = base.strip_prefix("SE") {
+        if let Some(section_idx) = parse_ascii_u64(rest) {
+            return PcreOffsetSpec::SectionEntire {
+                section_idx,
+                extra_maxshift: maxshift.unwrap_or(0),
+            };
+        }
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
+    if let Some(rest) = base.strip_prefix('S') {
+        if !(rest.starts_with('L') || rest.starts_with('E')) {
+            if let Some((section_idx, delta)) = rest.split_once('+') {
+                if let (Some(section_idx), Some(delta)) =
+                    (parse_ascii_u64(section_idx), parse_ascii_u64(delta))
+                {
+                    return PcreOffsetSpec::SectionStart {
+                        section_idx,
+                        delta,
+                        maxshift,
+                    };
+                }
+            }
+            return PcreOffsetSpec::Unsupported(input.to_string());
+        }
+    }
+
+    if let Some(rest) = base.strip_prefix("EOF-") {
+        if let Some(delta) = parse_ascii_u64(rest) {
+            return PcreOffsetSpec::EofMinus { delta, maxshift };
+        }
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
+    if let Some(start) = parse_ascii_u64(base) {
+        return PcreOffsetSpec::Absolute { start, maxshift };
     }
 
     PcreOffsetSpec::Unsupported(input.to_string())
+}
+
+fn pcre_occurrence_exact_expr(core: &str, start: &str, rolling: bool) -> String {
+    if rolling {
+        format!("for any j in (1..#{core}) : (@{core}[j] >= {start})")
+    } else {
+        format!("for any j in (1..#{core}) : (@{core}[j] == {start})")
+    }
+}
+
+fn pcre_occurrence_window_expr(core: &str, start: &str, end: &str) -> String {
+    format!("for any j in (1..#{core}) : (@{core}[j] >= {start} and @{core}[j] <= {end})")
+}
+
+fn lower_pcre_offset_window_condition(
+    idx: usize,
+    core: &str,
+    window: PcreOffsetWindow,
+    rolling: bool,
+    encompass: bool,
+    notes: &mut Vec<String>,
+) -> String {
+    match window {
+        PcreOffsetWindow::Exact { start } => {
+            if encompass {
+                notes.push(format!(
+                    "subsig[{idx}] pcre flag 'e' ignored on exact offset"
+                ));
+            }
+            pcre_occurrence_exact_expr(core, &start, rolling)
+        }
+        PcreOffsetWindow::Range { start, end } => {
+            if rolling {
+                notes.push(format!(
+                    "subsig[{idx}] pcre flag 'r' ignored when maxshift is present"
+                ));
+            }
+
+            if encompass {
+                pcre_occurrence_window_expr(core, &start, &end)
+            } else {
+                notes.push(format!(
+                    "subsig[{idx}] pcre maxshift present without 'e'; lowered to false for safety"
+                ));
+                "false".to_string()
+            }
+        }
+    }
 }
 
 fn lower_pcre_offset_condition(
@@ -2569,6 +2736,7 @@ fn lower_pcre_offset_condition(
     offset: Option<PcreOffsetSpec>,
     rolling: bool,
     encompass: bool,
+    imports: &mut Vec<String>,
     notes: &mut Vec<String>,
 ) -> Option<String> {
     let core = id.strip_prefix('$').unwrap_or(id);
@@ -2587,42 +2755,143 @@ fn lower_pcre_offset_condition(
         return None;
     };
 
-    match offset {
-        PcreOffsetSpec::Exact(start) => {
-            if encompass {
-                notes.push(format!(
-                    "subsig[{idx}] pcre flag 'e' ignored on exact offset"
-                ));
-            }
-
-            if rolling {
-                Some(format!(
-                    "for any j in (1..#{core}) : (@{core}[j] >= {start})"
-                ))
-            } else {
-                Some(format!(
-                    "for any j in (1..#{core}) : (@{core}[j] == {start})"
-                ))
-            }
+    let scoped = |guard: String, inner: String| {
+        if inner == "false" {
+            inner
+        } else {
+            format!("{guard} and ({inner})")
         }
-        PcreOffsetSpec::Range { start, maxshift } => {
+    };
+
+    match offset {
+        PcreOffsetSpec::Any => {
             if rolling {
                 notes.push(format!(
-                    "subsig[{idx}] pcre flag 'r' ignored when maxshift is present"
+                    "subsig[{idx}] pcre flag 'r' ignored on '*' offset prefix"
                 ));
             }
-
             if encompass {
-                Some(format!(
-                    "for any j in (1..#{core}) : (@{core}[j] >= {start} and @{core}[j] <= {})",
-                    start.saturating_add(maxshift)
-                ))
-            } else {
                 notes.push(format!(
-                    "subsig[{idx}] pcre maxshift present without 'e'; lowered to false for safety"
+                    "subsig[{idx}] pcre flag 'e' ignored: '*' offset has no maxshift"
                 ));
-                Some("false".to_string())
             }
+            None
+        }
+        PcreOffsetSpec::Absolute { start, maxshift } => {
+            let window = match maxshift {
+                Some(maxshift) => PcreOffsetWindow::Range {
+                    start: start.to_string(),
+                    end: start.saturating_add(maxshift).to_string(),
+                },
+                None => PcreOffsetWindow::Exact {
+                    start: start.to_string(),
+                },
+            };
+            Some(lower_pcre_offset_window_condition(
+                idx, core, window, rolling, encompass, notes,
+            ))
+        }
+        PcreOffsetSpec::EntryPoint { delta, maxshift } => {
+            push_import(imports, "pe");
+            let start = apply_signed_delta("pe.entry_point", delta);
+            let window = match maxshift {
+                Some(maxshift) => PcreOffsetWindow::Range {
+                    start: start.clone(),
+                    end: apply_unsigned_delta(&start, maxshift),
+                },
+                None => PcreOffsetWindow::Exact { start },
+            };
+            Some(lower_pcre_offset_window_condition(
+                idx, core, window, rolling, encompass, notes,
+            ))
+        }
+        PcreOffsetSpec::SectionStart {
+            section_idx,
+            delta,
+            maxshift,
+        } => {
+            push_import(imports, "pe");
+            let start = apply_unsigned_delta(
+                &format!("pe.sections[{section_idx}].raw_data_offset"),
+                delta,
+            );
+            let window = match maxshift {
+                Some(maxshift) => PcreOffsetWindow::Range {
+                    start: start.clone(),
+                    end: apply_unsigned_delta(&start, maxshift),
+                },
+                None => PcreOffsetWindow::Exact { start },
+            };
+            let inner =
+                lower_pcre_offset_window_condition(idx, core, window, rolling, encompass, notes);
+            Some(scoped(
+                format!("pe.number_of_sections > {section_idx}"),
+                inner,
+            ))
+        }
+        PcreOffsetSpec::LastSectionStart { delta, maxshift } => {
+            push_import(imports, "pe");
+            let start = apply_unsigned_delta(
+                "pe.sections[pe.number_of_sections - 1].raw_data_offset",
+                delta,
+            );
+            let window = match maxshift {
+                Some(maxshift) => PcreOffsetWindow::Range {
+                    start: start.clone(),
+                    end: apply_unsigned_delta(&start, maxshift),
+                },
+                None => PcreOffsetWindow::Exact { start },
+            };
+            let inner =
+                lower_pcre_offset_window_condition(idx, core, window, rolling, encompass, notes);
+            Some(scoped("pe.number_of_sections > 0".to_string(), inner))
+        }
+        PcreOffsetSpec::SectionEntire {
+            section_idx,
+            extra_maxshift,
+        } => {
+            push_import(imports, "pe");
+            let start = format!("pe.sections[{section_idx}].raw_data_offset");
+            let end =
+                format!("{start} + pe.sections[{section_idx}].raw_data_size + {extra_maxshift}");
+            let inner = lower_pcre_offset_window_condition(
+                idx,
+                core,
+                PcreOffsetWindow::Range {
+                    start: start.clone(),
+                    end,
+                },
+                rolling,
+                encompass,
+                notes,
+            );
+            Some(scoped(
+                format!("pe.number_of_sections > {section_idx}"),
+                inner,
+            ))
+        }
+        PcreOffsetSpec::EofMinus { delta, maxshift } => {
+            let start = if delta == 0 {
+                "filesize".to_string()
+            } else {
+                format!("filesize - {delta}")
+            };
+            let window = match maxshift {
+                Some(maxshift) => PcreOffsetWindow::Range {
+                    start: start.clone(),
+                    end: apply_unsigned_delta(&start, maxshift),
+                },
+                None => PcreOffsetWindow::Exact { start },
+            };
+            Some(lower_pcre_offset_window_condition(
+                idx, core, window, rolling, encompass, notes,
+            ))
+        }
+        PcreOffsetSpec::VersionInfo(raw) => {
+            notes.push(format!(
+                "subsig[{idx}] pcre offset prefix '{raw}' depends on versioninfo runtime offsets (CLI_OFF_VERSION); lowered to false for safety"
+            ));
+            Some("false".to_string())
         }
         PcreOffsetSpec::MacroGroup(group_id) => {
             if group_id >= 32 {

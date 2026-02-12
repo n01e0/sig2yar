@@ -61,7 +61,7 @@ Last update: 2026-02-12
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は distinct-count近似で暫定対応
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋numeric offset制約（exact / start,maxshift）を条件式に反映済み。`maxshift without e`、non-numeric offset prefix（例: `EP+`）、macro offset（`$n$`）は source根拠付きで **safety false + note** へ厳密化済み（残: 追加offset型の精密対応）
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持（残: `VI`/macroの厳密表現方針）。
 - [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -99,6 +99,7 @@ Last update: 2026-02-12
 
 - 2026-02-12 進捗: Cisco-Talos/clamav 公式fixture（`unit_tests/check_matchers.c` の pcre_testdata、`unit_tests/clamscan/regex_test.py`、`unit_tests/clamscan/fuzzy_img_hash_test.py`）を根拠に、`tests/yara_rule.rs` / `tests/yara_compile.rs` を拡張。PCRE exact offset を `==` で固定するケース、`/atre/re` + `2,6`（`r`無視+encompass window）ケース、`fuzzy_img` 非表現要素（2nd subsig併用・distance!=0）を **safety false + note** で明示検証。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記: macro-group と complex PCRE trigger-prefix の残ブロッカーを source準拠で厳密化。macro は `${min-max}group$` を group解釈し、runtime `macro_lastmatch` 依存のため safety false 化（invalid format / group>=32 も false）。PCRE trigger-prefix は `check_matchers.c` Test8/Test10・`regex_test.py` offset fixture を追加検証し、unsupported offset prefix（`EP+...`）および `$n$` macro offset を safety false + note 化。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 再通過。
+- 2026-02-12 追記2: `cli_caloff` 残フォーム（`*`, `EP-`, `Sx+`, `SL+`, `SE`, `EOF-`）をPCRE trigger-prefix lowerに追加し、`tests/yara_rule.rs` / `tests/yara_compile.rs` を拡張。`SE` は ClamAV同様に section size を maxshiftへ加味し、`e`なしは safety false 維持。`VI` / `$n$` macro offset / 非数値payloadは safety false + note を維持。`cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 
 `clamav-db/unpacked` の現物には以下拡張子が存在（2026-02-11時点）:
 

@@ -92,8 +92,81 @@ fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_non_numeric_offset_prefix_false_compiles_with_yara_x() {
+fn yara_rule_with_pcre_ep_plus_offset_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre EP+ offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_ep_minus_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP-4:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre EP- offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_star_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre '*' offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_section_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S2+4,8:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre Sx+ offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_section_end_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1,4:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre SE offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_last_section_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SL+16:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre SL+ offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_eof_minus_offset_prefix_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre EOF- offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_versioninfo_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;VI:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre VI offset-prefix safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_non_numeric_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+foo:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
