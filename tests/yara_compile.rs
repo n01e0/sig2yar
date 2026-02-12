@@ -150,6 +150,16 @@ fn yara_rule_with_non_raw_byte_comparison_gt_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_decimal_hex_alpha_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>A0)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile non-raw decimal-hex-alpha safety-false rule");
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_lt_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
