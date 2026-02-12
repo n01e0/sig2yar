@@ -39,6 +39,27 @@ fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_exact_pcre_offset_compiles_with_yara_x_from_clamav_regex_fixture() {
+    // ClamAV reference: unit_tests/clamscan/regex_test.py:127-129,152-174
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;68656c6c6f20;5:0/hello blee/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre exact-offset generated rule");
+}
+
+#[test]
+fn yara_rule_with_re_range_offset_compiles_with_yara_x_from_clamav_matcher_fixture() {
+    // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (pcre_testdata expected_result)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre range+re generated rule");
+}
+
+#[test]
 fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -149,6 +170,30 @@ fn yara_rule_with_descending_macro_range_false_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile descending-macro-range safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_fuzzy_img_second_subsig_false_compiles_with_yara_x_from_clamav_fixture() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;49484452;fuzzy_img#af2ad01ed42993c7#0")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile fuzzy_img second-subsig safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_fuzzy_img_nonzero_distance_false_compiles_with_yara_x_from_clamav_fixture() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:116-132
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#1").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile fuzzy_img nonzero-distance safety-false rule");
 }
 
 #[test]

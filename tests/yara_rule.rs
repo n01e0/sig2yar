@@ -201,6 +201,36 @@ fn lowers_pcre_offset_with_rolling_flag() {
 }
 
 #[test]
+fn lowers_pcre_exact_offset_as_equality_from_clamav_regex_fixture() {
+    // ClamAV reference:
+    // - unit_tests/clamscan/regex_test.py:127-129 (exact offset semantics)
+    // - unit_tests/clamscan/regex_test.py:152-174 (offset=5, exact start position)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;68656c6c6f20;5:0/hello blee/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] == 5"));
+    assert!(!rule.condition.contains("@s1[j] >= 5"));
+}
+
+#[test]
+fn lowers_pcre_re_range_ignores_r_and_keeps_encompass_window_from_clamav_matcher_fixture() {
+    // ClamAV reference:
+    // - unit_tests/check_matchers.c:146-149 (Test10 uses `/atre/re` with offset `2,6`)
+    // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= 2"));
+    assert!(rule.condition.contains("@s1[j] <= 8"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre flag 'r' ignored when maxshift is present")
+    )));
+}
+
+#[test]
 fn lowers_pcre_encompass_with_range_offset() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -438,6 +468,10 @@ fn lowers_byte_comparison_non_raw_contradictory_clauses_to_false_for_safety() {
 
 #[test]
 fn lowers_macro_subsignature_as_positional_constraint() {
+    // No official macro-group fixture was found in Cisco-Talos/clamav unit_tests while mining
+    // `unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`,
+    // `unit_tests/clamscan/fuzzy_img_hash_test.py`, and `git grep '\$\{[0-9]' unit_tests`.
+    // Keep this as a local positional-lowering regression without inventing extra semantics.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -472,6 +506,40 @@ fn lowers_fuzzy_img_as_safe_false() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes" && value.contains("fuzzy_img")
+    )));
+}
+
+#[test]
+fn lowers_fuzzy_img_with_second_subsig_to_safe_false_from_clamav_fixture() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
+    // (`logo.png.good.with.second.subsig` / `logo.png.bad.with.second.subsig`)
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;49484452;fuzzy_img#af2ad01ed42993c7#0")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("fuzzy_img hash 'af2ad01ed42993c7' is not representable in YARA")
+    )));
+}
+
+#[test]
+fn lowers_fuzzy_img_nonzero_distance_to_safe_false_with_note_from_clamav_fixture() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:116-132
+    // (`fuzzy_img#...#1` is rejected as invalid hamming distance)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#1").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("fuzzy_img distance=1 unsupported; lowered to false")
     )));
 }
 
