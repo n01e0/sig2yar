@@ -1416,6 +1416,7 @@ fn lower_raw_or_pcre_subsignature(
         let mut rolling = false;
         let mut encompass = false;
         let mut unsupported_e_flag = false;
+        let mut unsupported_flags = Vec::new();
 
         for flag in pcre.flags.chars() {
             match flag {
@@ -1448,19 +1449,28 @@ fn lower_raw_or_pcre_subsignature(
                         "subsig[{idx}] legacy pcre flag 'a' treated as anchored"
                     ));
                 }
-                'd' => notes.push(format!(
-                    "subsig[{idx}] legacy pcre flag 'd' is not mapped yet"
-                )),
-                other => notes.push(format!(
-                    "subsig[{idx}] unknown pcre flag '{}' ignored",
-                    other
-                )),
+                'd' => unsupported_flags.push('d'),
+                other => unsupported_flags.push(other),
             }
         }
 
         if unsupported_e_flag {
             notes.push(format!(
                 "subsig[{idx}] pcre flag 'E' unsupported; lowered to false for safety"
+            ));
+            return RawSubsigLowering::Expr("false".to_string());
+        }
+
+        if !unsupported_flags.is_empty() {
+            unsupported_flags.sort_unstable();
+            unsupported_flags.dedup();
+            let rendered = unsupported_flags
+                .iter()
+                .map(|ch| format!("'{}'", ch))
+                .collect::<Vec<_>>()
+                .join(", ");
+            notes.push(format!(
+                "subsig[{idx}] unsupported pcre flag(s) {rendered}; lowered to false for safety"
             ));
             return RawSubsigLowering::Expr("false".to_string());
         }
