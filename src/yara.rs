@@ -280,7 +280,7 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         "6" => Some("uint32(0) == 0x464C457F".to_string()), // ELF
         "7" => {
             notes.push(
-                "ndb target_type=7 (ascii) lowered with full-file printable+alpha heuristic"
+                "ndb target_type=7 (ascii) lowered with normalized-text heuristic (printable + lowercase alpha + no uppercase)"
                     .to_string(),
             );
             Some(ndb_ascii_target_condition())
@@ -322,15 +322,20 @@ fn ndb_ascii_predicate(var: &str) -> String {
     )
 }
 
-fn ndb_ascii_alpha_predicate(var: &str) -> String {
-    format!("(({var} >= 0x41 and {var} <= 0x5A) or ({var} >= 0x61 and {var} <= 0x7A))")
+fn ndb_ascii_lower_alpha_predicate(var: &str) -> String {
+    format!("({var} >= 0x61 and {var} <= 0x7A)")
+}
+
+fn ndb_ascii_upper_alpha_predicate(var: &str) -> String {
+    format!("({var} >= 0x41 and {var} <= 0x5A)")
 }
 
 fn ndb_ascii_target_condition() -> String {
-    let pred = ndb_ascii_predicate("uint8(i)");
-    let alpha = ndb_ascii_alpha_predicate("uint8(j)");
+    let printable = ndb_ascii_predicate("uint8(i)");
+    let lower_alpha = ndb_ascii_lower_alpha_predicate("uint8(j)");
+    let upper_alpha = ndb_ascii_upper_alpha_predicate("uint8(k)");
     format!(
-        "filesize > 0 and for all i in (0..filesize-1) : ({pred}) and for any j in (0..filesize-1) : ({alpha})"
+        "filesize > 0 and for all i in (0..filesize-1) : ({printable}) and for any j in (0..filesize-1) : ({lower_alpha}) and for all k in (0..filesize-1) : (not ({upper_alpha}))"
     )
 }
 

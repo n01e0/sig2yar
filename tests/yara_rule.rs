@@ -899,19 +899,25 @@ fn lowers_ndb_target_type_graphics_with_magic_check() {
 
 #[test]
 fn lowers_ndb_target_type_ascii_with_constraint() {
+    // ClamAV reference:
+    // - libclamav/textnorm.c:64-68 (text normalization contract: whitespace fold + lowercase)
+    // - libclamav/textnorm.c:74-82 (`A32` table entries map 'A'..'Z' to lowercase)
+    // - libclamav/textnorm.c:115-129 (NORMALIZE_ADD_32 applies uppercase->lowercase)
     let sig = NdbSignature::parse("Txt.Test-1:7:*:68656c6c6f").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("for all i in (0..filesize-1)"));
     assert!(rule.condition.contains("uint8(i) >= 0x20"));
     assert!(rule.condition.contains("for any j in (0..filesize-1)"));
-    assert!(rule.condition.contains("uint8(j) >= 0x41"));
+    assert!(rule.condition.contains("uint8(j) >= 0x61"));
+    assert!(rule.condition.contains("for all k in (0..filesize-1)"));
+    assert!(rule.condition.contains("not ((uint8(k) >= 0x41 and uint8(k) <= 0x5A))"));
     assert!(!rule.condition.contains("0..4095"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("full-file printable+alpha heuristic")
+                && value.contains("normalized-text heuristic")
     )));
 }
 
