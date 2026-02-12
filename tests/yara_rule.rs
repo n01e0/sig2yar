@@ -523,14 +523,17 @@ fn lowers_ndb_target_type_ascii_with_constraint() {
     let sig = NdbSignature::parse("Txt.Test-1:7:*:68656c6c6f").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("for all i"));
+    assert!(rule.condition.contains("for all i in (0..filesize-1)"));
     assert!(rule.condition.contains("uint8(i) >= 0x20"));
-    assert!(rule.condition.contains("for any j"));
+    assert!(rule.condition.contains("for any j in (0..filesize-1)"));
     assert!(rule.condition.contains("uint8(j) >= 0x41"));
-    assert!(rule
-        .meta
-        .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("target_type=7"))));
+    assert!(!rule.condition.contains("0..4095"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("full-file printable+alpha heuristic")
+    )));
 }
 
 #[test]
