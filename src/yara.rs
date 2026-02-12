@@ -264,7 +264,7 @@ fn lower_ndb_target_condition(target_type: &str, notes: &mut Vec<String>) -> Opt
         "2" => Some("uint32(0) == 0xE011CFD0 and uint32(4) == 0xE11AB1A1".to_string()), // OLE2
         "3" => {
             notes.push(
-                "ndb target_type=3 (HTML normalized) lowered with structural HTML heuristic"
+                "ndb target_type=3 (HTML normalized) lowered with strict structural HTML heuristic (tag terminator + order)"
                     .to_string(),
             );
             Some(ndb_html_target_condition())
@@ -330,6 +330,26 @@ fn ndb_ascii_upper_alpha_predicate(var: &str) -> String {
     format!("({var} >= 0x41 and {var} <= 0x5A)")
 }
 
+fn ndb_ascii_space_predicate(var: &str) -> String {
+    format!("({var} == 0x09 or {var} == 0x0A or {var} == 0x0D or {var} == 0x20)")
+}
+
+fn ndb_html_tag_terminator_predicate(var: &str) -> String {
+    let space = ndb_ascii_space_predicate(var);
+    format!("({var} == 0x3E or {space})")
+}
+
+fn ndb_html_prefix_with_terminator_condition(
+    prefix: &str,
+    idx_var: &str,
+    size_limit: &str,
+) -> String {
+    let len = prefix.len();
+    let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, idx_var);
+    let term = ndb_html_tag_terminator_predicate(&format!("uint8(({idx_var}) + {len})"));
+    format!("({idx_var} + {len} < {size_limit} and {prefix_match} and {term})")
+}
+
 fn ndb_ascii_target_condition() -> String {
     let printable = ndb_ascii_predicate("uint8(i)");
     let lower_alpha = ndb_ascii_lower_alpha_predicate("uint8(j)");
@@ -345,14 +365,14 @@ fn ndb_html_target_condition() -> String {
     let close_markers = ["</html", "</body", "</head"];
 
     let root_small =
-        ndb_any_prefix_in_window_condition(&root_markers, "r", "filesize-1", "filesize");
-    let root_large = ndb_any_prefix_in_window_condition(&root_markers, "r", "511", "512");
+        ndb_any_html_prefix_in_window_condition(&root_markers, "r", "filesize-1", "filesize");
+    let root_large = ndb_any_html_prefix_in_window_condition(&root_markers, "r", "511", "512");
 
     let close_small =
-        ndb_any_prefix_in_window_condition(&close_markers, "c", "filesize-1", "filesize");
-    let close_large = ndb_any_prefix_in_window_condition(&close_markers, "c", "4095", "4096");
+        ndb_any_html_prefix_in_window_condition(&close_markers, "c", "filesize-1", "filesize");
+    let close_large = ndb_any_html_prefix_in_window_condition(&close_markers, "c", "4095", "4096");
 
-    let root_before_close_small = ndb_any_prefix_before_separator_in_window_condition(
+    let root_before_close_small = ndb_any_html_prefix_before_separator_in_window_condition(
         &root_markers,
         &close_markers,
         "r",
@@ -360,7 +380,7 @@ fn ndb_html_target_condition() -> String {
         "filesize-1",
         "filesize",
     );
-    let root_before_close_large = ndb_any_prefix_before_separator_in_window_condition(
+    let root_before_close_large = ndb_any_html_prefix_before_separator_in_window_condition(
         &root_markers,
         &close_markers,
         "r",
@@ -418,7 +438,7 @@ fn ndb_mail_target_condition() -> String {
     )
 }
 
-fn ndb_any_prefix_in_window_condition(
+fn ndb_any_html_prefix_in_window_condition(
     prefixes: &[&str],
     idx_var: &str,
     window_end: &str,
@@ -426,15 +446,47 @@ fn ndb_any_prefix_in_window_condition(
 ) -> String {
     let clauses = prefixes
         .iter()
-        .map(|prefix| {
-            let len = prefix.len();
-            let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, idx_var);
-            format!("({idx_var} + {len} <= {size_limit} and {prefix_match})")
-        })
+        .map(|prefix| ndb_html_prefix_with_terminator_condition(prefix, idx_var, size_limit))
         .collect::<Vec<_>>()
         .join(" or ");
 
     format!("for any {idx_var} in (0..{window_end}) : ({clauses})")
+}
+
+fn ndb_any_html_prefix_before_separator_in_window_condition(
+    prefixes: &[&str],
+    separators: &[&str],
+    prefix_var: &str,
+    separator_var: &str,
+    window_end: &str,
+    size_limit: &str,
+) -> String {
+    let prefix_clauses = prefixes
+        .iter()
+        .map(|prefix| {
+            let len = prefix.len();
+            let prefix_match = ndb_ascii_prefix_at_offset_condition(prefix, prefix_var);
+            let term = ndb_html_tag_terminator_predicate(&format!("uint8(({prefix_var}) + {len})"));
+            format!("({prefix_var} + {len} < {separator_var} and {prefix_match} and {term})")
+        })
+        .collect::<Vec<_>>()
+        .join(" or ");
+
+    let separator_clauses = separators
+        .iter()
+        .map(|separator| {
+            let len = separator.len();
+            let separator_match = ndb_ascii_prefix_at_offset_condition(separator, separator_var);
+            let term =
+                ndb_html_tag_terminator_predicate(&format!("uint8(({separator_var}) + {len})"));
+            format!(
+                "({separator_var} + {len} < {size_limit} and {separator_match} and {term} and for any {prefix_var} in (0..{separator_var}) : ({prefix_clauses}))"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" or ");
+
+    format!("for any {separator_var} in (0..{window_end}) : ({separator_clauses})")
 }
 
 fn ndb_any_prefix_before_separator_in_window_condition(

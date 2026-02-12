@@ -1,6 +1,15 @@
 use sig2yar::parser::{logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::{self, YaraRule};
 
+fn scan_match_count(src: &str, data: &[u8]) -> usize {
+    let rules = yara_x::compile(src).expect("yara-x failed to compile rule for scan");
+    let mut scanner = yara_x::Scanner::new(&rules);
+    let results = scanner
+        .scan(data)
+        .expect("yara-x failed to scan data for rule");
+    results.matching_rules().len()
+}
+
 #[test]
 fn yara_rule_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;41414141").unwrap();
@@ -463,6 +472,30 @@ fn ndb_rule_with_target_type_3_compiles_with_yara_x() {
     let src = yara::render_ndb_signature(&ir);
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ndb target_type=3 rule");
+}
+
+#[test]
+fn ndb_rule_with_target_type_3_matches_valid_html_boundaries() {
+    // ClamAV reference:
+    // - libclamav/scanners.c:2563-2589 (normalized HTML buffers are scanned with CL_TYPE_HTML)
+    // - libclamav/htmlnorm.c:962-1000 (tag token ends on `>` or whitespace)
+    // - libclamav/htmlnorm.c:1229-1249 (exact closing tag token handling)
+    let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"<html><body>ok</body></html>";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_target_type_3_rejects_close_tag_without_terminator() {
+    // Strict-side non-match case: `</htmlx>` must not satisfy close-tag marker checks.
+    // ClamAV HTML tokenizer parses exact tag names and boundaries (htmlnorm.c state machine).
+    let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"<html>ok</htmlx>";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
 }
 
 #[test]

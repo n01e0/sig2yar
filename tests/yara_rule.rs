@@ -856,6 +856,10 @@ fn rejects_ndb_complex_signed_range_jump_for_strictness() {
 
 #[test]
 fn lowers_ndb_target_type_html_with_constraint() {
+    // ClamAV reference:
+    // - libclamav/scanners.c:2563-2589 (target HTML scans run on normalized `nocomment.html` / `notags.html`)
+    // - libclamav/htmlnorm.c:962-1000 (tag tokenization ends on `>`/whitespace)
+    // - libclamav/htmlnorm.c:1229-1249 (closing tag handling uses exact parsed tag token)
     let sig = NdbSignature::parse("Html.Test-1:3:*:3c68746d6c3e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -865,10 +869,22 @@ fn lowers_ndb_target_type_html_with_constraint() {
     assert!(rule.condition.contains("uint8((c) + 1) == 0x2F")); // close-tag marker (</...)
     assert!(rule.condition.contains("for any c in"));
     assert!(rule.condition.contains("for any r in (0..c)")); // root marker must appear before close marker
-    assert!(rule
-        .meta
-        .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("target_type=3"))));
+
+    // Strict boundary checks: marker must be followed by tag terminator (`>` or ASCII whitespace).
+    assert!(rule.condition.contains("r + 5 < 512"));
+    assert!(rule.condition.contains("uint8((r) + 5) == 0x3E"));
+    assert!(rule.condition.contains("c + 6 < 4096"));
+    assert!(rule.condition.contains("uint8((c) + 6) == 0x3E"));
+    assert!(!rule.condition.contains("r + 5 <= 512"));
+    assert!(!rule.condition.contains("c + 6 <= 4096"));
+
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("target_type=3")
+                && value.contains("tag terminator + order")
+    )));
 }
 
 #[test]
@@ -911,7 +927,9 @@ fn lowers_ndb_target_type_ascii_with_constraint() {
     assert!(rule.condition.contains("for any j in (0..filesize-1)"));
     assert!(rule.condition.contains("uint8(j) >= 0x61"));
     assert!(rule.condition.contains("for all k in (0..filesize-1)"));
-    assert!(rule.condition.contains("not ((uint8(k) >= 0x41 and uint8(k) <= 0x5A))"));
+    assert!(rule
+        .condition
+        .contains("not ((uint8(k) >= 0x41 and uint8(k) <= 0x5A))"));
     assert!(!rule.condition.contains("0..4095"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
