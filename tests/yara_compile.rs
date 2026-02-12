@@ -50,6 +50,17 @@ fn yara_rule_with_exact_pcre_offset_compiles_with_yara_x_from_clamav_regex_fixtu
 }
 
 #[test]
+fn yara_rule_with_exact_pcre_offset_match_fixture_compiles_with_yara_x() {
+    // ClamAV reference: unit_tests/clamscan/regex_test.py:170-183
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;68656c6c6f20;5:0/llo blee/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre exact-offset match-fixture rule");
+}
+
+#[test]
 fn yara_rule_with_re_range_offset_compiles_with_yara_x_from_clamav_matcher_fixture() {
     // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (pcre_testdata expected_result)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
@@ -60,6 +71,17 @@ fn yara_rule_with_re_range_offset_compiles_with_yara_x_from_clamav_matcher_fixtu
 }
 
 #[test]
+fn yara_rule_with_re_range_offset_nonmatch_fixture_compiles_with_yara_x() {
+    // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (Test8 `/apie/re` expected CL_SUCCESS)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre range+re nonmatch-fixture generated rule");
+}
+
+#[test]
 fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -67,6 +89,26 @@ fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile pcre-maxshift-without-e safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_non_numeric_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre non-numeric offset-prefix safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_macro_group_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$1$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre macro-group offset-prefix safety-false rule");
 }
 
 #[test]
@@ -163,6 +205,15 @@ fn yara_rule_with_byte_macro_fuzzy_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_macro_group_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile macro-group safety-false rule");
+}
+
+#[test]
 fn yara_rule_with_descending_macro_range_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${7-6}0$").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -170,6 +221,16 @@ fn yara_rule_with_descending_macro_range_false_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile descending-macro-range safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_invalid_macro_format_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6}0$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile invalid-macro-format safety-false rule");
 }
 
 #[test]
