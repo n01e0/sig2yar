@@ -1415,6 +1415,7 @@ fn lower_raw_or_pcre_subsignature(
         let mut anchored = false;
         let mut rolling = false;
         let mut encompass = false;
+        let mut unsupported_e_flag = false;
 
         for flag in pcre.flags.chars() {
             match flag {
@@ -1435,7 +1436,7 @@ fn lower_raw_or_pcre_subsignature(
                         inline_flags.push('x');
                     }
                 }
-                'E' => notes.push(format!("subsig[{idx}] pcre flag 'E' is not mapped yet")),
+                'E' => unsupported_e_flag = true,
                 'U' => {
                     if !inline_flags.contains('U') {
                         inline_flags.push('U');
@@ -1455,6 +1456,13 @@ fn lower_raw_or_pcre_subsignature(
                     other
                 )),
             }
+        }
+
+        if unsupported_e_flag {
+            notes.push(format!(
+                "subsig[{idx}] pcre flag 'E' unsupported; lowered to false for safety"
+            ));
+            return RawSubsigLowering::Expr("false".to_string());
         }
 
         let mut rendered_pattern = pcre.pattern.to_string();

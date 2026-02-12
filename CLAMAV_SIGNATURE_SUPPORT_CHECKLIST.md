@@ -58,7 +58,7 @@ Last update: 2026-02-12
 ### 2.3 未対応/不足
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は distinct-count近似で暫定対応
-- [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e` は safety false に厳密化済み。`E` などは未対応
+- [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e` と `E` は safety false へ厳密化済み。他flag/複雑条件は未対応
 - [ ] PCRE trigger prefix は trigger条件＋offset制約を条件式に反映済み（複雑ケースの厳密化は未完）
 - [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
@@ -82,7 +82,7 @@ Last update: 2026-02-12
 2. [ ] `byte_comparison` の未対応領域（non-raw base / rawの可変長）を厳密 lower
 3. [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映
 4. [ ] `fuzzy_img` の専用 lower
-5. [ ] PCRE flags / trigger prefix の残課題（`E` ほか未対応flag、複雑trigger-prefix厳密化）
+5. [ ] PCRE flags / trigger prefix の残課題（未対応flag、複雑trigger-prefix厳密化）
 6. [ ] `idb/cdb/crb/cbc/pdb/wdb` の優先順決め
 
 ---
