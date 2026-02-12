@@ -169,8 +169,18 @@ fn yara_rule_with_non_raw_byte_comparison_non_exact_false_compiles_with_yara_x()
 }
 
 #[test]
-fn yara_rule_with_raw_byte_comparison_unsupported_size_false_compiles_with_yara_x() {
+fn yara_rule_with_raw_byte_comparison_variable_size_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#ib3#=12)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile raw byte-compare variable-size rule");
+}
+
+#[test]
+fn yara_rule_with_raw_byte_comparison_unsupported_size_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#ib9#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
