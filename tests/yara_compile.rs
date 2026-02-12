@@ -39,6 +39,16 @@ fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre-maxshift-without-e safety-false rule");
+}
+
+#[test]
 fn yara_rule_with_pcre_x_flag_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a b c/x").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
