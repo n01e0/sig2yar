@@ -2396,15 +2396,15 @@ fn lower_macro_subsignature_condition(
         return None;
     }
 
-    let (min, max) = if macro_sig.min <= macro_sig.max {
-        (macro_sig.min, macro_sig.max)
-    } else {
+    if macro_sig.min > macro_sig.max {
         notes.push(format!(
-            "subsig[{idx}] macro range {}-{} reordered to {}-{}",
-            macro_sig.min, macro_sig.max, macro_sig.max, macro_sig.min
+            "subsig[{idx}] macro descending range {}-{} unsupported; lowered to false for safety",
+            macro_sig.min, macro_sig.max
         ));
-        (macro_sig.max, macro_sig.min)
-    };
+        return Some("false".to_string());
+    }
+
+    let (min, max) = (macro_sig.min, macro_sig.max);
 
     let prev_core = prev_id.strip_prefix('$').unwrap_or(&prev_id);
     let ref_core = ref_id.strip_prefix('$').unwrap_or(&ref_id);
