@@ -434,6 +434,20 @@ fn lowers_macro_subsignature_as_positional_constraint() {
 }
 
 #[test]
+fn lowers_macro_descending_range_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${7-6}0$").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 or false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro descending range 7-6 unsupported; lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_as_safe_false() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
