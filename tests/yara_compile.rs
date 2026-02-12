@@ -467,6 +467,9 @@ fn ndb_rule_with_target_type_3_compiles_with_yara_x() {
 
 #[test]
 fn ndb_rule_with_target_type_7_compiles_with_yara_x() {
+    // ClamAV reference:
+    // - libclamav/textnorm.c:64-68 (text normalization contract)
+    // - libclamav/textnorm.c:74-82,115-129 (uppercase A-Z normalized to lowercase)
     let sig = NdbSignature::parse("Txt.Test-1:7:*:68656c6c6f").unwrap();
     let ir = sig.to_ir();
     let src = yara::render_ndb_signature(&ir);
