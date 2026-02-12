@@ -810,14 +810,21 @@ fn lowers_ndb_entrypoint_with_pe_import() {
 }
 
 #[test]
-fn lowers_ndb_negative_jump_exactly() {
+fn rejects_ndb_signed_negative_jump_for_strictness() {
+    // ClamAV reference:
+    // - libclamav/readdb.c:727-731,851-874 (`{n}` / `{min-max}` parses unsigned distances)
+    // Signed jumps are not representable in ClamAV body wildcard grammar; keep strict safety-false.
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{-15}BB").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
-    let src = rule.to_string();
 
-    assert!(src.contains("$a = { AA [0-15] BB }"));
-    assert!(!src.contains("approximated"));
-    assert_eq!(rule.condition, "$a");
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("signed jump")
+                && value.contains("strict lowering")
+    )));
 }
 
 #[test]
@@ -828,6 +835,66 @@ fn lowers_ndb_open_ended_jump() {
 
     assert!(src.contains("$a = { AA [10-] BB }"));
     assert_eq!(rule.condition, "$a");
+}
+
+#[test]
+fn lowers_ndb_square_exact_range_jump_within_clamav_maxdist() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2751-2786 (`[n]` / `[n-m]`, ascending only)
+    // - libclamav/matcher-ac.h:32 (`AC_CH_MAXDIST` == 32)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[2-4]BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("$a = { AA [2-4] BB }"));
+    assert_eq!(rule.condition, "$a");
+}
+
+#[test]
+fn rejects_ndb_square_descending_range_jump_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[10-5]BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("[] jump")
+                && value.contains("descending bounds")
+                && value.contains("strict lowering")
+    )));
+}
+
+#[test]
+fn rejects_ndb_square_open_or_signed_bounds_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[-5]BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("[] jump")
+                && value.contains("open/signed bounds")
+                && value.contains("strict lowering")
+    )));
+}
+
+#[test]
+fn rejects_ndb_square_jump_over_clamav_maxdist_for_strictness() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[33]BB").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("AC_CH_MAXDIST=32")
+                && value.contains("strict lowering")
+    )));
 }
 
 #[test]

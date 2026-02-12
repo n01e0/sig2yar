@@ -221,14 +221,8 @@ fn lower_ndb_body_pattern(body: &str, notes: &mut Vec<String>) -> Option<String>
             '[' => {
                 let end = find_matching(&chars, i, ']')?;
                 let inner: String = chars[i + 1..end].iter().collect();
-                if !is_valid_ndb_square(inner.trim()) {
-                    notes.push(format!(
-                        "ndb body contains unsupported [] token: [{}]",
-                        inner
-                    ));
-                    return None;
-                }
-                tokens.push(format!("[{}]", inner.trim()));
+                let jump = lower_ndb_square_jump(inner.trim(), notes)?;
+                tokens.push(jump);
                 i = end + 1;
             }
             '(' | ')' | '|' => {
@@ -693,25 +687,73 @@ fn is_ndb_jump_token(token: &str) -> bool {
     token.starts_with('[') && token.ends_with(']')
 }
 
-fn is_valid_ndb_square(value: &str) -> bool {
-    if value == "-" {
-        return true;
+const NDB_SQUARE_JUMP_MAXDIST: u64 = 32;
+
+fn lower_ndb_square_jump(value: &str, notes: &mut Vec<String>) -> Option<String> {
+    if value.is_empty() {
+        notes.push("ndb body contains unsupported [] token: []".to_string());
+        return None;
     }
 
-    if let Some((lhs, rhs)) = value.split_once('-') {
-        if lhs.is_empty() && rhs.is_empty() {
-            return true;
+    if let Ok(exact) = value.parse::<u64>() {
+        if exact > NDB_SQUARE_JUMP_MAXDIST {
+            notes.push(format!(
+                "ndb [] jump [{value}] exceeds ClamAV AC_CH_MAXDIST={NDB_SQUARE_JUMP_MAXDIST}; unsupported for strict lowering"
+            ));
+            return None;
         }
-        if lhs.is_empty() {
-            return rhs.chars().all(|c| c.is_ascii_digit());
-        }
-        if rhs.is_empty() {
-            return lhs.chars().all(|c| c.is_ascii_digit());
-        }
-        return lhs.chars().all(|c| c.is_ascii_digit()) && rhs.chars().all(|c| c.is_ascii_digit());
+        return Some(format!("[{exact}]"));
     }
 
-    value.chars().all(|c| c.is_ascii_digit())
+    if value.matches('-').count() == 1 {
+        let (lhs, rhs) = value.split_once('-')?;
+        let lhs = lhs.trim();
+        let rhs = rhs.trim();
+
+        if lhs.is_empty() || rhs.is_empty() {
+            notes.push(format!(
+                "ndb [] jump with open/signed bounds [{value}] is unsupported for strict lowering"
+            ));
+            return None;
+        }
+
+        let start = match lhs.parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                notes.push(format!("ndb body contains unsupported [] token: [{value}]"));
+                return None;
+            }
+        };
+        let end = match rhs.parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                notes.push(format!("ndb body contains unsupported [] token: [{value}]"));
+                return None;
+            }
+        };
+
+        if start > end {
+            notes.push(format!(
+                "ndb [] jump with descending bounds [{value}] is unsupported for strict lowering"
+            ));
+            return None;
+        }
+
+        if end > NDB_SQUARE_JUMP_MAXDIST {
+            notes.push(format!(
+                "ndb [] jump [{value}] exceeds ClamAV AC_CH_MAXDIST={NDB_SQUARE_JUMP_MAXDIST}; unsupported for strict lowering"
+            ));
+            return None;
+        }
+
+        if start == end {
+            return Some(format!("[{start}]"));
+        }
+        return Some(format!("[{start}-{end}]"));
+    }
+
+    notes.push(format!("ndb body contains unsupported [] token: [{value}]"));
+    None
 }
 
 fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> {
@@ -720,8 +762,10 @@ fn lower_ndb_curly_jump(value: &str, notes: &mut Vec<String>) -> Option<String> 
             return Some(format!("[{num}]"));
         }
 
-        let width = num.unsigned_abs();
-        return Some(format!("[0-{width}]"));
+        notes.push(format!(
+            "ndb signed jump {{{value}}} is unsupported for strict lowering"
+        ));
+        return None;
     }
 
     if let Some((lhs, rhs)) = value.split_once('-') {
