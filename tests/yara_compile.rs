@@ -643,6 +643,69 @@ fn ndb_rule_with_square_range_jump_rejects_nonmatch_fixture() {
 }
 
 #[test]
+fn ndb_rule_with_square_right_flank_structure_matches_representable_fixture() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (`[]` allows core `[n-m]` single-byte-right-flank form)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AABB[1-2]CC").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\xBB\x01\xCC";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_square_right_flank_structure_rejects_nonmatch_fixture() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AABB[1-2]CC").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\xBB\x01\x02\x03\xCC";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_square_dual_flank_structure_matches_representable_fixture() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (`[]` parsing requires single-byte flank/core structure)
+    // - libclamav/matcher-ac.c:1286-1304,1365-1381 (`ch[0]`/`ch[1]` left/right distance checks)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[1-2]BBCC[3-4]DD").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\x01\xBB\xCC\x01\x02\x03\xDD";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn ndb_rule_with_square_dual_flank_structure_rejects_nonmatch_fixture() {
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[1-2]BBCC[3-4]DD").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\x01\xBB\xCC\x01\x02\xDD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_square_jump_without_single_byte_flank_strict_false_rejects_scan() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2767-2836 (invalid when neither `[]` side is a single-byte flank)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AABB[1-2]CCDD").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\xBB\x01\xCC\xDD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn ndb_rule_with_more_than_two_square_jumps_strict_false_rejects_scan() {
+    // ClamAV reference:
+    // - libclamav/matcher-ac.c:2768-2838 (`for (i = 0; i < 2; i++)`)
+    let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA[1]BB[2]CC[3]DD").unwrap();
+    let src = yara::render_ndb_signature(&sig.to_ir());
+
+    let data = b"\xAA\x00\xBB\x00\x00\xCC\x00\x00\x00\xDD";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn ndb_rule_with_descending_positive_range_jump_strict_false_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:AA{10-5}BB").unwrap();
     let ir = sig.to_ir();
