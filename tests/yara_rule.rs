@@ -1,4 +1,4 @@
-use sig2yar::parser::{logical::LogicalSignature, ndb::NdbSignature};
+use sig2yar::parser::{idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
 #[test]
@@ -1320,5 +1320,31 @@ fn lowers_ndb_non_numeric_target_type_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("target_type=foo")
                 && value.contains("invalid/unknown")
+    )));
+}
+
+#[test]
+fn lowers_idb_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: LogicalSignatures.md (`ICONNAME:GROUP1:GROUP2:ICON_HASH`)
+    // - source: libclamav/readdb.c:1365-1376,1388-1397 (`ICO_TOKENS=4`, hash len=124, size=16/24/32)
+    let icon_hash = format!("10{}", "0".repeat(122));
+    let raw = format!("Icon.Sample-1:IEXPLORE:GENERIC:{icon_hash}");
+    let sig = IdbSignature::parse(raw.as_str()).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.name, "Icon_Sample_1");
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "idb_icon_fuzzy_match"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("icon matcher")
+                && value.contains("IconGroup")
     )));
 }

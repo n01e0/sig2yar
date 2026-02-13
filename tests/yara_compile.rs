@@ -1,4 +1,4 @@
-use sig2yar::parser::{logical::LogicalSignature, ndb::NdbSignature};
+use sig2yar::parser::{idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature};
 use sig2yar::yara::{self, YaraRule};
 
 fn scan_match_count(src: &str, data: &[u8]) -> usize {
@@ -887,4 +887,15 @@ fn ndb_rule_with_non_numeric_target_type_strict_false_rejects_scan() {
 
     let data = b"ABCD";
     assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn idb_rule_strict_false_compiles_and_rejects_scan() {
+    let icon_hash = format!("10{}", "0".repeat(122));
+    let raw = format!("Icon.Sample-1:IEXPLORE:GENERIC:{icon_hash}");
+    let sig = IdbSignature::parse(raw.as_str()).unwrap();
+    let src = yara::render_idb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile idb strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
 }

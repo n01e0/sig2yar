@@ -1,4 +1,5 @@
 pub mod hash;
+pub mod idb;
 pub mod logical;
 pub mod ndb;
 
@@ -9,4 +10,5 @@ pub enum DbType {
     Hash,
     Logical,
     Ndb,
+    Idb,
 }

@@ -4,7 +4,10 @@ use anyhow::Result;
 use args::Args;
 use clap::Parser;
 use sig2yar::{
-    parser::{hash::HashSignature, logical::LogicalSignature, ndb::NdbSignature, DbType},
+    parser::{
+        hash::HashSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
+        DbType,
+    },
     yara,
 };
 
@@ -27,6 +30,11 @@ fn main() -> Result<()> {
             let sig = NdbSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_ndb_signature(&ir));
+        }
+        DbType::Idb => {
+            let sig = IdbSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_idb_signature(&ir));
         }
     };
 

@@ -1,5 +1,5 @@
 use sig2yar::{
-    parser::{hash::HashSignature, logical::LogicalSignature},
+    parser::{hash::HashSignature, idb::IdbSignature, logical::LogicalSignature},
     yara,
 };
 
@@ -19,4 +19,14 @@ fn logical_ir_lower_matches_display() {
 
     let rule = yara::lower_logical_signature(&sig.to_ir()).expect("lowering failed");
     assert_eq!(rule.to_string(), sig.to_string());
+}
+
+#[test]
+fn idb_ir_render_matches_display() {
+    let icon_hash = format!("10{}", "0".repeat(122));
+    let raw = format!("Icon.Test:GROUP_A:GROUP_B:{icon_hash}");
+    let sig = IdbSignature::parse(raw.as_str()).expect("idb parse failed");
+
+    let rendered = yara::render_idb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
 }
