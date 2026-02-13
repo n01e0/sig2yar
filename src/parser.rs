@@ -5,6 +5,7 @@ pub mod idb;
 pub mod logical;
 pub mod ndb;
 pub mod pdb;
+pub mod wdb;
 
 use clap::ValueEnum;
 
@@ -17,4 +18,5 @@ pub enum DbType {
     Cdb,
     Crb,
     Pdb,
+    Wdb,
 }

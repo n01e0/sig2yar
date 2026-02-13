@@ -21,11 +21,11 @@ Last update: 2026-02-13
 - [x] `cdb` (container metadata signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `crb` (trusted/revoked cert signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `pdb` (phishing protected-domain signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `wdb` (phishing allow-list signatures) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
 - [ ] `cbc` (bytecode)
-- [ ] `wdb` (phishing)
 - [ ] `ftm`
 - [ ] `fp` / `sfp` (false positive related)
 - [ ] `ign` / `ign2` (ignore lists)
@@ -51,7 +51,7 @@ Last update: 2026-02-13
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
@@ -99,13 +99,21 @@ Last update: 2026-02-13
   - `cdb`（件数: 137）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `crb`（件数: 32）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `pdb`（件数: 263）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
-  - `wdb`（件数: 185）
+  - `wdb`（件数: 185）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `cbc`（件数: 8425, bytecodeで実装難度が高いため最後）
 
 ---
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記22: `wdb` の最小スライスとして `parse対象` を追加。`src/parser/wdb.rs` に ClamAV source 準拠のバリデーション（`X/Y/M` プレフィクス、`:` 区切り、`regex_list.c:functionality_level_check` と同じ末尾 `:min-max` 形式の機能レベル抽出）を実装し、`DbType::Wdb` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/PhishSigs.html`（`X:RealURL:DisplayedURL[:FuncLevelSpec]`, `Y:RealURL[:FuncLevelSpec]`, `M:RealHostname:DisplayedHostname[:FuncLevelSpec]`）, `libclamav/readdb.c:1593-1610`（`cli_loadwdb` が `load_regex_matcher(..., is_allow_list_lookup=1)` を使用）, `libclamav/regex_list.c:503-519,568-576`（`X/Y/M` dispatch）, `libclamav/regex_list.c:355-395`（末尾 `:min-max` での functionality-level 取り扱い）。
+  - `src/yara.rs` に `render/lower_wdb_signature` を追加し、wdb allow-list 判定は ClamAV runtime の phishing URL 抽出（RealURL/DisplayedURL concat）+ regex matcher 依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
+- 2026-02-13 追記21: `byte_comparison` non-raw base の残edge-caseとして、`h` base の `num_bytes` 上限を ClamAV source 準拠（`CLI_BCOMP_MAX_HEX_BLEN=18`）で strict-safe 化。`src/yara.rs` の `lower_textual_byte_comparison_condition(...)` で `#he19#...` のような over-limit を **false + note** に統一（近似禁止）。
+  - source根拠: `libclamav/matcher-byte-comp.h`（`#define CLI_BCOMP_MAX_HEX_BLEN 18`）, `libclamav/matcher-byte-comp.c`（`CLI_BCOMP_HEX` で over-limit を malformed として拒否）。
+  - `tests/yara_rule.rs`: `#he19#=1` が `condition=false` + note（`non-raw hex width 19 exceeds ClamAV limit 18`）になることを追加。
+  - `tests/yara_compile.rs`: 同ケースの scan fixture が非match（0 hit）になることを追加。
 - 2026-02-13 追記20: `pdb` の最小スライスとして `parse対象` を追加。`src/parser/pdb.rs` に ClamAV source 準拠のバリデーション（`R/H` プレフィクス、`:` 区切り、`regex_list.c:functionality_level_check` と同じ末尾 `:min-max` 形式の機能レベル抽出）を実装し、`DbType::Pdb` を CLI へ接続。
   - source根拠: docs `manual/Signatures/PhishSigs.html`（`R:DisplayedURL[:FuncLevelSpec]`, `H:DisplayedHostname[:FuncLevelSpec]`）, `libclamav/readdb.c:1613-1627`（`cli_loadpdb` が `load_regex_matcher` を使用）, `libclamav/regex_list.c:503-577`（`R/H` の dispatch）, `libclamav/regex_list.c:355-395`（末尾 `:min-max` での functionality-level 取り扱い）。
   - `src/yara.rs` に `render/lower_pdb_signature` を追加し、pdb の照合は ClamAV runtime の phishing engine（RealURL/DisplayedURL 抽出 + protected-domain matcher）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。

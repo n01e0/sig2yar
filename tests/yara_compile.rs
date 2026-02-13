@@ -1,6 +1,6 @@
 use sig2yar::parser::{
     cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature,
+    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -481,6 +481,19 @@ fn yara_rule_with_non_raw_auto_base_false_rejects_scan_fixture() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_hex_width_over_clamav_limit_false_rejects_scan_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#he19#=1)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("non-raw hex width 19 exceeds ClamAV limit 18"));
+    assert_eq!(
+        scan_match_count(src.as_str(), b"AAAA0000000000000000001"),
+        0
+    );
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_lt_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -945,6 +958,19 @@ fn pdb_rule_strict_false_compiles_and_rejects_scan() {
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pdb strict-false rule");
     assert_eq!(
         scan_match_count(src.as_str(), b"https://www.amazon.com/"),
+        0
+    );
+}
+
+#[test]
+fn wdb_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "Y:https?://safe\\.example\\.com([/?].*)?:17-";
+    let sig = WdbSignature::parse(raw).unwrap();
+    let src = yara::render_wdb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile wdb strict-false rule");
+    assert_eq!(
+        scan_match_count(src.as_str(), b"https://safe.example.com/"),
         0
     );
 }

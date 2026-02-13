@@ -1,7 +1,7 @@
 use sig2yar::{
     parser::{
         cdb::CdbSignature, crb::CrbSignature, hash::HashSignature, idb::IdbSignature,
-        logical::LogicalSignature, pdb::PdbSignature,
+        logical::LogicalSignature, pdb::PdbSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -58,5 +58,14 @@ fn pdb_ir_render_matches_display() {
     let sig = PdbSignature::parse(raw).expect("pdb parse failed");
 
     let rendered = yara::render_pdb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn wdb_ir_render_matches_display() {
+    let raw = "M:www\\.google\\.ro:www\\.google\\.com:20-30";
+    let sig = WdbSignature::parse(raw).expect("wdb parse failed");
+
+    let rendered = yara::render_wdb_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
