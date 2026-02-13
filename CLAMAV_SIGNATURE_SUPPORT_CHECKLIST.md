@@ -1,6 +1,6 @@
 # ClamAV Signature Support Checklist
 
-Last update: 2026-02-12
+Last update: 2026-02-13
 
 このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
 
@@ -61,7 +61,7 @@ Last update: 2026-02-12
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持（残: `VI`/macroの厳密表現方針）。
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み（残: `VI`/macroの厳密表現方針）。
 - [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -106,6 +106,10 @@ Last update: 2026-02-12
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記12: PCRE trigger-prefix strict化の最小スライスとして、trigger式が lowering で `false` に解決されたケース（未解決subsig参照など）を「constraint ignored」から **false + note** へ変更。`src/yara.rs` の `lower_pcre_trigger_condition(...)` で strict-safe を徹底。
+  - `tests/yara_rule.rs`: `9/abc/`（trigger参照先なし）で rule condition が `false` かつ note を確認。
+  - `tests/yara_compile.rs`: 同ケースが scan で非match（`abc` を与えても 0 hit）を確認。
+  - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-13 追記11: malformed な `byte_comparison` を raw 文字列として扱わないよう strict 化。`src/yara.rs` に `looks_like_byte_comparison(...)` を追加し、構文が byte_comparison 形なのに parse 失敗した場合は **safety false + note** に統一。
   - `tests/yara_rule.rs`: invalid threshold token（`#he2#=1G`）で strict-false note を確認。
   - `tests/yara_compile.rs`: 同ケースが scan で非match（literalとして誤マッチしない）を確認。
