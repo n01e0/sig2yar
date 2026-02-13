@@ -675,6 +675,22 @@ fn lowers_byte_comparison_non_raw_contradictory_clauses_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_invalid_byte_comparison_format_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert_eq!(rule.strings.len(), 1);
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison format unsupported/invalid")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_macro_subsignature_to_false_for_safety_with_macro_group_note() {
     // ClamAV reference (source semantics):
     // - libclamav/readdb.c:442-512 parses `${min-max}group$` and stores group id (not subsig index)

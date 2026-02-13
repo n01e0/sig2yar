@@ -1570,6 +1570,13 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Skip;
     }
 
+    if looks_like_byte_comparison(raw) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison format unsupported/invalid; lowered to false for safety"
+        ));
+        return RawSubsigLowering::Expr("false".to_string());
+    }
+
     if let Some(macro_sig) = parse_macro_subsignature(raw) {
         let lowered = lower_macro_subsignature_condition(idx, &macro_sig, known_ids, notes);
         return RawSubsigLowering::Expr(lowered);
@@ -1775,6 +1782,23 @@ struct ParsedByteComparison {
     offset: i64,
     options: ByteCmpOptions,
     comparisons: Vec<ByteCmpClause>,
+}
+
+fn looks_like_byte_comparison(raw: &str) -> bool {
+    let Some(open) = raw.find('(') else {
+        return false;
+    };
+
+    if open == 0 || !raw.ends_with(')') {
+        return false;
+    }
+
+    let trigger = &raw[..open];
+    if !trigger.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    raw[open + 1..raw.len() - 1].contains('#')
 }
 
 fn parse_byte_comparison(raw: &str) -> Option<ParsedByteComparison> {

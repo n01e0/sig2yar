@@ -448,6 +448,16 @@ fn yara_rule_with_byte_comparison_contradictory_clauses_false_compiles_with_yara
 }
 
 #[test]
+fn yara_rule_with_invalid_byte_comparison_format_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let data = b"AAAA0(>>4#he2#=1G)";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn ndb_rule_compiles_with_yara_x() {
     let sig = NdbSignature::parse("Win.Trojan.Example-1:0:*:41424344:73").unwrap();
     let ir = sig.to_ir();
