@@ -373,6 +373,16 @@ fn yara_rule_with_invalid_macro_format_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_macro_missing_trailing_dollar_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("macro subsignature format unsupported/invalid"));
+    assert_eq!(scan_match_count(src.as_str(), b"xx${6-7}0yy"), 0);
+}
+
+#[test]
 fn yara_rule_with_fuzzy_img_second_subsig_false_compiles_with_yara_x_from_clamav_fixture() {
     // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
     let sig =
