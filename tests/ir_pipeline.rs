@@ -1,7 +1,7 @@
 use sig2yar::{
     parser::{
-        cdb::CdbSignature, crb::CrbSignature, hash::HashSignature, idb::IdbSignature,
-        logical::LogicalSignature, pdb::PdbSignature, wdb::WdbSignature,
+        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, hash::HashSignature,
+        idb::IdbSignature, logical::LogicalSignature, pdb::PdbSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -31,6 +31,15 @@ fn idb_ir_render_matches_display() {
     let sig = IdbSignature::parse(raw.as_str()).expect("idb parse failed");
 
     let rendered = yara::render_idb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn cbc_ir_render_matches_display() {
+    let raw = "VIRUSNAME Bytecode.Sample\nFUNCTIONALITY_LEVEL_MIN 51";
+    let sig = CbcSignature::parse(raw).expect("cbc parse failed");
+
+    let rendered = yara::render_cbc_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
 

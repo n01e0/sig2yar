@@ -22,10 +22,10 @@ Last update: 2026-02-13
 - [x] `crb` (trusted/revoked cert signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `pdb` (phishing protected-domain signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `wdb` (phishing allow-list signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `cbc` (bytecode) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `cbc` (bytecode)
 - [ ] `ftm`
 - [ ] `fp` / `sfp` (false positive related)
 - [ ] `ign` / `ign2` (ignore lists)
@@ -54,7 +54,8 @@ Last update: 2026-02-13
 - [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
-  - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
+  - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
+  - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type=0` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成。条件外（linkなし / 非direct anchor / non-0 target / 非表現body）は **false + note** を維持。
 - [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一）
 
 ### 2.3 未対応/不足
@@ -91,7 +92,7 @@ Last update: 2026-02-13
 
 （継続トラック）
 - [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8・decimal-base hex-alpha strict false・non-raw auto-base strict false は対応済み）
-- [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映
+- [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset は実装済み。残は CLI経路連携・対象拡張）
 - [ ] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
@@ -100,12 +101,21 @@ Last update: 2026-02-13
   - `crb`（件数: 32）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `pdb`（件数: 263）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `wdb`（件数: 185）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
-  - `cbc`（件数: 8425, bytecodeで実装難度が高いため最後）
+  - `cbc`（件数: 8425）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
 
 ---
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記23: `cbc`（bytecode）の最小スライスとして `parse対象` を追加。`src/parser/cbc.rs` に bytecode payload の最小バリデーション（empty拒否・ASCII前提）を実装し、`DbType::Cbc` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/BytecodeSignatures.html`（`.cbc` は ASCII bytecode encoding）, `libclamav/readdb.c:2332-2387`（`cli_loadcbc` が file payload を `cli_bytecode_load` へ渡して bytecode をロード）, `libclamav/readdb.c:2422-2457`（bytecode kind / hooks 実行系の runtime 依存）。
+  - `src/yara.rs` に `render/lower_cbc_signature` を追加し、bytecode VM 実行は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
+- 2026-02-13 追記24: macro 残課題（macro group解決 / ndb連携）の最小スライスとして、`src/yara.rs` に `lower_logical_signature_with_ndb_context(...)` を追加し、macro subsig の strict subset 連携を実装。
+  - 連携条件（strict-safe）: `ndb.offset=$<group>` / `target_type=0` / group<32 / bodyが既存NDB strict lowerで表現可能 / macro直前subsigが direct string anchor。
+  - 生成条件: `subsig[idx-1]` の start offset 基準で `{min-max}` window を `for any` 条件へ lowerし、linked ndb member body を rule string として展開（例: `$m1_0`, `$m1_1`）。
+  - 非表現ケース（link無し・non-direct anchor・target!=0・non-representable body）は **false + note** を維持（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` に macro↔ndb link の rule/scan fixture（match/non-match + strict-false fallback）を追加。
 - 2026-02-13 追記22: `wdb` の最小スライスとして `parse対象` を追加。`src/parser/wdb.rs` に ClamAV source 準拠のバリデーション（`X/Y/M` プレフィクス、`:` 区切り、`regex_list.c:functionality_level_check` と同じ末尾 `:min-max` 形式の機能レベル抽出）を実装し、`DbType::Wdb` を CLI へ接続。
   - source根拠: docs `manual/Signatures/PhishSigs.html`（`X:RealURL:DisplayedURL[:FuncLevelSpec]`, `Y:RealURL[:FuncLevelSpec]`, `M:RealHostname:DisplayedHostname[:FuncLevelSpec]`）, `libclamav/readdb.c:1593-1610`（`cli_loadwdb` が `load_regex_matcher(..., is_allow_list_lookup=1)` を使用）, `libclamav/regex_list.c:503-519,568-576`（`X/Y/M` dispatch）, `libclamav/regex_list.c:355-395`（末尾 `:min-max` での functionality-level 取り扱い）。
   - `src/yara.rs` に `render/lower_wdb_signature` を追加し、wdb allow-list 判定は ClamAV runtime の phishing URL 抽出（RealURL/DisplayedURL concat）+ regex matcher 依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
