@@ -532,6 +532,19 @@ fn lowers_byte_comparison_non_raw_hex_exact_eq() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_hex_numeric_threshold_as_hex_value() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#he2#=10)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    // base=`h` should interpret numeric threshold tokens as hex values.
+    // `=10` means 0x10, so the textual hex comparison should target "10" (0x31,0x30),
+    // not "0A".
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x31"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x30"));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_decimal_exact_eq() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
