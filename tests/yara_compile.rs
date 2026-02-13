@@ -407,6 +407,16 @@ fn yara_rule_with_fuzzy_img_nonzero_distance_false_compiles_with_yara_x_from_cla
 }
 
 #[test]
+fn yara_rule_with_malformed_fuzzy_img_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#zzzzzzzzzzzzzzzz#0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("fuzzy_img format unsupported/invalid"));
+    assert_eq!(scan_match_count(src.as_str(), b"xxfuzzy_img#zzzzzzzzzzzzzzzz#0yy"), 0);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

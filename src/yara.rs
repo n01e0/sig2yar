@@ -1691,6 +1691,13 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Expr("false".to_string());
     }
 
+    if looks_like_fuzzy_img_subsignature(raw) {
+        notes.push(format!(
+            "subsig[{idx}] fuzzy_img format unsupported/invalid (expected `fuzzy_img#<hexhash>[#<distance>]`); lowered to false for safety"
+        ));
+        return RawSubsigLowering::Expr("false".to_string());
+    }
+
     let mut string_mods = StringModifierSet::default();
     for modifier in modifiers {
         match modifier {
@@ -2762,6 +2769,10 @@ fn lower_macro_subsignature_condition(
 struct ParsedFuzzyImg {
     hash: String,
     distance: u64,
+}
+
+fn looks_like_fuzzy_img_subsignature(raw: &str) -> bool {
+    raw.starts_with("fuzzy_img#")
 }
 
 fn parse_fuzzy_img_subsignature(raw: &str) -> Option<ParsedFuzzyImg> {

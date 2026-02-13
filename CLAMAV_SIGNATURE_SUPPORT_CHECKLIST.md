@@ -55,7 +55,7 @@ Last update: 2026-02-13
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
-- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note）
+- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一）
 
 ### 2.3 未対応/不足
 
@@ -106,6 +106,11 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記17: `fuzzy_img` 継続トラックの最小スライスとして、**malformed `fuzzy_img` を raw literal にフォールバックさせない** strict-safe 化を実施。
+  - 背景: 既存実装は `parse_fuzzy_img_subsignature(...)` 成功時のみ `false + note` 化していたため、`fuzzy_img#zz...#0` のような malformed ケースが通常文字列としてlowerされる余地があった。
+  - 変更: `src/yara.rs` に `looks_like_fuzzy_img_subsignature(...)` を追加し、`fuzzy_img#` prefix なのにparse失敗する場合は **`false + lowering note`** に統一（近似禁止）。
+  - `tests/yara_rule.rs`: malformed fuzzy_img が `condition=false` / `strings` 空 / note（`fuzzy_img format unsupported/invalid`）になることを追加。
+  - `tests/yara_compile.rs`: 同ケースの scan fixture（`xxfuzzy_img#zz...#0yy`）が非match（0 hit）になることを追加。
 - 2026-02-13 追記16: `idb` の最小スライスとして `parse対象` を追加。`src/parser/idb.rs` に ClamAV source 準拠のバリデーション（4トークン、`ICON_HASH` 124桁hex、先頭サイズprefixが 16/24/32）を実装し、`DbType::Idb` を CLI へ接続。
   - source根拠: `libclamav/readdb.c:1365-1376`（token count / hash length）, `libclamav/readdb.c:1388-1397`（hex文字・size=16/24/32）, docs `LogicalSignatures`（`.idb` format: `ICONNAME:GROUP1:GROUP2:ICON_HASH`）。
   - `src/yara.rs` に `render/lower_idb_signature` を追加し、icon fuzzy matching は ClamAV runtime（icon matcher + ldb IconGroup linkage）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
