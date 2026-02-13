@@ -18,10 +18,10 @@ Last update: 2026-02-13
 - [x] `ldb` (logical)
 - [x] `ndb` (extended/body signatures) ※parse + 実用lower（近似あり）
 - [x] `idb` (icon signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `cdb` (container metadata signatures) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `cdb`
 - [ ] `crb`
 - [ ] `cbc` (bytecode)
 - [ ] `pdb` (phishing)
@@ -96,7 +96,7 @@ Last update: 2026-02-13
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
   - `idb`（件数: 223）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
-  - `cdb`（件数: 137）
+  - `cdb`（件数: 137）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `crb`（件数: 32）
   - `pdb`（件数: 263）
   - `wdb`（件数: 185）
@@ -106,6 +106,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記18: `cdb` の最小スライスとして `parse対象` を追加。`src/parser/cdb.rs` に ClamAV source 準拠のバリデーション（10..12トークン、`ContainerSize/FileSizeInContainer/FileSizeReal/FilePos` の `*|n|n-m`、`IsEncrypted` の `*|0|1`、`MinFL/MaxFL` numeric）を実装し、`DbType::Cdb` を CLI へ接続。
+  - source根拠: docs `ContainerMetadata`（`VirusName:ContainerType:...:Res2[:MinFL[:MaxFL]]`）, `libclamav/readdb.c:3112-3137`（`CDB_TOKENS=12`, token count, optional MinFL/MaxFL）, `libclamav/readdb.c:3234-3244`（range fields + encryption flag検証）。
+  - `src/yara.rs` に `render/lower_cdb_signature` を追加し、container metadata matching は ClamAV runtime の container traversal / metadata（size, encrypted flag, file position, CRC）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記17: `fuzzy_img` 継続トラックの最小スライスとして、**malformed `fuzzy_img` を raw literal にフォールバックさせない** strict-safe 化を実施。
   - 背景: 既存実装は `parse_fuzzy_img_subsignature(...)` 成功時のみ `false + note` 化していたため、`fuzzy_img#zz...#0` のような malformed ケースが通常文字列としてlowerされる余地があった。
   - 変更: `src/yara.rs` に `looks_like_fuzzy_img_subsignature(...)` を追加し、`fuzzy_img#` prefix なのにparse失敗する場合は **`false + lowering note`** に統一（近似禁止）。

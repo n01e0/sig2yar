@@ -1,4 +1,6 @@
-use sig2yar::parser::{idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature};
+use sig2yar::parser::{
+    cdb::CdbSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
+};
 use sig2yar::yara::{self, YaraRule};
 
 fn scan_match_count(src: &str, data: &[u8]) -> usize {
@@ -413,7 +415,10 @@ fn yara_rule_with_malformed_fuzzy_img_false_rejects_scan() {
     let src = rule.to_string();
 
     assert!(src.contains("fuzzy_img format unsupported/invalid"));
-    assert_eq!(scan_match_count(src.as_str(), b"xxfuzzy_img#zzzzzzzzzzzzzzzz#0yy"), 0);
+    assert_eq!(
+        scan_match_count(src.as_str(), b"xxfuzzy_img#zzzzzzzzzzzzzzzz#0yy"),
+        0
+    );
 }
 
 #[test]
@@ -908,4 +913,14 @@ fn idb_rule_strict_false_compiles_and_rejects_scan() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile idb strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
+}
+
+#[test]
+fn cdb_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "Container.Sample-1:CL_TYPE_ZIP:*:.*\\.exe:10-20:20-40:0:1:*:*:120:255";
+    let sig = CdbSignature::parse(raw).unwrap();
+    let src = yara::render_cdb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile cdb strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"PK\x03\x04"), 0);
 }

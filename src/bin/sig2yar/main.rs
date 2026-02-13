@@ -5,8 +5,8 @@ use args::Args;
 use clap::Parser;
 use sig2yar::{
     parser::{
-        hash::HashSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
-        DbType,
+        cdb::CdbSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
+        ndb::NdbSignature, DbType,
     },
     yara,
 };
@@ -35,6 +35,11 @@ fn main() -> Result<()> {
             let sig = IdbSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_idb_signature(&ir));
+        }
+        DbType::Cdb => {
+            let sig = CdbSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_cdb_signature(&ir));
         }
     };
 
