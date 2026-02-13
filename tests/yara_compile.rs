@@ -1,6 +1,6 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -926,6 +926,16 @@ fn idb_rule_strict_false_compiles_and_rejects_scan() {
     let src = yara::render_idb_signature(&sig.to_ir());
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile idb strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
+}
+
+#[test]
+fn cbc_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "VIRUSNAME Bytecode.Sample\nFUNCTIONALITY_LEVEL_MIN 51";
+    let sig = CbcSignature::parse(raw).unwrap();
+    let src = yara::render_cbc_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile cbc strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
 }
 

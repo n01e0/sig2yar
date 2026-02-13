@@ -1,6 +1,6 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
@@ -1380,6 +1380,31 @@ fn lowers_idb_signature_to_strict_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("icon matcher")
                 && value.contains("IconGroup")
+    )));
+}
+
+#[test]
+fn lowers_cbc_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/BytecodeSignatures (`.cbc` is ASCII-encoded executable bytecode)
+    // - source: libclamav/readdb.c:2332-2439 (`cli_loadcbc` -> `cli_bytecode_load`, runtime hooks)
+    let raw = "VIRUSNAME Bytecode.Sample\nFUNCTIONALITY_LEVEL_MIN 51";
+    let sig = CbcSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("CBC_bytecode_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "cbc_bytecode_vm"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("bytecode VM")
+                && value.contains("runtime hooks")
     )));
 }
 

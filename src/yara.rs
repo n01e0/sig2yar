@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::{self, Display},
 };
 
@@ -8,6 +8,7 @@ use anyhow::Result;
 use crate::{
     ir,
     parser::{
+        cbc::CbcSignature,
         cdb::CdbSignature,
         crb::CrbSignature,
         hash::HashSignature,
@@ -38,6 +39,14 @@ pub enum YaraMeta {
 pub enum YaraString {
     Raw(String),
 }
+
+#[derive(Debug, Clone)]
+struct MacroGroupMember {
+    source_name: String,
+    lowered_body: String,
+}
+
+type MacroGroupIndex = HashMap<u32, Vec<MacroGroupMember>>;
 
 pub fn render_hash_signature(value: &ir::HashSignature) -> String {
     let rule_name = normalize_rule_name(&value.name);
@@ -91,6 +100,10 @@ pub fn render_idb_signature(value: &ir::IdbSignature) -> String {
     lower_idb_signature(value).to_string()
 }
 
+pub fn render_cbc_signature(value: &ir::CbcSignature) -> String {
+    lower_cbc_signature(value).to_string()
+}
+
 pub fn render_cdb_signature(value: &ir::CdbSignature) -> String {
     lower_cdb_signature(value).to_string()
 }
@@ -132,6 +145,43 @@ pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
             YaraMeta::Entry {
                 key: "clamav_unsupported".to_string(),
                 value: "idb_icon_fuzzy_match".to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_lowering_notes".to_string(),
+                value: note.to_string(),
+            },
+        ],
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_cbc_signature(value: &ir::CbcSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/BytecodeSignatures (`.cbc` contains ASCII-encoded executable bytecode)
+    // - source: libclamav/readdb.c:2332-2439 (`cli_loadcbc` -> `cli_bytecode_load`; runtime hook execution)
+    let note = "cbc bytecode execution depends on ClamAV bytecode VM/runtime hooks and cannot be represented faithfully in plain YARA; lowered to false for safety";
+    let fingerprint = format!("{:08x}", stable_fnv1a_32(&value.raw));
+
+    YaraRule {
+        name: format!("CBC_bytecode_{fingerprint}"),
+        meta: vec![
+            YaraMeta::Entry {
+                key: "clamav_cbc_len".to_string(),
+                value: value.raw.len().to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_cbc_preview".to_string(),
+                value: preview_for_meta(&value.raw, 128),
+            },
+            YaraMeta::Entry {
+                key: "clamav_cbc_fingerprint".to_string(),
+                value: fingerprint,
+            },
+            YaraMeta::Entry {
+                key: "clamav_unsupported".to_string(),
+                value: "cbc_bytecode_vm".to_string(),
             },
             YaraMeta::Entry {
                 key: "clamav_lowering_notes".to_string(),
@@ -1345,7 +1395,72 @@ fn parse_positive_delta_with_optional_range(input: &str) -> Option<(u64, Option<
     Some((delta, range))
 }
 
+fn parse_ndb_macro_group_offset(input: &str) -> Option<u32> {
+    let rest = input.strip_prefix('$')?;
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    rest.parse::<u32>().ok()
+}
+
+fn build_macro_group_index(
+    ndb_context: &[ir::NdbSignature],
+    notes: &mut Vec<String>,
+) -> MacroGroupIndex {
+    let mut groups: MacroGroupIndex = HashMap::new();
+
+    for sig in ndb_context {
+        let Some(group_id) = parse_ndb_macro_group_offset(sig.offset.trim()) else {
+            continue;
+        };
+
+        if group_id >= 32 {
+            notes.push(format!(
+                "ndb macro link '{}' has offset group ${group_id} outside 0..31; ignored for strict macro lowering",
+                sig.name
+            ));
+            continue;
+        }
+
+        if sig.target_type != "0" {
+            notes.push(format!(
+                "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0); ignored for strict macro lowering",
+                sig.name, sig.target_type
+            ));
+            continue;
+        }
+
+        let mut body_notes = Vec::new();
+        let Some(lowered_body) = lower_ndb_body_pattern(&sig.body, &mut body_notes) else {
+            let reason = if body_notes.is_empty() {
+                "ndb body unsupported".to_string()
+            } else {
+                body_notes.join("; ")
+            };
+            notes.push(format!(
+                "ndb macro link '{}' for group ${group_id} is not representable in strict YARA lowering ({reason}); ignored",
+                sig.name
+            ));
+            continue;
+        };
+
+        groups.entry(group_id).or_default().push(MacroGroupMember {
+            source_name: sig.name.to_string(),
+            lowered_body,
+        });
+    }
+
+    groups
+}
+
 pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule> {
+    lower_logical_signature_with_ndb_context(value, &[])
+}
+
+pub fn lower_logical_signature_with_ndb_context(
+    value: &ir::LogicalSignature,
+    ndb_context: &[ir::NdbSignature],
+) -> Result<YaraRule> {
     let mut meta = Vec::new();
     meta.push(YaraMeta::Entry {
         key: "original_ident".to_string(),
@@ -1368,7 +1483,19 @@ pub fn lower_logical_signature(value: &ir::LogicalSignature) -> Result<YaraRule>
     }
 
     let mut imports = Vec::new();
-    let (strings, id_map, mut notes) = lower_subsignatures(&value.subsignatures, &mut imports);
+    let mut notes = Vec::new();
+    let macro_groups = build_macro_group_index(ndb_context, &mut notes);
+
+    if !macro_groups.is_empty() {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_macro_group_linked_count".to_string(),
+            value: macro_groups.len().to_string(),
+        });
+    }
+
+    let (strings, id_map, subsig_notes) =
+        lower_subsignatures(&value.subsignatures, &mut imports, &macro_groups);
+    notes.extend(subsig_notes);
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
 
     let mut condition_parts = vec![base_condition.clone()];
@@ -1451,6 +1578,7 @@ fn range_condition(name: &str, min: u64, max: u64) -> String {
 fn lower_subsignatures(
     subsigs: &[ir::Subsignature],
     imports: &mut Vec<String>,
+    macro_groups: &MacroGroupIndex,
 ) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>) {
     let mut strings = Vec::new();
     let mut id_map = Vec::with_capacity(subsigs.len());
@@ -3743,6 +3871,39 @@ impl<'p> TryFrom<IdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::CbcSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::CbcSignature) -> Result<Self> {
+        Ok(lower_cbc_signature(value))
+    }
+}
+
+impl TryFrom<ir::CbcSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::CbcSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&CbcSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &CbcSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<CbcSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CbcSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::CdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -3922,6 +4083,12 @@ impl<'p> From<&NdbSignature<'p>> for ir::NdbSignature {
 
 impl<'p> From<&IdbSignature<'p>> for ir::IdbSignature {
     fn from(value: &IdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&CbcSignature<'p>> for ir::CbcSignature {
+    fn from(value: &CbcSignature<'p>) -> Self {
         value.to_ir()
     }
 }

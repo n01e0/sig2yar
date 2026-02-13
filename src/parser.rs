@@ -1,3 +1,4 @@
+pub mod cbc;
 pub mod cdb;
 pub mod crb;
 pub mod hash;
@@ -15,6 +16,7 @@ pub enum DbType {
     Logical,
     Ndb,
     Idb,
+    Cbc,
     Cdb,
     Crb,
     Pdb,

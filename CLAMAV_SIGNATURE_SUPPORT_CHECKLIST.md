@@ -22,10 +22,10 @@ Last update: 2026-02-13
 - [x] `crb` (trusted/revoked cert signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `pdb` (phishing protected-domain signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `wdb` (phishing allow-list signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `cbc` (bytecode) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `cbc` (bytecode)
 - [ ] `ftm`
 - [ ] `fp` / `sfp` (false positive related)
 - [ ] `ign` / `ign2` (ignore lists)
@@ -100,12 +100,16 @@ Last update: 2026-02-13
   - `crb`（件数: 32）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `pdb`（件数: 263）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `wdb`（件数: 185）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
-  - `cbc`（件数: 8425, bytecodeで実装難度が高いため最後）
+  - `cbc`（件数: 8425）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
 
 ---
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記23: `cbc`（bytecode）の最小スライスとして `parse対象` を追加。`src/parser/cbc.rs` に bytecode payload の最小バリデーション（empty拒否・ASCII前提）を実装し、`DbType::Cbc` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/BytecodeSignatures.html`（`.cbc` は ASCII bytecode encoding）, `libclamav/readdb.c:2332-2387`（`cli_loadcbc` が file payload を `cli_bytecode_load` へ渡して bytecode をロード）, `libclamav/readdb.c:2422-2457`（bytecode kind / hooks 実行系の runtime 依存）。
+  - `src/yara.rs` に `render/lower_cbc_signature` を追加し、bytecode VM 実行は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記22: `wdb` の最小スライスとして `parse対象` を追加。`src/parser/wdb.rs` に ClamAV source 準拠のバリデーション（`X/Y/M` プレフィクス、`:` 区切り、`regex_list.c:functionality_level_check` と同じ末尾 `:min-max` 形式の機能レベル抽出）を実装し、`DbType::Wdb` を CLI へ接続。
   - source根拠: docs `manual/Signatures/PhishSigs.html`（`X:RealURL:DisplayedURL[:FuncLevelSpec]`, `Y:RealURL[:FuncLevelSpec]`, `M:RealHostname:DisplayedHostname[:FuncLevelSpec]`）, `libclamav/readdb.c:1593-1610`（`cli_loadwdb` が `load_regex_matcher(..., is_allow_list_lookup=1)` を使用）, `libclamav/regex_list.c:503-519,568-576`（`X/Y/M` dispatch）, `libclamav/regex_list.c:355-395`（末尾 `:min-max` での functionality-level 取り扱い）。
   - `src/yara.rs` に `render/lower_wdb_signature` を追加し、wdb allow-list 判定は ClamAV runtime の phishing URL 抽出（RealURL/DisplayedURL concat）+ regex matcher 依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
