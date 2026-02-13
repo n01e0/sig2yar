@@ -51,7 +51,7 @@ Last update: 2026-02-12
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。unsupported ケース（non-rawの非exact/LE/表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
@@ -106,6 +106,10 @@ Last update: 2026-02-12
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記10: `byte_comparison` の `h` base 閾値解釈を修正。`src/yara.rs` で比較値トークンの parse を base-aware 化し、`h` 指定時は **数字のみトークンも hex 値として解釈**（`=10` を `0x10` として扱う）。
+  - `tests/yara_rule.rs` に `#he2#=10` が "10"（0x31,0x30）へ lower されることを追加。
+  - `tests/yara_compile.rs` に scan fixture を追加（`"10"` は match、`"0A"` は non-match）。
+  - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-13 追記9: `MultiGt` / `MultiLt` の複合式（grouped expression）で使っていた distinct-count 近似を廃止し、`src/yara.rs` の lower を **safety false + note** に統一。単一subsigの occurrence count (`#sN`) は従来どおり反映。
   - `tests/yara_rule.rs` の grouped `MultiGt` / `MultiLt` ケースを strict-false 検証へ更新。
   - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。

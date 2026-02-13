@@ -1800,7 +1800,7 @@ fn parse_byte_comparison(raw: &str) -> Option<ParsedByteComparison> {
 
     let offset = parse_byte_comparison_offset(offset_part)?;
     let options = parse_byte_comparison_options(options_part)?;
-    let comparisons = parse_byte_comparison_clauses(comparisons_part)?;
+    let comparisons = parse_byte_comparison_clauses(comparisons_part, options.base)?;
     if comparisons.is_empty() {
         return None;
     }
@@ -1895,7 +1895,10 @@ fn parse_byte_comparison_options(input: &str) -> Option<ByteCmpOptions> {
     })
 }
 
-fn parse_byte_comparison_clauses(input: &str) -> Option<Vec<ByteCmpClause>> {
+fn parse_byte_comparison_clauses(
+    input: &str,
+    base: Option<ByteCmpBase>,
+) -> Option<Vec<ByteCmpClause>> {
     let mut out = Vec::new();
 
     for token in input.split(',') {
@@ -1912,7 +1915,7 @@ fn parse_byte_comparison_clauses(input: &str) -> Option<Vec<ByteCmpClause>> {
         };
 
         let value_str = value_str.trim();
-        let value = parse_clamav_numeric(value_str)?;
+        let value = parse_byte_comparison_threshold(value_str, base)?;
         let contains_hex_alpha = value_str
             .bytes()
             .any(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'));
@@ -1924,6 +1927,18 @@ fn parse_byte_comparison_clauses(input: &str) -> Option<Vec<ByteCmpClause>> {
     }
 
     Some(out)
+}
+
+fn parse_byte_comparison_threshold(input: &str, base: Option<ByteCmpBase>) -> Option<u64> {
+    match base.unwrap_or(ByteCmpBase::Auto) {
+        ByteCmpBase::Hex => {
+            if input.is_empty() || !input.chars().all(|c| c.is_ascii_hexdigit()) {
+                return None;
+            }
+            u64::from_str_radix(input, 16).ok()
+        }
+        ByteCmpBase::Decimal | ByteCmpBase::Auto | ByteCmpBase::Raw => parse_clamav_numeric(input),
+    }
 }
 
 fn parse_clamav_numeric(input: &str) -> Option<u64> {

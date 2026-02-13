@@ -349,6 +349,26 @@ fn yara_rule_with_non_raw_byte_comparison_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_hex_numeric_threshold_matches_hex_digit_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3130;0(>>0#he2#=10)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let data = b"xx10yy";
+    assert_eq!(scan_match_count(src.as_str(), data), 1);
+}
+
+#[test]
+fn yara_rule_with_non_raw_hex_numeric_threshold_rejects_decimal_interpretation_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3041;0(>>0#he2#=10)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let data = b"xx0Ayy";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_gt_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
