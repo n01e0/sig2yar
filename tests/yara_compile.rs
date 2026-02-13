@@ -38,6 +38,53 @@ fn yara_rule_with_hex_nocase_modifier_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_hex_wide_modifier_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::w").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile hex-wide generated rule");
+}
+
+#[test]
+fn yara_rule_with_hex_wide_ascii_modifier_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::wa").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile hex-wide-ascii generated rule");
+}
+
+#[test]
+fn yara_rule_with_hex_wide_modifier_matches_only_wide_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::w").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"A\x00B\x00C\x00"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"ABC"), 0);
+}
+
+#[test]
+fn yara_rule_with_hex_wide_ascii_modifier_matches_ascii_and_wide_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::wa").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"ABC"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"A\x00B\x00C\x00"), 1);
+}
+
+#[test]
+fn yara_rule_with_hex_fullword_modifier_strict_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::f").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"hello"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/sme").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

@@ -62,7 +62,7 @@ Last update: 2026-02-13
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
 - [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み（残: `VI`/macroの厳密表現方針）。
-- [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
+- [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
 ### 2.4 ndb（extended/body）の現状
@@ -109,6 +109,11 @@ Last update: 2026-02-13
 - 2026-02-13 追記13: `byte_comparison` non-raw base の残edge-caseとして、`a` (auto) base を strict-safe で **false + note** に統一。`src/yara.rs` の `lower_textual_byte_comparison_condition(...)` で non-raw auto-base を拒否する分岐を追加（runtime auto-detection近似を禁止）。
   - `tests/yara_rule.rs`: `#ae2#=10` で rule condition が `false` かつ note（`auto base unsupported for strict lowering`）を確認。
   - `tests/yara_compile.rs`: 同ケースで scan fixture（`xx10yy`）が非match（0 hit）になることを確認。
+- 2026-02-13 追記14: hex modifier の 1スライス前進として、ClamAV `libclamav/readdb.c:cli_sigopts_handler` の `w/a/f` 挙動を再確認し、`src/yara.rs` の hex lowering を更新。
+  - `w`: hex bytes を `XX 00` へ wide化して文字列化（`i` 併用時は ASCII alpha の nocase alternation を保持）。
+  - `a+w`: 単一YARA hex string内で `(ascii_variant | wide_variant)` を生成し、ClamAVの `ASCII` 追加パターン読込に対応。
+  - `f`: ClamAV fullword境界（`matcher-ac.c` の `isalnum` / wide時 `isalnum(byte)&&next==0`）を現状厳密表現しない方針として **false + note** へ統一。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` に wide/wa/iwa の rule文字列・compile・scan fixture と `::f` strict-false を追加。
   - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-13 追記12: PCRE trigger-prefix strict化の最小スライスとして、trigger式が lowering で `false` に解決されたケース（未解決subsig参照など）を「constraint ignored」から **false + note** へ変更。`src/yara.rs` の `lower_pcre_trigger_condition(...)` で strict-safe を徹底。
   - `tests/yara_rule.rs`: `9/abc/`（trigger参照先なし）で rule condition が `false` かつ note を確認。
