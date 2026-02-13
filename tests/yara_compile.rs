@@ -1,7 +1,8 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1103,4 +1104,14 @@ fn ign2_rule_strict_false_compiles_and_rejects_scan() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ign2 strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
+}
+
+#[test]
+fn ldu_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "PUA.CVE_2012_0198;Engine:51-255,Target:3;0&1;636C6173;72756E";
+    let sig = LduSignature::parse(raw).unwrap();
+    let src = yara::render_ldu_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ldu strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"PUA.CVE_2012_0198"), 0);
 }

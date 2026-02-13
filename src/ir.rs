@@ -2,6 +2,7 @@
 pub enum Signature {
     Hash(HashSignature),
     Logical(LogicalSignature),
+    Ldu(LduSignature),
     Ndb(NdbSignature),
     Idb(IdbSignature),
     Cbc(CbcSignature),
@@ -44,6 +45,12 @@ pub struct LogicalSignature {
     pub target_description: TargetDescription,
     pub expression: LogicalExpression,
     pub subsignatures: Vec<Subsignature>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LduSignature {
+    pub raw: String,
+    pub signature_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

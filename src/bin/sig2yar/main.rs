@@ -7,8 +7,8 @@ use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
         ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
-        ign2::Ign2Signature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
-        sfp::SfpSignature, wdb::WdbSignature, DbType,
+        ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, ndb::NdbSignature,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -27,6 +27,11 @@ fn main() -> Result<()> {
             let ir = sig.to_ir();
             let rule = yara::lower_logical_signature(&ir)?;
             println!("{}", rule);
+        }
+        DbType::Ldu => {
+            let sig = LduSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_ldu_signature(&ir));
         }
         DbType::Ndb => {
             let sig = NdbSignature::parse(&args.signature)?;
