@@ -235,6 +235,16 @@ fn yara_rule_with_pcre_versioninfo_offset_prefix_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_versioninfo_prefixed_payload_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;VIjunk:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre VIpayload offset-prefix safety-false rule");
+}
+
+#[test]
 fn yara_rule_with_pcre_non_numeric_offset_prefix_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+foo:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -252,6 +262,17 @@ fn yara_rule_with_pcre_macro_group_offset_prefix_false_compiles_with_yara_x() {
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile pcre macro-group offset-prefix safety-false rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_invalid_macro_group_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$foo$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect(
+        "yara-x failed to compile malformed pcre macro-group offset-prefix safety-false rule",
+    );
 }
 
 #[test]

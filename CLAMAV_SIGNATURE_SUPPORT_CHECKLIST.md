@@ -62,7 +62,7 @@ Last update: 2026-02-13
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み（残: `VI`/macroの厳密表現方針）。
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）したため、残は runtime semantics 自体の厳密再現可否。
 - [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -111,6 +111,11 @@ Last update: 2026-02-13
   - source根拠: docs `manual/Signatures/BytecodeSignatures.html`（`.cbc` は ASCII bytecode encoding）, `libclamav/readdb.c:2332-2387`（`cli_loadcbc` が file payload を `cli_bytecode_load` へ渡して bytecode をロード）, `libclamav/readdb.c:2422-2457`（bytecode kind / hooks 実行系の runtime 依存）。
   - `src/yara.rs` に `render/lower_cbc_signature` を追加し、bytecode VM 実行は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
   - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
+- 2026-02-13 追記25: PCRE trigger-prefix 残課題（`VI` / macro offset `$n$`）の最小スライスとして、`src/yara.rs` の `parse_pcre_offset_spec(...)` を ClamAV `cli_caloff` 形に寄せた。
+  - `VI` 判定を `base == "VI"` から `base.starts_with("VI")` に変更（`matcher.c` の `strncmp(offcpy, "VI", 2)` 準拠）。`VIjunk` のような payload 付きでも **CLI_OFF_VERSION扱いで false+note** に統一。
+  - macro offset は `base.contains('$')` を macro-intent として扱い、`$<digits>$` 形でない場合は `InvalidMacroGroup` へ分類して **false+note**（`invalid format`）へ厳密化。`$<digits>$...` trailing bytes は `sscanf("$%u$")` 準拠で group decode のみ採用。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` に `VIjunk` と malformed `$foo$` の rule/compile fixture を追加。
+  - 追加fixture名: `lowers_pcre_versioninfo_prefixed_payload_to_false_for_safety` / `lowers_pcre_invalid_macro_group_offset_prefix_to_false_for_safety` / `yara_rule_with_pcre_versioninfo_prefixed_payload_false_compiles_with_yara_x` / `yara_rule_with_pcre_invalid_macro_group_offset_prefix_false_compiles_with_yara_x`。
 - 2026-02-13 追記24: macro 残課題（macro group解決 / ndb連携）の最小スライスとして、`src/yara.rs` に `lower_logical_signature_with_ndb_context(...)` を追加し、macro subsig の strict subset 連携を実装。
   - 連携条件（strict-safe）: `ndb.offset=$<group>` / `target_type=0` / group<32 / bodyが既存NDB strict lowerで表現可能 / macro直前subsigが direct string anchor。
   - 生成条件: `subsig[idx-1]` の start offset 基準で `{min-max}` window を `for any` 条件へ lowerし、linked ndb member body を rule string として展開（例: `$m1_0`, `$m1_1`）。
