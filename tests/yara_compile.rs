@@ -1,7 +1,6 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
-    logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature, idb::IdbSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1047,4 +1046,14 @@ fn wdb_rule_strict_false_compiles_and_rejects_scan() {
         scan_match_count(src.as_str(), b"https://safe.example.com/"),
         0
     );
+}
+
+#[test]
+fn ftm_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "1:*:25504446:PDF-body:CL_TYPE_ANY:CL_TYPE_PDF:120:255";
+    let sig = FtmSignature::parse(raw).unwrap();
+    let src = yara::render_ftm_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ftm strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"%PDF-1.7"), 0);
 }

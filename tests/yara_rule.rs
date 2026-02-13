@@ -1,7 +1,6 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
-    logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature, idb::IdbSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1603,5 +1602,43 @@ fn lowers_wdb_signature_to_strict_false_for_safety() {
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value } if key == "max_flevel" && value == "30"
+    )));
+}
+
+#[test]
+fn lowers_ftm_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/FileTypeMagic (`magictype:offset:magicbytes:name:rtype:type[:min_flevel[:max_flevel]]`)
+    // - source: libclamav/readdb.c:2468-2600 (`cli_loadftm`; `magictype` dispatch + filetype matcher wiring)
+    let raw = "1:*:25504446:PDF-body:CL_TYPE_ANY:CL_TYPE_PDF:120:255";
+    let sig = FtmSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("FTM_ac_pattern_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "ftm_file_type_magic"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_ftm_name" && value == "PDF-body"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("filetype engine integration")
+                && value.contains("cli_ftcode")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "min_flevel" && value == "120"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "max_flevel" && value == "255"
     )));
 }

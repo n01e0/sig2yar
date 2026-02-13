@@ -1,7 +1,8 @@
 use sig2yar::{
     parser::{
-        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, hash::HashSignature,
-        idb::IdbSignature, logical::LogicalSignature, pdb::PdbSignature, wdb::WdbSignature,
+        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature,
+        hash::HashSignature, idb::IdbSignature, logical::LogicalSignature, pdb::PdbSignature,
+        wdb::WdbSignature,
     },
     yara,
 };
@@ -76,5 +77,14 @@ fn wdb_ir_render_matches_display() {
     let sig = WdbSignature::parse(raw).expect("wdb parse failed");
 
     let rendered = yara::render_wdb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn ftm_ir_render_matches_display() {
+    let raw = "1:*:25504446:PDF-body:CL_TYPE_ANY:CL_TYPE_PDF:120:255";
+    let sig = FtmSignature::parse(raw).expect("ftm parse failed");
+
+    let rendered = yara::render_ftm_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
