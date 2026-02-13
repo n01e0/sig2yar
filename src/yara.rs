@@ -2213,6 +2213,13 @@ fn lower_textual_byte_comparison_condition(
         return Some("false".to_string());
     }
 
+    if matches!(base, ByteCmpBase::Auto) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw auto base unsupported for strict lowering; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     if matches!(base, ByteCmpBase::Decimal)
         && byte_cmp
             .comparisons
