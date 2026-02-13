@@ -830,6 +830,21 @@ fn lowers_macro_group_out_of_range_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_macro_missing_trailing_dollar_to_false_for_safety() {
+    // ClamAV reference: libclamav/readdb.c:463 rejects invalid macro format unless `${min-max}group$`.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0|1;41414141;${6-7}0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 or false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro subsignature format unsupported/invalid")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_as_safe_false() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

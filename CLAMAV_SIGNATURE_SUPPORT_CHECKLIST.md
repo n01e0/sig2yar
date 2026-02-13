@@ -52,7 +52,7 @@ Last update: 2026-02-13
 ### 2.2 近似/暫定対応（要改善）
 
 - [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
-- [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / group>=32 を含む）。
+- [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
 - [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note）
@@ -106,6 +106,12 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記15: macro 継続トラックの最小スライスとして、malformed macro（`${6-7}0` のような trailing `$` 欠落）を raw literal にフォールバックさせず **strict-safe false + note** に統一。
+  - 背景: 既存実装は `looks_like_macro_subsignature` が `${...}$` の完全形のみ検知していたため、`${...` で始まる malformed macro が raw string としてlowerされ得た。
+  - 変更: `src/yara.rs` で macro判定を `${` prefix 起点に変更し、parse失敗時は既存の invalid-format 分岐へ確実に入れる。
+  - `tests/yara_rule.rs`: `0|1;41414141;${6-7}0` が `($s0 or false)` になり、note（`macro subsignature format unsupported/invalid`）を持つことを追加。
+  - `tests/yara_compile.rs`: 同ケースで scan fixture（`xx${6-7}0yy`）が非match（0 hit）になることを追加。
+  - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-13 追記13: `byte_comparison` non-raw base の残edge-caseとして、`a` (auto) base を strict-safe で **false + note** に統一。`src/yara.rs` の `lower_textual_byte_comparison_condition(...)` で non-raw auto-base を拒否する分岐を追加（runtime auto-detection近似を禁止）。
   - `tests/yara_rule.rs`: `#ae2#=10` で rule condition が `false` かつ note（`auto base unsupported for strict lowering`）を確認。
   - `tests/yara_compile.rs`: 同ケースで scan fixture（`xx10yy`）が非match（0 hit）になることを確認。

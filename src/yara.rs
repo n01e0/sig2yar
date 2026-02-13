@@ -2645,7 +2645,9 @@ struct ParsedMacroSubsignature {
 }
 
 fn looks_like_macro_subsignature(raw: &str) -> bool {
-    raw.starts_with("${") && raw.ends_with('$')
+    // Treat any `${...` prefix as macro-intent so malformed variants also go
+    // through strict-safe (`false + note`) instead of falling back to raw text.
+    raw.starts_with("${")
 }
 
 fn parse_macro_subsignature(raw: &str) -> Option<ParsedMacroSubsignature> {
