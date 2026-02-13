@@ -1252,18 +1252,13 @@ fn lower_condition(
                 return format!("#{single} > {count}");
             }
 
-            if let Some(set) = lower_count_set(inner, id_map, notes) {
-                let distinct_needed = *distinct;
-                let count_needed = count.saturating_add(1);
-                let set_expr = set.join(", ");
+            if lower_count_set(inner, id_map, notes).is_some() {
                 notes.push(
-                    "multi-gt on grouped expression approximated with distinct-match counts"
+                    "multi-gt grouped expression unsupported for strict lowering; lowered to false for safety"
                         .to_string(),
                 );
-                format!("({distinct_needed} of ({set_expr})) and ({count_needed} of ({set_expr}))")
-            } else {
-                "false".to_string()
             }
+            "false".to_string()
         }
         ir::LogicalExpression::MultiLt(inner, count, distinct) => {
             if *count == 0 {
@@ -1287,16 +1282,13 @@ fn lower_condition(
                 return "false".to_string();
             }
 
-            if let Some(set) = lower_count_set(inner, id_map, notes) {
-                let set_expr = set.join(", ");
+            if lower_count_set(inner, id_map, notes).is_some() {
                 notes.push(
-                    "multi-lt on grouped expression approximated with distinct-match counts"
+                    "multi-lt grouped expression unsupported for strict lowering; lowered to false for safety"
                         .to_string(),
                 );
-                format!("({distinct} of ({set_expr})) and not ({count} of ({set_expr}))")
-            } else {
-                "false".to_string()
             }
+            "false".to_string()
         }
     }
 }

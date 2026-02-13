@@ -59,7 +59,7 @@ Last update: 2026-02-12
 
 ### 2.3 未対応/不足
 
-- [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は distinct-count近似で暫定対応
+- [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
 - [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持（残: `VI`/macroの厳密表現方針）。
 - [ ] hex modifier は `i` (ASCII letter nocase) を反映済み。`w/f/a` などは未対応
@@ -106,6 +106,9 @@ Last update: 2026-02-12
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記9: `MultiGt` / `MultiLt` の複合式（grouped expression）で使っていた distinct-count 近似を廃止し、`src/yara.rs` の lower を **safety false + note** に統一。単一subsigの occurrence count (`#sN`) は従来どおり反映。
+  - `tests/yara_rule.rs` の grouped `MultiGt` / `MultiLt` ケースを strict-false 検証へ更新。
+  - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-12 追記8: NDB-6（`[]` positional structure strictness）として、`src/yara.rs` に `[]` 位置構造バリデーションを追加。ClamAV source（`libclamav/matcher-ac.c:2767-2836`, `libclamav/matcher-ac.c:1286-1304,1365-1381`）準拠で、**single-byte flank + core**（dual-`[]` は single-byte/core/single-byte）を満たす場合のみ lower を許可し、それ以外（single-byte flank 不成立 / `[]` 3個以上 / 非canonical dual-`[]`）は safety false + note へ統一。
   - `tests/yara_rule.rs` / `tests/yara_compile.rs` に representable dual-flank の match/non-match と strict-false note/scan を追加（source参照コメント付き）。
   - `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。

@@ -122,16 +122,15 @@ fn lowers_multilt_for_single_subsig_with_occurrence_count() {
 }
 
 #[test]
-fn lowers_multigt_for_group_as_distinct_approximation() {
+fn lowers_multigt_for_group_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)>2,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("1 of ($s0, $s1)"));
-    assert!(rule.condition.contains("3 of ($s0, $s1)"));
+    assert_eq!(rule.condition, "false");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-gt on grouped expression approximated"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-gt grouped expression unsupported for strict lowering"))));
 }
 
 #[test]
@@ -158,16 +157,15 @@ fn lowers_hex_subsignature_with_nocase_modifier() {
 }
 
 #[test]
-fn lowers_multilt_for_group_as_distinct_approximation() {
+fn lowers_multilt_for_group_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("1 of ($s0, $s1)"));
-    assert!(rule.condition.contains("not (3 of ($s0, $s1))"));
+    assert_eq!(rule.condition, "false");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt on grouped expression approximated"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt grouped expression unsupported for strict lowering"))));
 }
 
 #[test]
