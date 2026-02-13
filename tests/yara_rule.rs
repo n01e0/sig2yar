@@ -1,7 +1,8 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
+    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1770,6 +1771,36 @@ fn lowers_ign2_signature_to_strict_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("ignore-lists suppress matching signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_ldu_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*.ldb *.ldu; *.idb: Logical Signatures`)
+    // - docs: same page notes `*u` extensions are loaded in PUA mode
+    let raw = "PUA.CVE_2012_0198;Engine:51-255,Target:3;0&1;636C6173;72756E";
+    let sig = LduSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("LDU_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "ldu_pua_logical_signature_semantics"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_ldu_signature_name" && value == "PUA.CVE_2012_0198"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("PUA-gated logical signatures")
                 && value.contains("lowered to false for safety")
     )));
 }

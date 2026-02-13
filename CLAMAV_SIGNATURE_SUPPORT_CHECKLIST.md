@@ -1,6 +1,6 @@
 # ClamAV Signature Support Checklist
 
-Last update: 2026-02-13
+Last update: 2026-02-14
 
 このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
 
@@ -35,7 +35,7 @@ Last update: 2026-02-13
 ### 1.3 更新/差分系ファイル（取り込み方針未整理）
 
 - [ ] `hdu` / `hsu`
-- [ ] `ldu`
+- [x] `ldu` (parse + strict-safe lower)
 - [ ] `mdu` / `msu`
 - [ ] `ndu`
 - [ ] `cfg` / `info` （シグネチャ本体ではないので扱い定義が必要）
@@ -109,6 +109,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-14 追記29: `ldu`（PUA-gated logical signature DB）の最小スライスとして `parse対象` を追加。`src/parser/ldu.rs` を新設し、最小バリデーション（empty拒否・`;` delimiter必須・signature name必須）を実装。`DbType::Ldu` を CLI へ接続し、`src/ir.rs` に `LduSignature` を追加。
+  - source根拠: docs `manual/Signatures`（`*.ldb *.ldu; *.idb: Logical Signatures`、`*u` 拡張子は PUA mode でロード）。
+  - `src/yara.rs` に `render/lower_ldu_signature` を追加し、PUA mode 依存の logical runtime semantics は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記28: `ign/ign2`（ignore lists）の最小スライスとして `parse対象` を追加。`src/parser/ign.rs` / `src/parser/ign2.rs` を新設し、ClamAV source 準拠の最小バリデーション（token count 1..3、`name[:md5]` と legacy 3-token 形式の受理、md5指定時は32hex必須）を実装。`DbType::Ign` / `DbType::Ign2` を CLI へ接続し、`src/ir.rs` に `IgnSignature` / `Ign2Signature` を追加。
   - source根拠: docs `manual/Signatures/AllowLists`（`ign2` は `SignatureName[:md5(entry)]`、`.ign` は互換維持）, `libclamav/readdb.c:2721-2821`（`cli_loadign`, `IGN_MAX_TOKENS=3`, optional md5, legacy mode）。
   - `src/yara.rs` に `render/lower_ign_signature` / `render/lower_ign2_signature` を追加し、ignore-list の効果（シグネチャ抑制）は ClamAV DB load/scan flow の runtime semantics 依存で YARA単体では厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。

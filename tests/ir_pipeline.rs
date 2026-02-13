@@ -2,8 +2,8 @@ use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
         ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
-        ign2::Ign2Signature, logical::LogicalSignature, pdb::PdbSignature, sfp::SfpSignature,
-        wdb::WdbSignature,
+        ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, pdb::PdbSignature,
+        sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -24,6 +24,15 @@ fn logical_ir_lower_matches_display() {
 
     let rule = yara::lower_logical_signature(&sig.to_ir()).expect("lowering failed");
     assert_eq!(rule.to_string(), sig.to_string());
+}
+
+#[test]
+fn ldu_ir_render_matches_display() {
+    let raw = "PUA.CVE_2012_0198;Engine:51-255,Target:3;0&1;636C6173;72756E";
+    let sig = LduSignature::parse(raw).expect("ldu parse failed");
+
+    let rendered = yara::render_ldu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
 }
 
 #[test]

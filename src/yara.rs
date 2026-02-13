@@ -17,6 +17,7 @@ use crate::{
         idb::IdbSignature,
         ign::IgnSignature,
         ign2::Ign2Signature,
+        ldu::LduSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
         pdb::PdbSignature,
@@ -143,6 +144,10 @@ pub fn render_ign_signature(value: &ir::IgnSignature) -> String {
 
 pub fn render_ign2_signature(value: &ir::Ign2Signature) -> String {
     lower_ign2_signature(value).to_string()
+}
+
+pub fn render_ldu_signature(value: &ir::LduSignature) -> String {
+    lower_ldu_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -829,6 +834,40 @@ pub fn lower_ign2_signature(value: &ir::Ign2Signature) -> YaraRule {
     YaraRule {
         name: format!("IGN2_{:08x}", stable_fnv1a_32(&fingerprint)),
         meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_ldu_signature(value: &ir::LduSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*.ldb *.ldu; *.idb: Logical Signatures`)
+    // - docs: same page notes `*u` extensions are loaded in PUA mode
+    let note = "ldu signatures are PUA-gated logical signatures evaluated in ClamAV runtime flow; standalone YARA cannot preserve equivalent semantics safely; lowered to false for safety";
+
+    let fingerprint = stable_fnv1a_32(&value.raw);
+
+    YaraRule {
+        name: format!("LDU_{fingerprint:08x}"),
+        meta: vec![
+            YaraMeta::Entry {
+                key: "clamav_ldu_signature_name".to_string(),
+                value: value.signature_name.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_ldu_raw".to_string(),
+                value: value.raw.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_unsupported".to_string(),
+                value: "ldu_pua_logical_signature_semantics".to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_lowering_notes".to_string(),
+                value: note.to_string(),
+            },
+        ],
         strings: Vec::new(),
         condition: "false".to_string(),
         imports: Vec::new(),
@@ -4679,6 +4718,39 @@ impl<'p> TryFrom<Ign2Signature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::LduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::LduSignature) -> Result<Self> {
+        Ok(lower_ldu_signature(value))
+    }
+}
+
+impl TryFrom<ir::LduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::LduSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&LduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &LduSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<LduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: LduSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -4786,6 +4858,12 @@ impl<'p> From<&IgnSignature<'p>> for ir::IgnSignature {
 
 impl<'p> From<&Ign2Signature<'p>> for ir::Ign2Signature {
     fn from(value: &Ign2Signature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&LduSignature<'p>> for ir::LduSignature {
+    fn from(value: &LduSignature<'p>) -> Self {
         value.to_ir()
     }
 }
