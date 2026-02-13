@@ -398,6 +398,16 @@ fn yara_rule_with_non_raw_decimal_hex_alpha_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_non_raw_auto_base_false_rejects_scan_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3130;0(>>0#ae2#=10)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let data = b"xx10yy";
+    assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_lt_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>2#he2#<A0)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

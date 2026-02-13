@@ -51,7 +51,7 @@ Last update: 2026-02-13
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。この runtime 状態は単一YARA ruleで観測不能なため、現状は **safety false + lowering note**。
@@ -90,7 +90,7 @@ Last update: 2026-02-13
 - [x] **NDB-6**: `[]` jump 位置構造（single-byte flank/core）を source準拠で strict 化し、非表現構造を safety false + note に統一
 
 （継続トラック）
-- [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8 と decimal-base hex-alpha strict false は対応済み）
+- [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8・decimal-base hex-alpha strict false・non-raw auto-base strict false は対応済み）
 - [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映
 - [ ] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
@@ -106,6 +106,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記13: `byte_comparison` non-raw base の残edge-caseとして、`a` (auto) base を strict-safe で **false + note** に統一。`src/yara.rs` の `lower_textual_byte_comparison_condition(...)` で non-raw auto-base を拒否する分岐を追加（runtime auto-detection近似を禁止）。
+  - `tests/yara_rule.rs`: `#ae2#=10` で rule condition が `false` かつ note（`auto base unsupported for strict lowering`）を確認。
+  - `tests/yara_compile.rs`: 同ケースで scan fixture（`xx10yy`）が非match（0 hit）になることを確認。
+  - 検証: `cargo test --locked --test yara_rule --test yara_compile` と `cargo test --locked --all-targets` 通過。
 - 2026-02-13 追記12: PCRE trigger-prefix strict化の最小スライスとして、trigger式が lowering で `false` に解決されたケース（未解決subsig参照など）を「constraint ignored」から **false + note** へ変更。`src/yara.rs` の `lower_pcre_trigger_condition(...)` で strict-safe を徹底。
   - `tests/yara_rule.rs`: `9/abc/`（trigger参照先なし）で rule condition が `false` かつ note を確認。
   - `tests/yara_compile.rs`: 同ケースが scan で非match（`abc` を与えても 0 hit）を確認。
