@@ -2774,10 +2774,17 @@ fn lower_pcre_trigger_condition(
 
     let trigger_expr = lower_condition(&trigger_ir, known_ids, notes);
     if trigger_expr == "false" {
+        if pcre_trigger_refs_only_self(&trigger_ir, idx) {
+            notes.push(format!(
+                "subsig[{idx}] pcre trigger expression is self-referential; treated as implicit self-match"
+            ));
+            return None;
+        }
+
         notes.push(format!(
-            "subsig[{idx}] pcre trigger expression resolved to false; trigger constraint ignored"
+            "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
         ));
-        return None;
+        return Some("false".to_string());
     }
 
     let mut parts = vec![id.to_string(), format!("({trigger_expr})")];
@@ -2819,6 +2826,26 @@ fn parse_pcre_trigger_prefix(prefix: &str) -> Result<ParsedPcrePrefix<'_>, Strin
         trigger: prefix,
         offset: None,
     })
+}
+
+fn pcre_trigger_refs_only_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(idx) => *idx == self_idx,
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(|node| pcre_trigger_refs_only_self(node, self_idx))
+        }
+        ir::LogicalExpression::MatchCount(inner, _)
+        | ir::LogicalExpression::Gt(inner, _)
+        | ir::LogicalExpression::Lt(inner, _)
+        | ir::LogicalExpression::MultiMatchCount(inner, _, _)
+        | ir::LogicalExpression::MultiGt(inner, _, _)
+        | ir::LogicalExpression::MultiLt(inner, _, _) => {
+            pcre_trigger_refs_only_self(inner, self_idx)
+        }
+    }
 }
 
 fn parse_ascii_u64(input: &str) -> Option<u64> {
