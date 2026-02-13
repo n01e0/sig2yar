@@ -1,8 +1,8 @@
 use sig2yar::{
     parser::{
-        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature,
-        hash::HashSignature, idb::IdbSignature, logical::LogicalSignature, pdb::PdbSignature,
-        wdb::WdbSignature,
+        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
+        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -86,5 +86,24 @@ fn ftm_ir_render_matches_display() {
     let sig = FtmSignature::parse(raw).expect("ftm parse failed");
 
     let rendered = yara::render_ftm_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn fp_ir_render_matches_display() {
+    let raw = "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature";
+    let sig = FpSignature::parse(raw).expect("fp parse failed");
+
+    let rendered = yara::render_fp_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn sfp_ir_render_matches_display() {
+    let raw =
+        "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f:68:Eicar-Test-Signature";
+    let sig = SfpSignature::parse(raw).expect("sfp parse failed");
+
+    let rendered = yara::render_sfp_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }

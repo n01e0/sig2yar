@@ -11,12 +11,14 @@ use crate::{
         cbc::CbcSignature,
         cdb::CdbSignature,
         crb::CrbSignature,
+        fp::FpSignature,
         ftm::FtmSignature,
         hash::HashSignature,
         idb::IdbSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
         pdb::PdbSignature,
+        sfp::SfpSignature,
         wdb::WdbSignature,
     },
 };
@@ -123,6 +125,14 @@ pub fn render_wdb_signature(value: &ir::WdbSignature) -> String {
 
 pub fn render_ftm_signature(value: &ir::FtmSignature) -> String {
     lower_ftm_signature(value).to_string()
+}
+
+pub fn render_fp_signature(value: &ir::FpSignature) -> String {
+    lower_fp_signature(value).to_string()
+}
+
+pub fn render_sfp_signature(value: &ir::SfpSignature) -> String {
+    lower_sfp_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -559,6 +569,119 @@ pub fn lower_ftm_signature(value: &ir::FtmSignature) -> YaraRule {
 
     YaraRule {
         name: format!("FTM_{mode_tag}_{:08x}", stable_fnv1a_32(&fingerprint)),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_fp_signature(value: &ir::FpSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/AllowLists (`.fp` file allow-list uses MD5 file hash signatures)
+    // - source: allow-list semantics are engine-level suppression/override, not positive detection
+    let note = "fp allow-list signatures suppress detections in ClamAV scan flow; standalone YARA cannot represent suppression semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_fp_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_fp_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_fp_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "fp_allow_list_override".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "FP_{}_{}",
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_sfp_signature(value: &ir::SfpSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/AllowLists (`.sfp` file allow-list uses SHA1/SHA256 file hash signatures)
+    // - source: allow-list semantics are engine-level suppression/override, not positive detection
+    let note = "sfp allow-list signatures suppress detections in ClamAV scan flow; standalone YARA cannot represent suppression semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_sfp_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_sfp_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_sfp_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "sfp_allow_list_override".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "SFP_{}_{}_{}",
+            hash_fn(&value.hash_type),
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -4278,6 +4401,72 @@ impl<'p> TryFrom<FtmSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::FpSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::FpSignature) -> Result<Self> {
+        Ok(lower_fp_signature(value))
+    }
+}
+
+impl TryFrom<ir::FpSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::FpSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&FpSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &FpSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<FpSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: FpSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::SfpSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::SfpSignature) -> Result<Self> {
+        Ok(lower_sfp_signature(value))
+    }
+}
+
+impl TryFrom<ir::SfpSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::SfpSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&SfpSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &SfpSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<SfpSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: SfpSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -4363,6 +4552,26 @@ impl<'p> From<&FtmSignature<'p>> for ir::FtmSignature {
     fn from(value: &FtmSignature<'p>) -> Self {
         value.to_ir()
     }
+}
+
+impl<'p> From<&FpSignature<'p>> for ir::FpSignature {
+    fn from(value: &FpSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&SfpSignature<'p>> for ir::SfpSignature {
+    fn from(value: &SfpSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+fn hash_tag(value: &str) -> String {
+    value
+        .chars()
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 fn stable_fnv1a_32(input: &str) -> u32 {

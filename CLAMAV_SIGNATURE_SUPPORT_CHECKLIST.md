@@ -24,10 +24,11 @@ Last update: 2026-02-13
 - [x] `wdb` (phishing allow-list signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `cbc` (bytecode) ※parse + strict-safe lower（`false` + note）
 - [x] `ftm` (filetype magic) ※parse + strict-safe lower（`false` + note）
+- [x] `fp` (file allow-list/false positive) ※parse + strict-safe lower（`false` + note）
+- [x] `sfp` (SHA file allow-list/false positive) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `fp` / `sfp` (false positive related)
 - [ ] `ign` / `ign2` (ignore lists)
 
 ### 1.3 更新/差分系ファイル（取り込み方針未整理）
@@ -107,6 +108,11 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記27: `fp/sfp`（file allow-list / SHA file allow-list）の最小スライスとして `parse対象` を追加。`src/parser/fp.rs` / `src/parser/sfp.rs` を新設し、Hash signature parserを土台に `.fp` は **MD5 file hashのみ**、`.sfp` は **SHA1/SHA256 file hashのみ**を受理、section-hash形式は strict に拒否するよう実装。`DbType::Fp` / `DbType::Sfp` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/AllowLists`（`.fp` は MD5 file allow-list、`.sfp` は SHA1/SHA256 file allow-list）, docs `manual/Signatures/HashSignatures`（hash signature format）。
+  - `src/ir.rs` に `FpSignature` / `SfpSignature` を追加、`src/yara.rs` に `render/lower_fp_signature` / `render/lower_sfp_signature` を追加。
+  - allow-list は ClamAV の scan-flow での suppression/override semantics（検知抑制）であり、YARA単体の positive match には安全に同型化できないため、**strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記26: `ftm`（filetype magic）の最小スライスとして `parse対象` を追加。`src/parser/ftm.rs` に ClamAV source 準拠の最小バリデーション（`FTM_TOKENS=8` / 6..8フィールド、`MagicType`/`MinFL`/`MaxFL` numeric、`MagicType=0|4` は numeric offset + hex magic bytes、`RequiredType/DetectedType` は `CL_TYPE_*` 形式）を実装し、`DbType::Ftm` を CLI へ接続。
   - source根拠: docs `manual/Signatures/FileTypeMagic`（`magictype:offset:magicbytes:name:rtype:type[:min_flevel[:max_flevel]]`）, `libclamav/readdb.c:2468-2600`（`cli_loadftm`, `FTM_TOKENS=8`, magictype dispatch 0/1/4）。
   - `src/yara.rs` に `render/lower_ftm_signature` を追加し、filetype magic 照合は ClamAV の filetype engine（`cli_add_content_match_pattern` + `cli_ftcode` + rtype文脈）依存で YARA単体では厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
