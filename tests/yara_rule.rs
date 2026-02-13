@@ -859,6 +859,21 @@ fn lowers_fuzzy_img_as_safe_false() {
 }
 
 #[test]
+fn lowers_malformed_fuzzy_img_to_safe_false_instead_of_raw_string() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#zzzzzzzzzzzzzzzz#0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("fuzzy_img format unsupported/invalid")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_with_second_subsig_to_safe_false_from_clamav_fixture() {
     // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
     // (`logo.png.good.with.second.subsig` / `logo.png.bad.with.second.subsig`)
