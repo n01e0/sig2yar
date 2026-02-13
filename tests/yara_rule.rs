@@ -157,6 +157,55 @@ fn lowers_hex_subsignature_with_nocase_modifier() {
 }
 
 #[test]
+fn lowers_hex_subsignature_with_wide_modifier() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::w").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = { 41 00 42 00 43 00 }")));
+}
+
+#[test]
+fn lowers_hex_subsignature_with_wide_ascii_modifier() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::wa").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule.strings.iter().any(
+        |s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = { (41 42 43 | 41 00 42 00 43 00) }")
+    ));
+}
+
+#[test]
+fn lowers_hex_subsignature_with_wide_ascii_nocase_modifier() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;414243::iwa").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "$s0");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = { ((41|61) (42|62) (43|63) | (41|61) 00 (42|62) 00 (43|63) 00) }")));
+}
+
+#[test]
+fn lowers_hex_subsignature_with_fullword_modifier_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::f").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("hex modifier 'f' (fullword) is unsupported for strict lowering")
+    )));
+}
+
+#[test]
 fn lowers_multilt_for_group_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -547,8 +596,7 @@ fn lowers_byte_comparison_non_raw_hex_exact_eq() {
 
 #[test]
 fn lowers_byte_comparison_non_raw_hex_numeric_threshold_as_hex_value() {
-    let sig =
-        LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#he2#=10)").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#he2#=10)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     // base=`h` should interpret numeric threshold tokens as hex values.

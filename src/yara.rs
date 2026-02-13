@@ -1120,30 +1120,38 @@ fn lower_subsignatures(
         match &subsig.pattern {
             ir::SubsignaturePattern::Hex(hex) if is_even_hex(hex) => {
                 let mut hex_nocase = false;
-                let mut ignored = Vec::new();
+                let mut hex_wide = false;
+                let mut hex_ascii = false;
+                let mut hex_fullword = false;
+                let mut ignored_unknown = Vec::new();
                 for modifier in &subsig.modifiers {
                     match modifier {
                         ir::SubsignatureModifier::CaseInsensitive => hex_nocase = true,
-                        other => ignored.push(match other {
-                            ir::SubsignatureModifier::Wide => "w".to_string(),
-                            ir::SubsignatureModifier::Fullword => "f".to_string(),
-                            ir::SubsignatureModifier::Ascii => "a".to_string(),
-                            ir::SubsignatureModifier::Unknown(c) => c.to_string(),
-                            ir::SubsignatureModifier::CaseInsensitive => unreachable!(),
-                        }),
+                        ir::SubsignatureModifier::Wide => hex_wide = true,
+                        ir::SubsignatureModifier::Ascii => hex_ascii = true,
+                        ir::SubsignatureModifier::Fullword => hex_fullword = true,
+                        ir::SubsignatureModifier::Unknown(c) => ignored_unknown.push(c.to_string()),
                     }
                 }
 
-                if !ignored.is_empty() {
+                if hex_fullword {
                     notes.push(format!(
-                        "subsig[{idx}] ignored non-nocase modifiers on hex: {}",
-                        ignored.join("")
+                        "subsig[{idx}] hex modifier 'f' (fullword) is unsupported for strict lowering; lowered to false for safety"
+                    ));
+                    id_map.push(Some("false".to_string()));
+                    continue;
+                }
+
+                if !ignored_unknown.is_empty() {
+                    notes.push(format!(
+                        "subsig[{idx}] ignored unknown hex modifier(s): {}",
+                        ignored_unknown.join("")
                     ));
                 }
 
                 let line = format!(
                     "{id} = {{ {} }}",
-                    format_hex_bytes_with_ascii_nocase(hex, hex_nocase)
+                    format_hex_bytes_with_modifiers(hex, hex_nocase, hex_wide, hex_ascii)
                 );
                 strings.push(YaraString::Raw(line));
                 id_map.push(Some(id));
@@ -1511,6 +1519,44 @@ fn format_hex_bytes_with_ascii_nocase(input: &str, nocase: bool) -> String {
     }
 
     out.join(" ")
+}
+
+fn format_hex_bytes_wide_with_ascii_nocase(input: &str, nocase: bool) -> String {
+    let mut out = Vec::new();
+    for chunk in input.as_bytes().chunks(2) {
+        let token = String::from_utf8_lossy(chunk).to_string();
+        let Ok(byte) = u8::from_str_radix(&token, 16) else {
+            out.push(token.to_uppercase());
+            out.push("00".to_string());
+            continue;
+        };
+
+        let upper = byte.to_ascii_uppercase();
+        let lower = byte.to_ascii_lowercase();
+
+        if nocase && byte.is_ascii_alphabetic() && upper != lower {
+            out.push(format!("({:02X}|{:02X})", upper, lower));
+        } else {
+            out.push(format!("{:02X}", byte));
+        }
+        out.push("00".to_string());
+    }
+
+    out.join(" ")
+}
+
+fn format_hex_bytes_with_modifiers(input: &str, nocase: bool, wide: bool, ascii: bool) -> String {
+    let ascii_variant = format_hex_bytes_with_ascii_nocase(input, nocase);
+    if !wide {
+        return ascii_variant;
+    }
+
+    let wide_variant = format_hex_bytes_wide_with_ascii_nocase(input, nocase);
+    if ascii {
+        format!("({ascii_variant} | {wide_variant})")
+    } else {
+        wide_variant
+    }
 }
 
 #[allow(dead_code)]
