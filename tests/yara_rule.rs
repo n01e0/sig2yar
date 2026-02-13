@@ -1,8 +1,9 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
+    logical::LogicalSignature,
     ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
-use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
+use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
 #[test]
 fn build_yara_rule_from_logical_signature() {
@@ -864,6 +865,55 @@ fn lowers_macro_missing_trailing_dollar_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_macro_subsignature_with_linked_ndb_group_when_representable() {
+    // ClamAV reference: docs LogicalSignatures macro example (`${6-7}12$` + `test.ndb` `$12`).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:0:$12:626262").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:636363").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$m1_0 = { 62 62 62 }")));
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$m1_1 = { 63 63 63 }")));
+    assert!(rule.condition.contains("for any i in (1..#s0)"));
+    assert!(rule.condition.contains("for any j in (1..#m1_0)"));
+    assert!(rule.condition.contains("@m1_0[j] >= @s0[i] + 6"));
+    assert!(rule.condition.contains("@m1_0[j] <= @s0[i] + 7"));
+    assert!(!rule.condition.contains("and false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("macro-group `$12$` resolved via linked ndb members [D1, D2]")
+    )));
+}
+
+#[test]
+fn lowers_macro_subsignature_to_false_when_linked_ndb_is_not_strictly_representable() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![NdbSignature::parse("D1:1:$12:626262").unwrap().to_ir()];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("target_type=1 (expected 0)")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_as_safe_false() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1380,6 +1430,31 @@ fn lowers_idb_signature_to_strict_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("icon matcher")
                 && value.contains("IconGroup")
+    )));
+}
+
+#[test]
+fn lowers_cbc_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/BytecodeSignatures (`.cbc` is ASCII-encoded executable bytecode)
+    // - source: libclamav/readdb.c:2332-2439 (`cli_loadcbc` -> `cli_bytecode_load`, runtime hooks)
+    let raw = "VIRUSNAME Bytecode.Sample\nFUNCTIONALITY_LEVEL_MIN 51";
+    let sig = CbcSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("CBC_bytecode_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "cbc_bytecode_vm"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("bytecode VM")
+                && value.contains("runtime hooks")
     )));
 }
 

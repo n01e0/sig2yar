@@ -1,6 +1,7 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, crb::CrbSignature, hash::HashSignature, idb::IdbSignature,
-    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, hash::HashSignature,
+    idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 use std::collections::HashSet;
@@ -214,6 +215,42 @@ fn sample_idb_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sa
             if idx < sample_size {
                 samples[idx] = sample;
             }
+        }
+    }
+
+    samples
+}
+
+fn sample_cbc_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
+    let files = collect_files(db_dir, &["cbc"]);
+    let mut rng = XorShift64::new(seed);
+    let mut samples: Vec<Sample> = Vec::new();
+    let mut seen = 0usize;
+
+    for path in files {
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+
+        let payload = String::from_utf8_lossy(&bytes).into_owned();
+        if payload.trim().is_empty() {
+            continue;
+        }
+
+        seen += 1;
+        let sample = Sample {
+            line: payload,
+            origin: path.display().to_string(),
+        };
+
+        if samples.len() < sample_size {
+            samples.push(sample);
+            continue;
+        }
+
+        let idx = rng.gen_range(seen);
+        if idx < sample_size {
+            samples[idx] = sample;
         }
     }
 
@@ -837,6 +874,57 @@ fn parse_idb_signatures_from_clamav_db() {
 }
 
 #[test]
+fn parse_cbc_signatures_from_clamav_db() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let files = collect_files(&db_dir, &["cbc"]);
+    if files.is_empty() {
+        if clamav_db_required() {
+            panic!("No .cbc files found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut total = 0usize;
+    let mut failures = 0usize;
+    let mut samples: Vec<String> = Vec::new();
+
+    for path in files {
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+        let payload = String::from_utf8_lossy(&bytes).into_owned();
+        if payload.trim().is_empty() {
+            continue;
+        }
+
+        total += 1;
+        if let Err(err) = CbcSignature::parse(payload.as_str()) {
+            failures += 1;
+            if samples.len() < MAX_ERROR_SAMPLES {
+                samples.push(format!("{}: {}", path.display(), err));
+            }
+        }
+    }
+
+    if total == 0 {
+        panic!("No cbc signatures found under {:?}", db_dir);
+    }
+    if failures > 0 {
+        panic!(
+            "Failed to parse {failures} of {total} cbc signatures. Samples:\n{}",
+            samples.join("\n")
+        );
+    }
+}
+
+#[test]
 fn parse_cdb_signatures_from_clamav_db() {
     let Some(db_dir) = clamav_db_dir() else {
         if clamav_db_required() {
@@ -1136,6 +1224,37 @@ fn yara_idb_rules_from_db_samples_compile() {
             .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
         let ir = sig.to_ir();
         let src = yara::render_idb_signature(&ir);
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_cbc_rules_from_db_samples_compile() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let sample_size = parse_sample_size();
+    let seed = parse_seed();
+    let samples = sample_cbc_signatures(&db_dir, sample_size, seed);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No cbc signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    for sample in samples {
+        let sig = CbcSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
+        let ir = sig.to_ir();
+        let src = yara::render_cbc_signature(&ir);
 
         yara_x::compile(src.as_str())
             .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));

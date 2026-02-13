@@ -1,5 +1,6 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature,
+    logical::LogicalSignature,
     ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
@@ -383,6 +384,48 @@ fn yara_rule_with_macro_missing_trailing_dollar_false_rejects_scan() {
 
     assert!(src.contains("macro subsignature format unsupported/invalid"));
     assert_eq!(scan_match_count(src.as_str(), b"xx${6-7}0yy"), 0);
+}
+
+#[test]
+fn yara_rule_with_macro_group_linked_ndb_members_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:0:$12:626262").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:636363").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile macro-group linked-ndb strict subset rule");
+}
+
+#[test]
+fn yara_rule_with_macro_group_linked_ndb_members_matches_and_rejects_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:0:$12:626262").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:636363").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxxbbb"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxbbb"), 0);
+}
+
+#[test]
+fn yara_rule_with_macro_group_linked_ndb_invalid_target_strict_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![NdbSignature::parse("D1:1:$12:626262").unwrap().to_ir()];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("target_type=1 (expected 0)"));
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxxbbb"), 0);
 }
 
 #[test]
@@ -926,6 +969,16 @@ fn idb_rule_strict_false_compiles_and_rejects_scan() {
     let src = yara::render_idb_signature(&sig.to_ir());
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile idb strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
+}
+
+#[test]
+fn cbc_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "VIRUSNAME Bytecode.Sample\nFUNCTIONALITY_LEVEL_MIN 51";
+    let sig = CbcSignature::parse(raw).unwrap();
+    let src = yara::render_cbc_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile cbc strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
 }
 
