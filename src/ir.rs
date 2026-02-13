@@ -4,6 +4,7 @@ pub enum Signature {
     Logical(LogicalSignature),
     Ndb(NdbSignature),
     Idb(IdbSignature),
+    Cdb(CdbSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +53,22 @@ pub struct IdbSignature {
     pub group1: String,
     pub group2: String,
     pub icon_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CdbSignature {
+    pub name: String,
+    pub container_type: String,
+    pub container_size: String,
+    pub filename_regexp: String,
+    pub file_size_in_container: String,
+    pub file_size_real: String,
+    pub is_encrypted: String,
+    pub file_pos: String,
+    pub res1: String,
+    pub res2: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

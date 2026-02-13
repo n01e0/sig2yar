@@ -1,5 +1,7 @@
 use sig2yar::{
-    parser::{hash::HashSignature, idb::IdbSignature, logical::LogicalSignature},
+    parser::{
+        cdb::CdbSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
+    },
     yara,
 };
 
@@ -28,5 +30,14 @@ fn idb_ir_render_matches_display() {
     let sig = IdbSignature::parse(raw.as_str()).expect("idb parse failed");
 
     let rendered = yara::render_idb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn cdb_ir_render_matches_display() {
+    let raw = "Container.Test-1:CL_TYPE_ZIP:*:.*\\.exe:10-20:20-40:0:1:*:*:120:255";
+    let sig = CdbSignature::parse(raw).expect("cdb parse failed");
+
+    let rendered = yara::render_cdb_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }

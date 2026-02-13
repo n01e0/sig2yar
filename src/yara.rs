@@ -8,6 +8,7 @@ use anyhow::Result;
 use crate::{
     ir,
     parser::{
+        cdb::CdbSignature,
         hash::HashSignature,
         idb::IdbSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
@@ -87,6 +88,10 @@ pub fn render_idb_signature(value: &ir::IdbSignature) -> String {
     lower_idb_signature(value).to_string()
 }
 
+pub fn render_cdb_signature(value: &ir::CdbSignature) -> String {
+    lower_cdb_signature(value).to_string()
+}
+
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
     let note = "idb icon fuzzy matching depends on ClamAV runtime icon matcher and ldb IconGroup linkage; lowered to false for safety";
 
@@ -118,6 +123,82 @@ pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
                 value: note.to_string(),
             },
         ],
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_cdb_signature(value: &ir::CdbSignature) -> YaraRule {
+    let note = "cdb container metadata matching depends on ClamAV container traversal/runtime metadata (size, encryption, position, CRC); lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_container_type".to_string(),
+            value: value.container_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_container_size".to_string(),
+            value: value.container_size.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_filename_regexp".to_string(),
+            value: value.filename_regexp.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_file_size_in_container".to_string(),
+            value: value.file_size_in_container.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_file_size_real".to_string(),
+            value: value.file_size_real.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_is_encrypted".to_string(),
+            value: value.is_encrypted.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_file_pos".to_string(),
+            value: value.file_pos.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_res1".to_string(),
+            value: value.res1.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_res2".to_string(),
+            value: value.res2.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "cdb_container_metadata_match".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: normalize_rule_name(&value.name),
+        meta,
         strings: Vec::new(),
         condition: "false".to_string(),
         imports: Vec::new(),
@@ -3435,6 +3516,39 @@ impl<'p> TryFrom<IdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::CdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::CdbSignature) -> Result<Self> {
+        Ok(lower_cdb_signature(value))
+    }
+}
+
+impl TryFrom<ir::CdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::CdbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&CdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &CdbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<CdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CdbSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -3482,6 +3596,12 @@ impl<'p> From<&NdbSignature<'p>> for ir::NdbSignature {
 
 impl<'p> From<&IdbSignature<'p>> for ir::IdbSignature {
     fn from(value: &IdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&CdbSignature<'p>> for ir::CdbSignature {
+    fn from(value: &CdbSignature<'p>) -> Self {
         value.to_ir()
     }
 }

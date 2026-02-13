@@ -1,4 +1,6 @@
-use sig2yar::parser::{idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature};
+use sig2yar::parser::{
+    cdb::CdbSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
+};
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
 #[test]
@@ -1361,5 +1363,30 @@ fn lowers_idb_signature_to_strict_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("icon matcher")
                 && value.contains("IconGroup")
+    )));
+}
+
+#[test]
+fn lowers_cdb_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/ContainerMetadata.html (`VirusName:ContainerType:...:Res2[:MinFL[:MaxFL]]`)
+    // - source: libclamav/readdb.c:3112-3137,3234-3244 (`CDB_TOKENS=12`, numeric/range fields, IsEncrypted `*|0|1`)
+    let raw = "Container.Sample-1:CL_TYPE_ZIP:*:.*\\.exe:10-20:20-40:0:1:*:*:120:255";
+    let sig = CdbSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.name, "Container_Sample_1");
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "cdb_container_metadata_match"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("container traversal")
+                && value.contains("CRC")
     )));
 }
