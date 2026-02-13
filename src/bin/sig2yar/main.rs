@@ -6,7 +6,7 @@ use clap::Parser;
 use sig2yar::{
     parser::{
         cdb::CdbSignature, crb::CrbSignature, hash::HashSignature, idb::IdbSignature,
-        logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, DbType,
+        logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -50,6 +50,11 @@ fn main() -> Result<()> {
             let sig = PdbSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_pdb_signature(&ir));
+        }
+        DbType::Wdb => {
+            let sig = WdbSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_wdb_signature(&ir));
         }
     };
 

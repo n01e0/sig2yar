@@ -1,6 +1,6 @@
 use sig2yar::parser::{
     cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
-    ndb::NdbSignature, pdb::PdbSignature,
+    ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
@@ -654,6 +654,22 @@ fn lowers_byte_comparison_non_raw_auto_base_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("non-raw auto base unsupported for strict lowering")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_hex_width_over_clamav_limit_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher-byte-comp.h (`CLI_BCOMP_MAX_HEX_BLEN = 18`).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#he19#=1)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("non-raw hex width 19 exceeds ClamAV limit 18")
                 && value.contains("lowered to false for safety")
     )));
 }
@@ -1440,6 +1456,40 @@ fn lowers_pdb_signature_to_strict_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("RealURL/DisplayedURL")
                 && value.contains("phish_protected_domain")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "min_flevel" && value == "20"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "max_flevel" && value == "30"
+    )));
+}
+
+#[test]
+fn lowers_wdb_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/PhishSigs.html (`X:RealURL:DisplayedURL[:FuncLevelSpec]`, `Y:RealURL[:FuncLevelSpec]`, `M:RealHostname:DisplayedHostname[:FuncLevelSpec]`)
+    // - source: libclamav/readdb.c:1593-1610 (`cli_loadwdb` -> `load_regex_matcher(..., is_allow_list_lookup=1)`)
+    // - source: libclamav/regex_list.c:503-519,568-576 (`X/Y/M` dispatch) and 355-395 (`:min-max` functionality-level parsing)
+    let raw = "M:www\\.google\\.ro:www\\.google\\.com:20-30";
+    let sig = WdbSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("WDB_host_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "wdb_allow_list_match"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("RealURL/DisplayedURL")
+                && value.contains("allow-list")
     )));
     assert!(rule.meta.iter().any(|m| matches!(
         m,

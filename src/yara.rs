@@ -15,6 +15,7 @@ use crate::{
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
         pdb::PdbSignature,
+        wdb::WdbSignature,
     },
 };
 
@@ -100,6 +101,10 @@ pub fn render_crb_signature(value: &ir::CrbSignature) -> String {
 
 pub fn render_pdb_signature(value: &ir::PdbSignature) -> String {
     lower_pdb_signature(value).to_string()
+}
+
+pub fn render_wdb_signature(value: &ir::WdbSignature) -> String {
+    lower_wdb_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -349,6 +354,68 @@ pub fn lower_pdb_signature(value: &ir::PdbSignature) -> YaraRule {
 
     YaraRule {
         name: format!("PDB_{type_tag}_{:08x}", stable_fnv1a_32(&value.raw)),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_wdb_signature(value: &ir::WdbSignature) -> YaraRule {
+    let note = "wdb phishing allow-list checks depend on ClamAV RealURL/DisplayedURL extraction and regex_list allow-list runtime matcher; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "clamav_raw_signature".to_string(),
+            value: value.raw.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_wdb_record_type".to_string(),
+            value: value.record_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_wdb_pattern".to_string(),
+            value: value.pattern.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "wdb_allow_list_match".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(flags) = &value.filter_flags {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_wdb_filter_flags".to_string(),
+            value: flags.to_string(),
+        });
+    }
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    let type_tag = match value.record_type.as_str() {
+        "X" => "pair_regex",
+        "Y" => "real_regex",
+        "M" => "host",
+        _ => "unknown",
+    };
+
+    YaraRule {
+        name: format!("WDB_{type_tag}_{:08x}", stable_fnv1a_32(&value.raw)),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -2517,6 +2584,8 @@ fn build_raw_byte_comparison_value_expr(
     format!("({})", terms.join(" | "))
 }
 
+const CLAMAV_BCOMP_MAX_HEX_BLEN: usize = 18;
+
 fn lower_textual_byte_comparison_condition(
     idx: usize,
     core: &str,
@@ -2569,6 +2638,13 @@ fn lower_textual_byte_comparison_condition(
             return Some("false".to_string());
         }
     };
+
+    if matches!(base, ByteCmpBase::Hex) && width > CLAMAV_BCOMP_MAX_HEX_BLEN {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison non-raw hex width {width} exceeds ClamAV limit {CLAMAV_BCOMP_MAX_HEX_BLEN}; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
 
     let mut guards = base_guards.to_vec();
     guards.push(format!("({start_expr}) + {width} <= filesize"));
@@ -3766,6 +3842,39 @@ impl<'p> TryFrom<PdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::WdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::WdbSignature) -> Result<Self> {
+        Ok(lower_wdb_signature(value))
+    }
+}
+
+impl TryFrom<ir::WdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::WdbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&WdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &WdbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<WdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: WdbSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -3831,6 +3940,12 @@ impl<'p> From<&CrbSignature<'p>> for ir::CrbSignature {
 
 impl<'p> From<&PdbSignature<'p>> for ir::PdbSignature {
     fn from(value: &PdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&WdbSignature<'p>> for ir::WdbSignature {
+    fn from(value: &WdbSignature<'p>) -> Self {
         value.to_ir()
     }
 }

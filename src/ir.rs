@@ -7,6 +7,7 @@ pub enum Signature {
     Cdb(CdbSignature),
     Crb(CrbSignature),
     Pdb(PdbSignature),
+    Wdb(WdbSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +93,16 @@ pub struct CrbSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PdbSignature {
+    pub raw: String,
+    pub record_type: String,
+    pub filter_flags: Option<String>,
+    pub pattern: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WdbSignature {
     pub raw: String,
     pub record_type: String,
     pub filter_flags: Option<String>,
