@@ -1,6 +1,7 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature, idb::IdbSignature,
-    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
+    idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1640,5 +1641,70 @@ fn lowers_ftm_signature_to_strict_false_for_safety() {
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value } if key == "max_flevel" && value == "255"
+    )));
+}
+
+#[test]
+fn lowers_fp_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/AllowLists (`.fp` uses MD5 file hash allow-list entries)
+    // - docs: manual/Signatures/HashSignatures (`HashString:FileSize:MalwareName[:MinFL]`)
+    let raw = "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature";
+    let sig = FpSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("FP_Eicar_Test_Signature_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "fp_allow_list_override"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_fp_hash_type" && value == "md5"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("suppress detections")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_sfp_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/AllowLists (`.sfp` uses SHA1/SHA256 file hash allow-list entries)
+    // - docs: manual/Signatures/HashSignatures (`HashString:FileSize:MalwareName[:MinFL]`)
+    let raw = "0059ee2322c3301263c8006fd780d7fe95a30572:1705472:Example:120";
+    let sig = SfpSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("SFP_sha1_Example_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "sfp_allow_list_override"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_sfp_hash_type" && value == "sha1"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "min_flevel" && value == "120"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("suppress detections")
+                && value.contains("lowered to false for safety")
     )));
 }

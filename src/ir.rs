@@ -10,6 +10,8 @@ pub enum Signature {
     Pdb(PdbSignature),
     Wdb(WdbSignature),
     Ftm(FtmSignature),
+    Fp(FpSignature),
+    Sfp(SfpSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,6 +130,24 @@ pub struct FtmSignature {
     pub detected_type: String,
     pub min_flevel: Option<u32>,
     pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FpSignature {
+    pub name: String,
+    pub hash: String,
+    pub hash_type: HashType,
+    pub size: Option<u64>,
+    pub min_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SfpSignature {
+    pub name: String,
+    pub hash: String,
+    pub hash_type: HashType,
+    pub size: Option<u64>,
+    pub min_flevel: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

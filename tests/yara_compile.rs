@@ -1,6 +1,7 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, ftm::FtmSignature, idb::IdbSignature,
-    logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
+    idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1056,4 +1057,30 @@ fn ftm_rule_strict_false_compiles_and_rejects_scan() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile ftm strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"%PDF-1.7"), 0);
+}
+
+#[test]
+fn fp_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature";
+    let sig = FpSignature::parse(raw).unwrap();
+    let src = yara::render_fp_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile fp strict-false rule");
+    assert_eq!(
+        scan_match_count(src.as_str(), b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"),
+        0
+    );
+}
+
+#[test]
+fn sfp_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f:68:Eicar-Test-Signature:73";
+    let sig = SfpSignature::parse(raw).unwrap();
+    let src = yara::render_sfp_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile sfp strict-false rule");
+    assert_eq!(
+        scan_match_count(src.as_str(), b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"),
+        0
+    );
 }
