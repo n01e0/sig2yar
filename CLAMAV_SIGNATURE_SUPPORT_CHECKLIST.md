@@ -17,10 +17,10 @@ Last update: 2026-02-13
 - [x] `imp` (hash)
 - [x] `ldb` (logical)
 - [x] `ndb` (extended/body signatures) ※parse + 実用lower（近似あり）
+- [x] `idb` (icon signatures) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `idb`
 - [ ] `cdb`
 - [ ] `crb`
 - [ ] `cbc` (bytecode)
@@ -95,7 +95,7 @@ Last update: 2026-02-13
 - [ ] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
-  - `idb`（件数: 223）
+  - `idb`（件数: 223）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `cdb`（件数: 137）
   - `crb`（件数: 32）
   - `pdb`（件数: 263）
@@ -106,6 +106,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記16: `idb` の最小スライスとして `parse対象` を追加。`src/parser/idb.rs` に ClamAV source 準拠のバリデーション（4トークン、`ICON_HASH` 124桁hex、先頭サイズprefixが 16/24/32）を実装し、`DbType::Idb` を CLI へ接続。
+  - source根拠: `libclamav/readdb.c:1365-1376`（token count / hash length）, `libclamav/readdb.c:1388-1397`（hex文字・size=16/24/32）, docs `LogicalSignatures`（`.idb` format: `ICONNAME:GROUP1:GROUP2:ICON_HASH`）。
+  - `src/yara.rs` に `render/lower_idb_signature` を追加し、icon fuzzy matching は ClamAV runtime（icon matcher + ldb IconGroup linkage）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記15: macro 継続トラックの最小スライスとして、malformed macro（`${6-7}0` のような trailing `$` 欠落）を raw literal にフォールバックさせず **strict-safe false + note** に統一。
   - 背景: 既存実装は `looks_like_macro_subsignature` が `${...}$` の完全形のみ検知していたため、`${...` で始まる malformed macro が raw string としてlowerされ得た。
   - 変更: `src/yara.rs` で macro判定を `${` prefix 起点に変更し、parse失敗時は既存の invalid-format 分岐へ確実に入れる。

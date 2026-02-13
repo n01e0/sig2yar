@@ -9,6 +9,7 @@ use crate::{
     ir,
     parser::{
         hash::HashSignature,
+        idb::IdbSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
     },
@@ -80,6 +81,47 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
 
 pub fn render_ndb_signature(value: &ir::NdbSignature) -> String {
     lower_ndb_signature(value).to_string()
+}
+
+pub fn render_idb_signature(value: &ir::IdbSignature) -> String {
+    lower_idb_signature(value).to_string()
+}
+
+pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
+    let note = "idb icon fuzzy matching depends on ClamAV runtime icon matcher and ldb IconGroup linkage; lowered to false for safety";
+
+    YaraRule {
+        name: normalize_rule_name(&value.name),
+        meta: vec![
+            YaraMeta::Entry {
+                key: "original_ident".to_string(),
+                value: value.name.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_icon_group1".to_string(),
+                value: value.group1.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_icon_group2".to_string(),
+                value: value.group2.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_icon_hash".to_string(),
+                value: value.icon_hash.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_unsupported".to_string(),
+                value: "idb_icon_fuzzy_match".to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_lowering_notes".to_string(),
+                value: note.to_string(),
+            },
+        ],
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
 }
 
 pub fn lower_ndb_signature(value: &ir::NdbSignature) -> YaraRule {
@@ -3349,6 +3391,39 @@ impl<'p> TryFrom<LogicalSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::IdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::IdbSignature) -> Result<Self> {
+        Ok(lower_idb_signature(value))
+    }
+}
+
+impl TryFrom<ir::IdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::IdbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&IdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &IdbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<IdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: IdbSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -3390,6 +3465,12 @@ impl<'p> From<&HashSignature<'p>> for ir::HashSignature {
 
 impl<'p> From<&NdbSignature<'p>> for ir::NdbSignature {
     fn from(value: &NdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&IdbSignature<'p>> for ir::IdbSignature {
+    fn from(value: &IdbSignature<'p>) -> Self {
         value.to_ir()
     }
 }

@@ -3,6 +3,7 @@ pub enum Signature {
     Hash(HashSignature),
     Logical(LogicalSignature),
     Ndb(NdbSignature),
+    Idb(IdbSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +44,14 @@ pub struct NdbSignature {
     pub body: String,
     pub min_flevel: Option<u32>,
     pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdbSignature {
+    pub name: String,
+    pub group1: String,
+    pub group2: String,
+    pub icon_hash: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
