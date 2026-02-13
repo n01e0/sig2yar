@@ -9,6 +9,7 @@ pub enum Signature {
     Crb(CrbSignature),
     Pdb(PdbSignature),
     Wdb(WdbSignature),
+    Ftm(FtmSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +114,18 @@ pub struct WdbSignature {
     pub record_type: String,
     pub filter_flags: Option<String>,
     pub pattern: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FtmSignature {
+    pub magic_type: u32,
+    pub offset: String,
+    pub magic_bytes: String,
+    pub name: String,
+    pub required_type: String,
+    pub detected_type: String,
     pub min_flevel: Option<u32>,
     pub max_flevel: Option<u32>,
 }

@@ -11,6 +11,7 @@ use crate::{
         cbc::CbcSignature,
         cdb::CdbSignature,
         crb::CrbSignature,
+        ftm::FtmSignature,
         hash::HashSignature,
         idb::IdbSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
@@ -118,6 +119,10 @@ pub fn render_pdb_signature(value: &ir::PdbSignature) -> String {
 
 pub fn render_wdb_signature(value: &ir::WdbSignature) -> String {
     lower_wdb_signature(value).to_string()
+}
+
+pub fn render_ftm_signature(value: &ir::FtmSignature) -> String {
+    lower_ftm_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -466,6 +471,94 @@ pub fn lower_wdb_signature(value: &ir::WdbSignature) -> YaraRule {
 
     YaraRule {
         name: format!("WDB_{type_tag}_{:08x}", stable_fnv1a_32(&value.raw)),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_ftm_signature(value: &ir::FtmSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/FileTypeMagic (`magictype:offset:magicbytes:name:rtype:type[:min_flevel[:max_flevel]]`)
+    // - source: libclamav/readdb.c:2468-2600 (`cli_loadftm`; `magictype` 0/1/4 with filetype engine/runtime wiring)
+    let note = "ftm filetype magic matching depends on ClamAV filetype engine integration (cli_add_content_match_pattern/cli_ftcode/rtype context); lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "clamav_ftm_magic_type".to_string(),
+            value: value.magic_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ftm_offset".to_string(),
+            value: value.offset.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ftm_magic_bytes".to_string(),
+            value: value.magic_bytes.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ftm_name".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ftm_required_type".to_string(),
+            value: value.required_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ftm_detected_type".to_string(),
+            value: value.detected_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "ftm_file_type_magic".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    let mode_tag = match value.magic_type {
+        0 => "memcmp_file",
+        1 => "ac_pattern",
+        4 => "memcmp_partition",
+        _ => "unsupported_mode",
+    };
+
+    let fingerprint = format!(
+        "{}:{}:{}:{}:{}:{}:{}:{}",
+        value.magic_type,
+        value.offset,
+        value.magic_bytes,
+        value.name,
+        value.required_type,
+        value.detected_type,
+        value
+            .min_flevel
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        value
+            .max_flevel
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "-".to_string())
+    );
+
+    YaraRule {
+        name: format!("FTM_{mode_tag}_{:08x}", stable_fnv1a_32(&fingerprint)),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -4152,6 +4245,39 @@ impl<'p> TryFrom<WdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::FtmSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::FtmSignature) -> Result<Self> {
+        Ok(lower_ftm_signature(value))
+    }
+}
+
+impl TryFrom<ir::FtmSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::FtmSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&FtmSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &FtmSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<FtmSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: FtmSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -4229,6 +4355,12 @@ impl<'p> From<&PdbSignature<'p>> for ir::PdbSignature {
 
 impl<'p> From<&WdbSignature<'p>> for ir::WdbSignature {
     fn from(value: &WdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&FtmSignature<'p>> for ir::FtmSignature {
+    fn from(value: &FtmSignature<'p>) -> Self {
         value.to_ir()
     }
 }

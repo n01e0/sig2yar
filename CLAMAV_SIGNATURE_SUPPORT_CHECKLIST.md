@@ -23,10 +23,10 @@ Last update: 2026-02-13
 - [x] `pdb` (phishing protected-domain signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `wdb` (phishing allow-list signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `cbc` (bytecode) ※parse + strict-safe lower（`false` + note）
+- [x] `ftm` (filetype magic) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `ftm`
 - [ ] `fp` / `sfp` (false positive related)
 - [ ] `ign` / `ign2` (ignore lists)
 
@@ -107,6 +107,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記26: `ftm`（filetype magic）の最小スライスとして `parse対象` を追加。`src/parser/ftm.rs` に ClamAV source 準拠の最小バリデーション（`FTM_TOKENS=8` / 6..8フィールド、`MagicType`/`MinFL`/`MaxFL` numeric、`MagicType=0|4` は numeric offset + hex magic bytes、`RequiredType/DetectedType` は `CL_TYPE_*` 形式）を実装し、`DbType::Ftm` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/FileTypeMagic`（`magictype:offset:magicbytes:name:rtype:type[:min_flevel[:max_flevel]]`）, `libclamav/readdb.c:2468-2600`（`cli_loadftm`, `FTM_TOKENS=8`, magictype dispatch 0/1/4）。
+  - `src/yara.rs` に `render/lower_ftm_signature` を追加し、filetype magic 照合は ClamAV の filetype engine（`cli_add_content_match_pattern` + `cli_ftcode` + rtype文脈）依存で YARA単体では厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記23: `cbc`（bytecode）の最小スライスとして `parse対象` を追加。`src/parser/cbc.rs` に bytecode payload の最小バリデーション（empty拒否・ASCII前提）を実装し、`DbType::Cbc` を CLI へ接続。
   - source根拠: docs `manual/Signatures/BytecodeSignatures.html`（`.cbc` は ASCII bytecode encoding）, `libclamav/readdb.c:2332-2387`（`cli_loadcbc` が file payload を `cli_bytecode_load` へ渡して bytecode をロード）, `libclamav/readdb.c:2422-2457`（bytecode kind / hooks 実行系の runtime 依存）。
   - `src/yara.rs` に `render/lower_cbc_signature` を追加し、bytecode VM 実行は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。

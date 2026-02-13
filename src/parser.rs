@@ -1,6 +1,7 @@
 pub mod cbc;
 pub mod cdb;
 pub mod crb;
+pub mod ftm;
 pub mod hash;
 pub mod idb;
 pub mod logical;
@@ -21,4 +22,5 @@ pub enum DbType {
     Crb,
     Pdb,
     Wdb,
+    Ftm,
 }
