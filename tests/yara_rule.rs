@@ -460,6 +460,21 @@ fn lowers_pcre_versioninfo_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_versioninfo_prefixed_payload_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:401-403 uses `strncmp(offcpy, "VI", 2)`.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;VIjunk:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("CLI_OFF_VERSION")
+    )));
+}
+
+#[test]
 fn lowers_pcre_non_numeric_offset_prefix_to_false_for_safety() {
     // ClamAV reference: libclamav/matcher.c:348-454 (`cli_caloff` accepts only numeric payloads for `EP+/-`, `Sx+`, `EOF-`).
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+foo:0/abc/").unwrap();
@@ -489,6 +504,21 @@ fn lowers_pcre_macro_group_offset_prefix_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("pcre offset `$1$` depends on CLI_OFF_MACRO runtime state")
+    )));
+}
+
+#[test]
+fn lowers_pcre_invalid_macro_group_offset_prefix_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:432-434 rejects malformed `$...$` offsets.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$foo$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre macro offset '$foo$' has invalid format")
     )));
 }
 

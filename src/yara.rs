@@ -3359,6 +3359,7 @@ enum PcreOffsetSpec {
     },
     VersionInfo(String),
     MacroGroup(u32),
+    InvalidMacroGroup(String),
     Unsupported(String),
 }
 
@@ -3499,12 +3500,19 @@ fn parse_ascii_u64(input: &str) -> Option<u64> {
 }
 
 fn parse_pcre_macro_group_offset(input: &str) -> Option<u32> {
-    let inner = input.strip_prefix('$')?.strip_suffix('$')?;
-    if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_digit()) {
+    // ClamAV `cli_caloff` checks for any `$` then parses with `sscanf("$%u$")`.
+    // Mirror that shape: leading `$`, one or more digits, and a closing `$`.
+    // Trailing bytes after the closing `$` are tolerated like `sscanf` does.
+    let rest = input.strip_prefix('$')?;
+    let digits_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits_len == 0 {
         return None;
     }
 
-    inner.parse::<u32>().ok()
+    let (digits, after_digits) = rest.split_at(digits_len);
+    let _ = after_digits.strip_prefix('$')?;
+
+    digits.parse::<u32>().ok()
 }
 
 fn parse_pcre_offset_spec(input: &str) -> PcreOffsetSpec {
@@ -3523,12 +3531,15 @@ fn parse_pcre_offset_spec(input: &str) -> PcreOffsetSpec {
         None => (input, None),
     };
 
-    if let Some(group_id) = parse_pcre_macro_group_offset(base) {
-        return PcreOffsetSpec::MacroGroup(group_id);
+    if base.starts_with("VI") {
+        return PcreOffsetSpec::VersionInfo(input.to_string());
     }
 
-    if base == "VI" {
-        return PcreOffsetSpec::VersionInfo(input.to_string());
+    if base.contains('$') {
+        if let Some(group_id) = parse_pcre_macro_group_offset(base) {
+            return PcreOffsetSpec::MacroGroup(group_id);
+        }
+        return PcreOffsetSpec::InvalidMacroGroup(input.to_string());
     }
 
     if let Some(rest) = base.strip_prefix("EP+") {
@@ -3817,6 +3828,12 @@ fn lower_pcre_offset_condition(
                     "subsig[{idx}] pcre offset `${group_id}$` depends on CLI_OFF_MACRO runtime state; lowered to false for safety"
                 ));
             }
+            Some("false".to_string())
+        }
+        PcreOffsetSpec::InvalidMacroGroup(raw) => {
+            notes.push(format!(
+                "subsig[{idx}] pcre macro offset '{raw}' has invalid format (expected `$<group>$`); lowered to false for safety"
+            ));
             Some("false".to_string())
         }
         PcreOffsetSpec::Unsupported(raw) => {
