@@ -6,8 +6,9 @@ use clap::Parser;
 use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
-        ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
+        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
+        ign2::Ign2Signature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
+        sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -76,6 +77,16 @@ fn main() -> Result<()> {
             let sig = SfpSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_sfp_signature(&ir));
+        }
+        DbType::Ign => {
+            let sig = IgnSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_ign_signature(&ir));
+        }
+        DbType::Ign2 => {
+            let sig = Ign2Signature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_ign2_signature(&ir));
         }
     };
 

@@ -1,7 +1,7 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
-    sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, logical::LogicalSignature,
+    ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1705,6 +1705,71 @@ fn lowers_sfp_signature_to_strict_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("suppress detections")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_ign_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/AllowLists (`.ign2`: `SignatureName[:md5(entry)]`; `.ign` legacy-compatible)
+    // - source: libclamav/readdb.c:2721-2821 (`cli_loadign` supports token count 1..3)
+    let raw = "legacy-repo:legacy-id:Eicar-Test-Signature";
+    let sig = IgnSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("IGN_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "ign_signature_ignore_list"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_ign_signature_name" && value == "Eicar-Test-Signature"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_ign_legacy_prefix_1" && value == "legacy-repo"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("ignore-lists suppress matching signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_ign2_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/AllowLists (`.ign2`: `SignatureName[:md5(entry)]`)
+    // - source: libclamav/readdb.c:2721-2821 (`cli_loadign` handles .ign and .ign2)
+    let raw = "Eicar-Test-Signature:bc356bae4c42f19a3de16e333ba3569c";
+    let sig = Ign2Signature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("IGN2_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "ign2_signature_ignore_list"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_ign2_md5" && value == "bc356bae4c42f19a3de16e333ba3569c"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("ignore-lists suppress matching signatures")
                 && value.contains("lowered to false for safety")
     )));
 }

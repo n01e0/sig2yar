@@ -1,7 +1,7 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
-    sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, logical::LogicalSignature,
+    ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1083,4 +1083,24 @@ fn sfp_rule_strict_false_compiles_and_rejects_scan() {
         scan_match_count(src.as_str(), b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"),
         0
     );
+}
+
+#[test]
+fn ign_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "legacy-repo:legacy-id:Eicar-Test-Signature";
+    let sig = IgnSignature::parse(raw).unwrap();
+    let src = yara::render_ign_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ign strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
+}
+
+#[test]
+fn ign2_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "Eicar-Test-Signature:bc356bae4c42f19a3de16e333ba3569c";
+    let sig = Ign2Signature::parse(raw).unwrap();
+    let src = yara::render_ign2_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ign2 strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
 }

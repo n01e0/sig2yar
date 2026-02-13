@@ -5,6 +5,8 @@ pub mod fp;
 pub mod ftm;
 pub mod hash;
 pub mod idb;
+pub mod ign;
+pub mod ign2;
 pub mod logical;
 pub mod ndb;
 pub mod pdb;
@@ -27,4 +29,6 @@ pub enum DbType {
     Ftm,
     Fp,
     Sfp,
+    Ign,
+    Ign2,
 }
