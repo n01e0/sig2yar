@@ -15,6 +15,8 @@ use crate::{
         ftm::FtmSignature,
         hash::HashSignature,
         idb::IdbSignature,
+        ign::IgnSignature,
+        ign2::Ign2Signature,
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
         pdb::PdbSignature,
@@ -133,6 +135,14 @@ pub fn render_fp_signature(value: &ir::FpSignature) -> String {
 
 pub fn render_sfp_signature(value: &ir::SfpSignature) -> String {
     lower_sfp_signature(value).to_string()
+}
+
+pub fn render_ign_signature(value: &ir::IgnSignature) -> String {
+    lower_ign_signature(value).to_string()
+}
+
+pub fn render_ign2_signature(value: &ir::Ign2Signature) -> String {
+    lower_ign2_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -682,6 +692,142 @@ pub fn lower_sfp_signature(value: &ir::SfpSignature) -> YaraRule {
             normalize_rule_name(&value.name),
             hash_tag(&value.hash)
         ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_ign_signature(value: &ir::IgnSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/AllowLists (`.ign2`: `SignatureName[:md5(entry)]`; `.ign` kept for compatibility)
+    // - source: libclamav/readdb.c:2721-2821 (`cli_loadign` loads ignore-list entries before normal DB loading)
+    let note = "ign signature ignore-lists suppress matching signatures during ClamAV database load/scan flow; standalone YARA cannot model suppression semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "clamav_ign_signature_name".to_string(),
+            value: value.signature_name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ign_raw".to_string(),
+            value: value.raw.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "ign_signature_ignore_list".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(md5) = &value.md5 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign_md5".to_string(),
+            value: md5.to_string(),
+        });
+    }
+    if let Some(v) = &value.legacy_prefix_1 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign_legacy_prefix_1".to_string(),
+            value: v.to_string(),
+        });
+    }
+    if let Some(v) = &value.legacy_prefix_2 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign_legacy_prefix_2".to_string(),
+            value: v.to_string(),
+        });
+    }
+
+    let fingerprint = format!(
+        "{}:{}:{}:{}:{}",
+        value.signature_name,
+        value.md5.clone().unwrap_or_else(|| "-".to_string()),
+        value
+            .legacy_prefix_1
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
+        value
+            .legacy_prefix_2
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
+        value.raw
+    );
+
+    YaraRule {
+        name: format!("IGN_{:08x}", stable_fnv1a_32(&fingerprint)),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_ign2_signature(value: &ir::Ign2Signature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures/AllowLists (`.ign2`: `SignatureName[:md5(entry)]`)
+    // - source: libclamav/readdb.c:2721-2821 (`cli_loadign` handles both .ign and .ign2)
+    let note = "ign2 signature ignore-lists suppress matching signatures during ClamAV database load/scan flow; standalone YARA cannot model suppression semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "clamav_ign2_signature_name".to_string(),
+            value: value.signature_name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_ign2_raw".to_string(),
+            value: value.raw.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "ign2_signature_ignore_list".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(md5) = &value.md5 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign2_md5".to_string(),
+            value: md5.to_string(),
+        });
+    }
+    if let Some(v) = &value.legacy_prefix_1 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign2_legacy_prefix_1".to_string(),
+            value: v.to_string(),
+        });
+    }
+    if let Some(v) = &value.legacy_prefix_2 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_ign2_legacy_prefix_2".to_string(),
+            value: v.to_string(),
+        });
+    }
+
+    let fingerprint = format!(
+        "{}:{}:{}:{}:{}",
+        value.signature_name,
+        value.md5.clone().unwrap_or_else(|| "-".to_string()),
+        value
+            .legacy_prefix_1
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
+        value
+            .legacy_prefix_2
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
+        value.raw
+    );
+
+    YaraRule {
+        name: format!("IGN2_{:08x}", stable_fnv1a_32(&fingerprint)),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -4467,6 +4613,72 @@ impl<'p> TryFrom<SfpSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::IgnSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::IgnSignature) -> Result<Self> {
+        Ok(lower_ign_signature(value))
+    }
+}
+
+impl TryFrom<ir::IgnSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::IgnSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&IgnSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &IgnSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<IgnSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: IgnSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::Ign2Signature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::Ign2Signature) -> Result<Self> {
+        Ok(lower_ign2_signature(value))
+    }
+}
+
+impl TryFrom<ir::Ign2Signature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::Ign2Signature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&Ign2Signature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Ign2Signature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<Ign2Signature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Ign2Signature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -4562,6 +4774,18 @@ impl<'p> From<&FpSignature<'p>> for ir::FpSignature {
 
 impl<'p> From<&SfpSignature<'p>> for ir::SfpSignature {
     fn from(value: &SfpSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&IgnSignature<'p>> for ir::IgnSignature {
+    fn from(value: &IgnSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&Ign2Signature<'p>> for ir::Ign2Signature {
+    fn from(value: &Ign2Signature<'p>) -> Self {
         value.to_ir()
     }
 }

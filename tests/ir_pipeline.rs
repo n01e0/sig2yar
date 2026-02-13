@@ -1,8 +1,9 @@
 use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
-        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
+        ign2::Ign2Signature, logical::LogicalSignature, pdb::PdbSignature, sfp::SfpSignature,
+        wdb::WdbSignature,
     },
     yara,
 };
@@ -105,5 +106,23 @@ fn sfp_ir_render_matches_display() {
     let sig = SfpSignature::parse(raw).expect("sfp parse failed");
 
     let rendered = yara::render_sfp_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn ign_ir_render_matches_display() {
+    let raw = "Eicar-Test-Signature:bc356bae4c42f19a3de16e333ba3569c";
+    let sig = IgnSignature::parse(raw).expect("ign parse failed");
+
+    let rendered = yara::render_ign_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn ign2_ir_render_matches_display() {
+    let raw = "legacy-repo:legacy-id:Eicar-Test-Signature";
+    let sig = Ign2Signature::parse(raw).expect("ign2 parse failed");
+
+    let rendered = yara::render_ign2_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }

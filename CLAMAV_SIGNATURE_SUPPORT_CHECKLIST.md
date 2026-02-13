@@ -26,10 +26,11 @@ Last update: 2026-02-13
 - [x] `ftm` (filetype magic) ※parse + strict-safe lower（`false` + note）
 - [x] `fp` (file allow-list/false positive) ※parse + strict-safe lower（`false` + note）
 - [x] `sfp` (SHA file allow-list/false positive) ※parse + strict-safe lower（`false` + note）
+- [x] `ign` / `ign2` (ignore lists) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `ign` / `ign2` (ignore lists)
+- （現時点では該当なし。更新/差分系は 1.3 管理）
 
 ### 1.3 更新/差分系ファイル（取り込み方針未整理）
 
@@ -108,6 +109,10 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記28: `ign/ign2`（ignore lists）の最小スライスとして `parse対象` を追加。`src/parser/ign.rs` / `src/parser/ign2.rs` を新設し、ClamAV source 準拠の最小バリデーション（token count 1..3、`name[:md5]` と legacy 3-token 形式の受理、md5指定時は32hex必須）を実装。`DbType::Ign` / `DbType::Ign2` を CLI へ接続し、`src/ir.rs` に `IgnSignature` / `Ign2Signature` を追加。
+  - source根拠: docs `manual/Signatures/AllowLists`（`ign2` は `SignatureName[:md5(entry)]`、`.ign` は互換維持）, `libclamav/readdb.c:2721-2821`（`cli_loadign`, `IGN_MAX_TOKENS=3`, optional md5, legacy mode）。
+  - `src/yara.rs` に `render/lower_ign_signature` / `render/lower_ign2_signature` を追加し、ignore-list の効果（シグネチャ抑制）は ClamAV DB load/scan flow の runtime semantics 依存で YARA単体では厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記27: `fp/sfp`（file allow-list / SHA file allow-list）の最小スライスとして `parse対象` を追加。`src/parser/fp.rs` / `src/parser/sfp.rs` を新設し、Hash signature parserを土台に `.fp` は **MD5 file hashのみ**、`.sfp` は **SHA1/SHA256 file hashのみ**を受理、section-hash形式は strict に拒否するよう実装。`DbType::Fp` / `DbType::Sfp` を CLI へ接続。
   - source根拠: docs `manual/Signatures/AllowLists`（`.fp` は MD5 file allow-list、`.sfp` は SHA1/SHA256 file allow-list）, docs `manual/Signatures/HashSignatures`（hash signature format）。
   - `src/ir.rs` に `FpSignature` / `SfpSignature` を追加、`src/yara.rs` に `render/lower_fp_signature` / `render/lower_sfp_signature` を追加。

@@ -12,6 +12,8 @@ pub enum Signature {
     Ftm(FtmSignature),
     Fp(FpSignature),
     Sfp(SfpSignature),
+    Ign(IgnSignature),
+    Ign2(Ign2Signature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +150,24 @@ pub struct SfpSignature {
     pub hash_type: HashType,
     pub size: Option<u64>,
     pub min_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IgnSignature {
+    pub raw: String,
+    pub signature_name: String,
+    pub md5: Option<String>,
+    pub legacy_prefix_1: Option<String>,
+    pub legacy_prefix_2: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ign2Signature {
+    pub raw: String,
+    pub signature_name: String,
+    pub md5: Option<String>,
+    pub legacy_prefix_1: Option<String>,
+    pub legacy_prefix_2: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
