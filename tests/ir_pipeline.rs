@@ -1,6 +1,7 @@
 use sig2yar::{
     parser::{
-        cdb::CdbSignature, hash::HashSignature, idb::IdbSignature, logical::LogicalSignature,
+        cdb::CdbSignature, crb::CrbSignature, hash::HashSignature, idb::IdbSignature,
+        logical::LogicalSignature, pdb::PdbSignature,
     },
     yara,
 };
@@ -39,5 +40,23 @@ fn cdb_ir_render_matches_display() {
     let sig = CdbSignature::parse(raw).expect("cdb parse failed");
 
     let rendered = yara::render_cdb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn crb_ir_render_matches_display() {
+    let raw = "Trusted.Cert-1;1;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;A1B2C3D4;010001;1;0;1;0;baseline-comment;120;255";
+    let sig = CrbSignature::parse(raw).expect("crb parse failed");
+
+    let rendered = yara::render_crb_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn pdb_ir_render_matches_display() {
+    let raw = "H:amazon.com:20-30";
+    let sig = PdbSignature::parse(raw).expect("pdb parse failed");
+
+    let rendered = yara::render_pdb_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }

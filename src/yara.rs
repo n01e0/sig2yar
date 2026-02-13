@@ -9,10 +9,12 @@ use crate::{
     ir,
     parser::{
         cdb::CdbSignature,
+        crb::CrbSignature,
         hash::HashSignature,
         idb::IdbSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
         ndb::NdbSignature,
+        pdb::PdbSignature,
     },
 };
 
@@ -90,6 +92,14 @@ pub fn render_idb_signature(value: &ir::IdbSignature) -> String {
 
 pub fn render_cdb_signature(value: &ir::CdbSignature) -> String {
     lower_cdb_signature(value).to_string()
+}
+
+pub fn render_crb_signature(value: &ir::CrbSignature) -> String {
+    lower_crb_signature(value).to_string()
+}
+
+pub fn render_pdb_signature(value: &ir::PdbSignature) -> String {
+    lower_pdb_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -198,6 +208,147 @@ pub fn lower_cdb_signature(value: &ir::CdbSignature) -> YaraRule {
 
     YaraRule {
         name: normalize_rule_name(&value.name),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_crb_signature(value: &ir::CrbSignature) -> YaraRule {
+    let note = "crb Authenticode certificate trust/revocation checks depend on ClamAV PE certificate chain verification/runtime trust store; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_trusted".to_string(),
+            value: value.trusted.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_subject_sha1".to_string(),
+            value: value.subject.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_serial_sha1".to_string(),
+            value: value.serial.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_pubkey".to_string(),
+            value: value.pubkey.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_exponent".to_string(),
+            value: value.exponent.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_code_sign".to_string(),
+            value: value.code_sign.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_time_sign".to_string(),
+            value: value.time_sign.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_cert_sign".to_string(),
+            value: value.cert_sign.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_not_before".to_string(),
+            value: value.not_before.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_comment".to_string(),
+            value: value.comment.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "crb_authenticode_cert_chain".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: normalize_rule_name(&value.name),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_pdb_signature(value: &ir::PdbSignature) -> YaraRule {
+    let note = "pdb phishing checks depend on ClamAV RealURL/DisplayedURL extraction and phish_protected_domain runtime matcher; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "clamav_raw_signature".to_string(),
+            value: value.raw.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_pdb_record_type".to_string(),
+            value: value.record_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_pdb_pattern".to_string(),
+            value: value.pattern.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "pdb_displayed_url_match".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(flags) = &value.filter_flags {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_pdb_filter_flags".to_string(),
+            value: flags.to_string(),
+        });
+    }
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    let type_tag = match value.record_type.as_str() {
+        "R" => "regex",
+        "H" => "host",
+        _ => "unknown",
+    };
+
+    YaraRule {
+        name: format!("PDB_{type_tag}_{:08x}", stable_fnv1a_32(&value.raw)),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -3549,6 +3700,72 @@ impl<'p> TryFrom<CdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::CrbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::CrbSignature) -> Result<Self> {
+        Ok(lower_crb_signature(value))
+    }
+}
+
+impl TryFrom<ir::CrbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::CrbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&CrbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &CrbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<CrbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CrbSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::PdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::PdbSignature) -> Result<Self> {
+        Ok(lower_pdb_signature(value))
+    }
+}
+
+impl TryFrom<ir::PdbSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::PdbSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&PdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &PdbSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<PdbSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: PdbSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -3604,6 +3821,27 @@ impl<'p> From<&CdbSignature<'p>> for ir::CdbSignature {
     fn from(value: &CdbSignature<'p>) -> Self {
         value.to_ir()
     }
+}
+
+impl<'p> From<&CrbSignature<'p>> for ir::CrbSignature {
+    fn from(value: &CrbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&PdbSignature<'p>> for ir::PdbSignature {
+    fn from(value: &PdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+fn stable_fnv1a_32(input: &str) -> u32 {
+    let mut hash = 0x811c9dc5u32;
+    for byte in input.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
 }
 
 fn normalize_rule_name(input: &str) -> String {
