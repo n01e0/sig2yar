@@ -1,5 +1,6 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
+    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
+    ndb::NdbSignature, pdb::PdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -923,4 +924,27 @@ fn cdb_rule_strict_false_compiles_and_rejects_scan() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile cdb strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"PK\x03\x04"), 0);
+}
+
+#[test]
+fn crb_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "Trusted.Cert-1;1;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;A1B2C3D4;010001;1;0;1;0;baseline-comment;120;255";
+    let sig = CrbSignature::parse(raw).unwrap();
+    let src = yara::render_crb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile crb strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"MZ"), 0);
+}
+
+#[test]
+fn pdb_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "R:.+\\.amazon\\.com([/?].*)?:20-";
+    let sig = PdbSignature::parse(raw).unwrap();
+    let src = yara::render_pdb_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pdb strict-false rule");
+    assert_eq!(
+        scan_match_count(src.as_str(), b"https://www.amazon.com/"),
+        0
+    );
 }

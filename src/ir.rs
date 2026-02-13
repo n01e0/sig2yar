@@ -5,6 +5,8 @@ pub enum Signature {
     Ndb(NdbSignature),
     Idb(IdbSignature),
     Cdb(CdbSignature),
+    Crb(CrbSignature),
+    Pdb(PdbSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +69,33 @@ pub struct CdbSignature {
     pub file_pos: String,
     pub res1: String,
     pub res2: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CrbSignature {
+    pub name: String,
+    pub trusted: String,
+    pub subject: String,
+    pub serial: String,
+    pub pubkey: String,
+    pub exponent: String,
+    pub code_sign: String,
+    pub time_sign: String,
+    pub cert_sign: String,
+    pub not_before: String,
+    pub comment: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PdbSignature {
+    pub raw: String,
+    pub record_type: String,
+    pub filter_flags: Option<String>,
+    pub pattern: String,
     pub min_flevel: Option<u32>,
     pub max_flevel: Option<u32>,
 }

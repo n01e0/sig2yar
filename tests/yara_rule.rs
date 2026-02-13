@@ -1,5 +1,6 @@
 use sig2yar::parser::{
-    cdb::CdbSignature, idb::IdbSignature, logical::LogicalSignature, ndb::NdbSignature,
+    cdb::CdbSignature, crb::CrbSignature, idb::IdbSignature, logical::LogicalSignature,
+    ndb::NdbSignature, pdb::PdbSignature,
 };
 use sig2yar::yara::{YaraMeta, YaraRule, YaraString};
 
@@ -1388,5 +1389,64 @@ fn lowers_cdb_signature_to_strict_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("container traversal")
                 && value.contains("CRC")
+    )));
+}
+
+#[test]
+fn lowers_crb_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/AuthenticodeRules.html (`Name;Trusted;Subject;Serial;Pubkey;Exponent;CodeSign;TimeSign;CertSign;NotBefore;Comment[;minFL[;maxFL]]`)
+    // - source: libclamav/readdb.c:3318-3322,3358,3389-3478 (`CRT_TOKENS=13`, token range 11..13, trust/usage flags, optional serial/not_before)
+    let raw = "Trusted.Cert-1;1;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;A1B2C3D4;010001;1;0;1;0;baseline-comment;120;255";
+    let sig = CrbSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.name, "Trusted_Cert_1");
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "crb_authenticode_cert_chain"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("certificate trust/revocation")
+                && value.contains("verification/runtime trust store")
+    )));
+}
+
+#[test]
+fn lowers_pdb_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures/PhishSigs.html (`R:DisplayedURL[:FuncLevelSpec]`, `H:DisplayedHostname[:FuncLevelSpec]`)
+    // - source: libclamav/readdb.c:1613-1627 (`cli_loadpdb` -> `load_regex_matcher`)
+    // - source: libclamav/regex_list.c:503-577 (`R/H` dispatch) and 355-395 (`:min-max` functionality-level parsing)
+    let raw = "H:amazon.com:20-30";
+    let sig = PdbSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("PDB_host_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pdb_displayed_url_match"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("RealURL/DisplayedURL")
+                && value.contains("phish_protected_domain")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "min_flevel" && value == "20"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "max_flevel" && value == "30"
     )));
 }

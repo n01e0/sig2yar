@@ -1,8 +1,10 @@
 pub mod cdb;
+pub mod crb;
 pub mod hash;
 pub mod idb;
 pub mod logical;
 pub mod ndb;
+pub mod pdb;
 
 use clap::ValueEnum;
 
@@ -13,4 +15,6 @@ pub enum DbType {
     Ndb,
     Idb,
     Cdb,
+    Crb,
+    Pdb,
 }

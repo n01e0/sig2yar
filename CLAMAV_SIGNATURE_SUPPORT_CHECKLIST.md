@@ -19,12 +19,12 @@ Last update: 2026-02-13
 - [x] `ndb` (extended/body signatures) ※parse + 実用lower（近似あり）
 - [x] `idb` (icon signatures) ※parse + strict-safe lower（`false` + note）
 - [x] `cdb` (container metadata signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `crb` (trusted/revoked cert signatures) ※parse + strict-safe lower（`false` + note）
+- [x] `pdb` (phishing protected-domain signatures) ※parse + strict-safe lower（`false` + note）
 
 ### 1.2 未サポート（parse/lower未対応）
 
-- [ ] `crb`
 - [ ] `cbc` (bytecode)
-- [ ] `pdb` (phishing)
 - [ ] `wdb` (phishing)
 - [ ] `ftm`
 - [ ] `fp` / `sfp` (false positive related)
@@ -97,8 +97,8 @@ Last update: 2026-02-13
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
   - `idb`（件数: 223）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `cdb`（件数: 137）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
-  - `crb`（件数: 32）
-  - `pdb`（件数: 263）
+  - `crb`（件数: 32）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
+  - `pdb`（件数: 263）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
   - `wdb`（件数: 185）
   - `cbc`（件数: 8425, bytecodeで実装難度が高いため最後）
 
@@ -106,6 +106,14 @@ Last update: 2026-02-13
 
 ## 4) メモ（現状観測）
 
+- 2026-02-13 追記20: `pdb` の最小スライスとして `parse対象` を追加。`src/parser/pdb.rs` に ClamAV source 準拠のバリデーション（`R/H` プレフィクス、`:` 区切り、`regex_list.c:functionality_level_check` と同じ末尾 `:min-max` 形式の機能レベル抽出）を実装し、`DbType::Pdb` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/PhishSigs.html`（`R:DisplayedURL[:FuncLevelSpec]`, `H:DisplayedHostname[:FuncLevelSpec]`）, `libclamav/readdb.c:1613-1627`（`cli_loadpdb` が `load_regex_matcher` を使用）, `libclamav/regex_list.c:503-577`（`R/H` の dispatch）, `libclamav/regex_list.c:355-395`（末尾 `:min-max` での functionality-level 取り扱い）。
+  - `src/yara.rs` に `render/lower_pdb_signature` を追加し、pdb の照合は ClamAV runtime の phishing engine（RealURL/DisplayedURL 抽出 + protected-domain matcher）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
+- 2026-02-13 追記19: `crb` の最小スライスとして `parse対象` を追加。`src/parser/crb.rs` に Authenticode cert rule のバリデーション（11..13トークン、`Trusted/CodeSign/TimeSign/CertSign` の `0|1`、`Subject` 40hex必須、`Serial` 40hexまたは空、`Pubkey` 非空hex、`NotBefore` numericまたは空、`MinFL/MaxFL` numeric）を実装し、`DbType::Crb` を CLI へ接続。
+  - source根拠: docs `manual/Signatures/AuthenticodeRules.html`（`Name;Trusted;Subject;Serial;Pubkey;Exponent;CodeSign;TimeSign;CertSign;NotBefore;Comment[;minFL[;maxFL]]`）, `libclamav/readdb.c:3318-3322`（CRB format + `CRT_TOKENS=13`）, `libclamav/readdb.c:3358`（token count 11..13）, `libclamav/readdb.c:3389-3478`（trust/usage flags・`serial/not_before` optional）, `libclamav/readdb.c:3293-3311`（Subject/Serial を SHA1長で検証）。
+  - `src/yara.rs` に `render/lower_crb_signature` を追加し、Authenticode の cert chain trust/revocation は ClamAV runtime の PE cert verification/trust store 依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + YARA compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-13 追記18: `cdb` の最小スライスとして `parse対象` を追加。`src/parser/cdb.rs` に ClamAV source 準拠のバリデーション（10..12トークン、`ContainerSize/FileSizeInContainer/FileSizeReal/FilePos` の `*|n|n-m`、`IsEncrypted` の `*|0|1`、`MinFL/MaxFL` numeric）を実装し、`DbType::Cdb` を CLI へ接続。
   - source根拠: docs `ContainerMetadata`（`VirusName:ContainerType:...:Res2[:MinFL[:MaxFL]]`）, `libclamav/readdb.c:3112-3137`（`CDB_TOKENS=12`, token count, optional MinFL/MaxFL）, `libclamav/readdb.c:3234-3244`（range fields + encryption flag検証）。
   - `src/yara.rs` に `render/lower_cdb_signature` を追加し、container metadata matching は ClamAV runtime の container traversal / metadata（size, encrypted flag, file position, CRC）依存で YARA単体では厳密再現不可のため **strict-safe false + note** で明示。
