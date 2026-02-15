@@ -2964,24 +2964,26 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Expr("false".to_string());
     }
 
-    if let Some(fuzzy) = parse_fuzzy_img_subsignature(raw) {
-        notes.push(format!(
-            "subsig[{idx}] fuzzy_img hash '{}' is not representable in YARA; lowered to false",
-            preview_for_meta(&fuzzy.hash, 16)
-        ));
-        if fuzzy.distance != 0 {
-            notes.push(format!(
-                "subsig[{idx}] fuzzy_img distance={} unsupported; lowered to false",
-                fuzzy.distance
-            ));
+    if let Some(parsed_fuzzy) = parse_fuzzy_img_subsignature(raw) {
+        match parsed_fuzzy {
+            Ok(fuzzy) => {
+                notes.push(format!(
+                    "subsig[{idx}] fuzzy_img hash '{}' is not representable in YARA; lowered to false",
+                    preview_for_meta(&fuzzy.hash, 16)
+                ));
+                if fuzzy.distance != 0 {
+                    notes.push(format!(
+                        "subsig[{idx}] fuzzy_img distance={} unsupported; lowered to false",
+                        fuzzy.distance
+                    ));
+                }
+            }
+            Err(reason) => {
+                notes.push(format!(
+                    "subsig[{idx}] fuzzy_img format unsupported/invalid ({reason}); lowered to false for safety"
+                ));
+            }
         }
-        return RawSubsigLowering::Expr("false".to_string());
-    }
-
-    if looks_like_fuzzy_img_subsignature(raw) {
-        notes.push(format!(
-            "subsig[{idx}] fuzzy_img format unsupported/invalid (expected `fuzzy_img#<hexhash>[#<distance>]`); lowered to false for safety"
-        ));
         return RawSubsigLowering::Expr("false".to_string());
     }
 
@@ -4201,33 +4203,56 @@ fn lower_macro_subsignature_condition(
     (expr, lines)
 }
 
+const FUZZY_IMG_HASH_HEX_LEN: usize = 16;
+
 #[derive(Debug, Clone)]
 struct ParsedFuzzyImg {
     hash: String,
-    distance: u64,
+    distance: u32,
 }
 
-fn looks_like_fuzzy_img_subsignature(raw: &str) -> bool {
-    raw.starts_with("fuzzy_img#")
-}
-
-fn parse_fuzzy_img_subsignature(raw: &str) -> Option<ParsedFuzzyImg> {
+fn parse_fuzzy_img_subsignature(raw: &str) -> Option<Result<ParsedFuzzyImg, String>> {
     let rest = raw.strip_prefix("fuzzy_img#")?;
-    let (hash, distance) = match rest.split_once('#') {
-        Some((hash, dist)) => (hash, dist),
-        None => (rest, "0"),
-    };
 
-    if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
+    let mut parts = rest.split('#');
+    let hash = parts.next().unwrap_or_default();
+    let distance_token = parts.next();
+    if parts.next().is_some() {
+        return Some(Err(
+            "too many '#' separators (expected `fuzzy_img#<hexhash>[#<distance>]`)".to_string(),
+        ));
     }
 
-    let distance = distance.parse::<u64>().ok()?;
+    if hash.len() != FUZZY_IMG_HASH_HEX_LEN {
+        return Some(Err(format!(
+            "hash must be exactly {FUZZY_IMG_HASH_HEX_LEN} hex chars (8-byte hash), got {}",
+            hash.len()
+        )));
+    }
 
-    Some(ParsedFuzzyImg {
+    if !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(Err(
+            "hash must contain only hexadecimal characters".to_string()
+        ));
+    }
+
+    let distance = match distance_token {
+        Some(token) => match token.parse::<u32>() {
+            Ok(value) => value,
+            Err(_) => {
+                return Some(Err(format!(
+                    "distance '{}' is not a valid unsigned integer",
+                    preview_for_meta(token, 32)
+                )));
+            }
+        },
+        None => 0,
+    };
+
+    Some(Ok(ParsedFuzzyImg {
         hash: hash.to_string(),
         distance,
-    })
+    }))
 }
 
 #[derive(Debug, Clone)]
