@@ -698,6 +698,31 @@ fn lowers_byte_comparison_with_value_check() {
 }
 
 #[test]
+fn lowers_byte_comparison_offset_with_0x_prefix() {
+    // ClamAV reference: libclamav/matcher-byte-comp.c parses offset using strtol(..., 0).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0xA#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s0[j] + 10"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
+fn lowers_byte_comparison_offset_with_bare_hex_token_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0A#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison format unsupported/invalid")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_hex_exact_eq() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
