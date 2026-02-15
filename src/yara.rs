@@ -2242,6 +2242,7 @@ fn build_macro_group_index(
             "0" => None,
             "1" => Some("uint16(0) == 0x5A4D".to_string()),
             "2" => Some("uint32(0) == 0xE011CFD0 and uint32(4) == 0xE11AB1A1".to_string()),
+            "5" => Some(ndb_graphics_target_condition()),
             "6" => Some("uint32(0) == 0x464C457F".to_string()),
             "9" => Some("(uint32(0) == 0xCEFAEDFE or uint32(0) == 0xCFFAEDFE or uint32(0) == 0xFEEDFACE or uint32(0) == 0xFEEDFACF or uint32(0) == 0xBEBAFECA or uint32(0) == 0xCAFEBABE)".to_string()),
             "10" => Some("uint32(0) == 0x46445025".to_string()),
@@ -2252,7 +2253,7 @@ fn build_macro_group_index(
             "12" => Some("uint32(0) == 0xBEBAFECA".to_string()),
             _ => {
                 notes.push(format!(
-                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 2, 6, 9, 10, 11, or 12); ignored for strict macro lowering",
+                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 2, 5, 6, 9, 10, 11, or 12); ignored for strict macro lowering",
                     sig.name, sig.target_type
                 ));
                 continue;
