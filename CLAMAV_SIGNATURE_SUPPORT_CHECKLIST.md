@@ -53,7 +53,7 @@ Last update: 2026-02-15
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでhex-alpha閾値、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1..8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでhex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、rawの9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記38: `byte_comparison` 残edge-caseの1スライスとして、comparison clause が **3件以上** のケースを **strict-safe false + note** へ変更。
+  - 背景: ClamAV source（`libclamav/matcher-byte-comp.c`）では比較式はコンマ0/1個のみを受理し、`comp_count` は 1 または 2 に限定される。
+  - 変更: `src/yara.rs` の `lower_byte_comparison_condition(...)` で `comparisons.len() > 2` を safety false 化。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（`0(>>3#de3#>100,<900,=123)`）。
 - 2026-02-15 追記37: PCRE flags 残課題の1スライスとして、`A`（anchored）単体も **strict-safe false + note** へ変更。
   - 背景: ClamAVのanchor評価は matcher runtime の scan-context（開始位置/対象バッファ文脈）依存で、standalone YARA `\\A`（ファイル先頭固定）と安全に同型化できないため。
   - 変更: `src/yara.rs` で `A` を受けた場合は rule条件を `false` に倒す（`anchor+offset` / `anchor+r/e` の既存strict化は維持）。
