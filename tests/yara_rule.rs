@@ -287,6 +287,23 @@ fn lowers_pcre_anchored_with_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_anchored_with_rolling_or_encompass_to_false_for_safety() {
+    // ClamAV reference:
+    // - `A` anchoring and `r/e` scan-behavior flags are evaluated in ClamAV matcher runtime state.
+    // - standalone YARA cannot safely preserve this combined flag interaction.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/Ar").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("anchored flag combined with rolling/encompass flags is not representable safely")
+    )));
+}
+
+#[test]
 fn lowers_pcre_exact_offset_as_equality_from_clamav_regex_fixture() {
     // ClamAV reference:
     // - unit_tests/clamscan/regex_test.py:127-129 (exact offset semantics)

@@ -3043,6 +3043,13 @@ fn lower_raw_or_pcre_subsignature(
             return RawSubsigLowering::Expr("false".to_string());
         }
 
+        if anchored && (rolling || encompass) {
+            notes.push(format!(
+                "subsig[{idx}] pcre anchored flag combined with rolling/encompass flags is not representable safely in standalone YARA; lowered to false for safety"
+            ));
+            return RawSubsigLowering::Expr("false".to_string());
+        }
+
         if !unsupported_flags.is_empty() {
             unsupported_flags.sort_unstable();
             unsupported_flags.dedup();
