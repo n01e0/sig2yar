@@ -37,7 +37,7 @@ Last update: 2026-02-15
 - [x] `hdu` / `hsu` (parse + strict-safe lower)
 - [x] `ldu` (parse + strict-safe lower)
 - [x] `mdu` / `msu` (parse + strict-safe lower)
-- [ ] `ndu`
+- [x] `ndu` (parse + strict-safe lower)
 - [ ] `cfg` / `info` （シグネチャ本体ではないので扱い定義が必要）
 
 ---
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記32: `ndu`（PUA-gated extended signature DB）の最小スライスとして `parse対象` を追加。`src/parser/ndu.rs` を新設し、`NdbSignature::parse` を再利用して `.ndu` を `name:target_type:offset:body[:min[:max]]` 形式として取り込み、`DbType::Ndu` を CLI へ接続し、`src/ir.rs` に `NduSignature` を追加。
+  - source根拠: docs `manual/Signatures`（`*u` 拡張子は PUA mode でロード, `.ndb/.ndu` は extended signature record）。
+  - `src/yara.rs` に `render/lower_ndu_signature` を追加。PUA mode/runtime gating を YARA単体で厳密再現しない方針として **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-15 追記31: `mdu/msu`（PUA-gated section-hash signature DB）の最小スライスとして `parse対象` を追加。`src/parser/mdu.rs` / `src/parser/msu.rs` を新設し、Hash signature parserを土台に `.mdu` は **MD5 section hashのみ**、`.msu` は **SHA1/SHA256 section hashのみ**を受理、file-hash形式は strict に拒否するよう実装。`DbType::Mdu` / `DbType::Msu` を CLI へ接続し、`src/ir.rs` に `MduSignature` / `MsuSignature` を追加。
   - source根拠: docs `manual/Signatures`（`*u` 拡張子は PUA mode でロード）, docs `manual/Signatures/HashSignatures`（`PESectionSize:Hash:MalwareName[:MinFL]`）。
   - `src/yara.rs` に `render/lower_mdu_signature` / `render/lower_msu_signature` を追加。PUA mode/runtime gating を YARA単体で厳密再現しない方針として **strict-safe false + note** に統一（近似禁止）。

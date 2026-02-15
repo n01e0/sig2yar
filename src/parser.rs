@@ -14,6 +14,7 @@ pub mod logical;
 pub mod mdu;
 pub mod msu;
 pub mod ndb;
+pub mod ndu;
 pub mod pdb;
 pub mod sfp;
 pub mod wdb;
@@ -30,6 +31,7 @@ pub enum DbType {
     Mdu,
     Msu,
     Ndb,
+    Ndu,
     Idb,
     Cbc,
     Cdb,

@@ -3,8 +3,8 @@ use sig2yar::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
         ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
         idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
-        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, pdb::PdbSignature,
-        sfp::SfpSignature, wdb::WdbSignature,
+        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, ndu::NduSignature,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -71,6 +71,15 @@ fn msu_ir_render_matches_display() {
     let sig = MsuSignature::parse(raw).expect("msu parse failed");
 
     let rendered = yara::render_msu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn ndu_ir_render_matches_display() {
+    let raw = "PUA.Win.Packer.YodaProt-1:1:EP+0:e803000000eb01??bb55000000e803000000eb01??e88e000000e803000000eb01??e881000000e803000000eb01??e8b7000000e803000000eb01??e8aa000000e803000000eb01??83fb55e803000000eb01??752d:18";
+    let sig = NduSignature::parse(raw).expect("ndu parse failed");
+
+    let rendered = yara::render_ndu_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
 

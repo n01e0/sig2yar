@@ -9,7 +9,7 @@ use sig2yar::{
         ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
         idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
         logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature,
-        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
+        ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -58,6 +58,11 @@ fn main() -> Result<()> {
             let sig = NdbSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_ndb_signature(&ir));
+        }
+        DbType::Ndu => {
+            let sig = NduSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_ndu_signature(&ir));
         }
         DbType::Idb => {
             let sig = IdbSignature::parse(&args.signature)?;

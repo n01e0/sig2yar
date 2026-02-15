@@ -2,7 +2,8 @@ use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
     hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
     ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-    msu::MsuSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1146,6 +1147,19 @@ fn msu_rule_strict_false_compiles_and_rejects_scan() {
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile msu strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
+}
+
+#[test]
+fn ndu_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "PUA.Win.Packer.YodaProt-1:1:EP+0:e803000000eb01??bb55000000e803000000eb01??e88e000000e803000000eb01??e881000000e803000000eb01??e8b7000000e803000000eb01??e8aa000000e803000000eb01??83fb55e803000000eb01??752d:18";
+    let sig = NduSignature::parse(raw).unwrap();
+    let src = yara::render_ndu_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile ndu strict-false rule");
+    assert_eq!(
+        scan_match_count(src.as_str(), b"PUA.Win.Packer.YodaProt-1"),
+        0
+    );
 }
 
 #[test]
