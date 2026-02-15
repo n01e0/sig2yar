@@ -4886,7 +4886,27 @@ fn stable_fnv1a_32(input: &str) -> u32 {
 }
 
 fn normalize_rule_name(input: &str) -> String {
-    input.replace('.', "_").replace('-', "_")
+    let mut out: String = input
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    if out.is_empty() {
+        out.push('_');
+        return out;
+    }
+
+    if out.as_bytes()[0].is_ascii_digit() {
+        out.insert(0, '_');
+    }
+
+    out
 }
 
 fn hash_fn(hash_type: &ir::HashType) -> &'static str {
