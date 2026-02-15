@@ -701,6 +701,32 @@ fn yara_rule_with_malformed_fuzzy_img_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_fuzzy_img_short_hash_false_rejects_scan() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:92-105
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#abcdef#0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("fuzzy_img format unsupported/invalid"));
+    assert!(src.contains("hash must be exactly 16 hex chars"));
+    assert_eq!(scan_match_count(src.as_str(), b"xxfuzzy_img#abcdef#0yy"), 0);
+}
+
+#[test]
+fn yara_rule_with_fuzzy_img_invalid_distance_token_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#x").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("fuzzy_img format unsupported/invalid"));
+    assert!(src.contains("distance 'x' is not a valid unsigned integer"));
+    assert_eq!(
+        scan_match_count(src.as_str(), b"xxfuzzy_img#af2ad01ed42993c7#xyy"),
+        0
+    );
+}
+
+#[test]
 fn yara_rule_with_byte_comparison_offset_0x_prefix_matches_fixture() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0xA#ib1#=65)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

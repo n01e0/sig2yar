@@ -109,13 +109,18 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記57: `fuzzy_img` strict-safe の parser境界を ClamAV source 準拠で明確化。
+  - 背景: 既存 `parse_fuzzy_img_subsignature(...)` は hash 長を制限せず、`fuzzy_img#abcdef#0` のような短い hash も「非表現要素」として扱っていた。
+  - 変更: `src/yara.rs` で `fuzzy_img` parse を `Option<Result<...>>` 化し、`fuzzy_img#` prefix の入力を専用判定。hash は **16 hex chars（8-byte）必須**、distance は unsigned integer のみ許可（省略時0）。違反時は詳細理由つきで **format unsupported/invalid + false**。
+  - source根拠: `libclamav/readdb.c`（`fuzzy_img` format loadエラーメッセージ）, `libclamav_rust/src/fuzzy_hash.rs`（`ImageFuzzyHash` は length 16 必須、distance は `u32` parse、`distance!=0` は InvalidHammingDistance）。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `fuzzy_img#abcdef#0`（short hash）と `#x`（invalid distance token）の strict-false fixture を追加。
 - 2026-02-15 追記56: `macro` linked NDB target 拡張として `target_type=4`（MAIL）を strict subset に追加。
   - 背景: linked member の strict subset を `target_type=3` まで拡張後も、MAIL向け NDB member は安全に表現可能でも false 側に倒れていた。
   - 変更: `target_type=4` を許可し、macro member clause に MAIL guard（`ndb_mail_target_condition()`）を併置。`target_type in {0,1,2,3,4,5,6,7,9,10,11,12}` 以外は引き続き strict-safe false（ignored）。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（mail fixture match、`MZ` fixture non-match、`target_type=8` は false）。
 - 2026-02-15 追記55: `macro` linked NDB target 拡張として `target_type=3`（HTML）を strict subset に追加。
   - 背景: linked member の strict subset を `target_type=7` まで拡張後も、HTML向け NDB member は安全に表現可能でも false 側に倒れていた。
-  - 変更: `target_type=3` を許可し、macro member clause に HTML guard（`ndb_html_target_condition()`）を併置。`target_type in {0,1,2,3,5,6,7,9,10,11,12}` 以外は引き続き strict-safe false（ignored）。
+  - 変更: `target_type=3` を許可し、macro member clause に HTML guard（`ndb_html_target_condition()`）を併置（※その後の追記56で現行許可集合は `{0,1,2,3,4,5,6,7,9,10,11,12}` へ拡張）。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（HTML fixture match、`MZ` fixture non-match、`target_type=4` は false）。
 - 2026-02-15 追記54: `macro` linked NDB target 拡張として `target_type=7`（ASCII）を strict subset に追加。
   - 背景: linked member の strict subset を `target_type=5` まで拡張後も、ASCII向け NDB member は安全に表現可能でも false 側に倒れていた。

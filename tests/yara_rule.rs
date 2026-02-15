@@ -1326,6 +1326,39 @@ fn lowers_malformed_fuzzy_img_to_safe_false_instead_of_raw_string() {
 }
 
 #[test]
+fn lowers_fuzzy_img_short_hash_to_safe_false_with_hash_length_note() {
+    // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:92-105
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#abcdef#0").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("fuzzy_img format unsupported/invalid")
+                && value.contains("hash must be exactly 16 hex chars")
+    )));
+}
+
+#[test]
+fn lowers_fuzzy_img_invalid_distance_token_to_safe_false() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#x").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("fuzzy_img format unsupported/invalid")
+                && value.contains("distance 'x' is not a valid unsigned integer")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_with_second_subsig_to_safe_false_from_clamav_fixture() {
     // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
     // (`logo.png.good.with.second.subsig` / `logo.png.bad.with.second.subsig`)
