@@ -3230,8 +3230,38 @@ fn parse_byte_comparison_offset(input: &str) -> Option<i64> {
         return None;
     };
 
-    let value = parse_clamav_numeric(rest)? as i64;
+    let value = parse_clamav_base0_u64(rest.trim())?;
+    let value = i64::try_from(value).ok()?;
     Some(sign * value)
+}
+
+fn parse_clamav_base0_u64(input: &str) -> Option<u64> {
+    if input.is_empty() {
+        return None;
+    }
+
+    if let Some(rest) = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+    {
+        if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        return u64::from_str_radix(rest, 16).ok();
+    }
+
+    if input.len() > 1 && input.starts_with('0') {
+        if !input.chars().all(|c| matches!(c, '0'..='7')) {
+            return None;
+        }
+        return u64::from_str_radix(input, 8).ok();
+    }
+
+    if input.chars().all(|c| c.is_ascii_digit()) {
+        return input.parse::<u64>().ok();
+    }
+
+    None
 }
 
 fn parse_byte_comparison_options(input: &str) -> Option<ByteCmpOptions> {
