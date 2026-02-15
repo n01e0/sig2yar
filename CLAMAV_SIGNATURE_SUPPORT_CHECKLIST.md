@@ -64,7 +64,7 @@ Last update: 2026-02-15
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U` と ClamAV側 `r/e` を部分反映。`A`・maxshift without `e`・`E`・`g`・legacy `a`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59で **self-referential trigger**（ClamAV loader が malformed 扱い）を false+note 化、追記60で **slash含有だがPCRE構文不正な subsig** の raw fallback 経路を閉じて false+note 化済み。残は runtime semantics 自体の厳密再現可否。
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59で **self-referential trigger**（ClamAV loader が malformed 扱い）を false+note 化、追記60で **slash含有だがPCRE構文不正な subsig** の raw fallback 経路を閉じて false+note 化、追記61で **`*,maxshift` malformed offset** を false+note 化済み。残は runtime semantics 自体の厳密再現可否。
 - [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -109,6 +109,11 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記61: PCRE offset `*,maxshift` を source準拠で malformed 扱いに厳密化。
+  - 背景: 既存実装は `*,10` を `*` 同等として受理していたが、ClamAV `cli_caloff` は `"*"` のみを CLI_OFF_ANY として受理し、`*,10` は malformed。
+  - 変更: `src/yara.rs` の `parse_pcre_offset_spec(...)` で `base=="*" && maxshiftあり` を unsupported として `false + note` 化。
+  - source根拠: `libclamav/matcher.c:360-363`（`"*"` 受理）, `371-380`（`,` split）, `444-447`（`*` の absolute parse失敗で invalid）。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `*,10:0/abc/e` fixture を追加し strict-false を固定。
 - 2026-02-15 追記60: malformed PCRE subsignature の raw fallback 経路を閉じ、strict-safe false に統一。
   - 背景: 既存lowerは `parse_pcre_like(...)` 失敗時に通常raw文字列へ落ちるため、`0/abc` のような slash含有 malformed が literal match として残る余地があった。
   - 変更: `src/yara.rs` に `looks_like_pcre_subsignature(...)`（`/` 含有）を追加し、PCRE parse失敗時は **`pcre subsignature format unsupported/invalid + false`** に統一。

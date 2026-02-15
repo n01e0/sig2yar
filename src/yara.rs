@@ -4474,6 +4474,12 @@ fn parse_pcre_offset_spec(input: &str) -> PcreOffsetSpec {
         None => (input, None),
     };
 
+    if base == "*" {
+        // ClamAV `cli_caloff` accepts only exact "*" for CLI_OFF_ANY.
+        // Forms like "*,10" are malformed (fall through to invalid absolute parse).
+        return PcreOffsetSpec::Unsupported(input.to_string());
+    }
+
     if base.starts_with("VI") {
         return PcreOffsetSpec::VersionInfo(input.to_string());
     }
