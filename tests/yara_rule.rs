@@ -278,6 +278,24 @@ fn lowers_pcre_trigger_prefix_resolved_false_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_malformed_pcre_subsignature_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/readdb.c routes subsignatures containing '/' to PCRE loader path
+    //   before plain content-match handling.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre subsignature format unsupported/invalid")
+    )));
+}
+
+#[test]
 fn lowers_pcre_offset_with_rolling_flag() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/r").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

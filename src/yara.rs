@@ -3123,6 +3123,13 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::String(line);
     }
 
+    if looks_like_pcre_subsignature(raw) {
+        notes.push(format!(
+            "subsig[{idx}] pcre subsignature format unsupported/invalid (expected `Trigger/PCRE/[Flags]`); lowered to false for safety"
+        ));
+        return RawSubsigLowering::Expr("false".to_string());
+    }
+
     let escaped = escape_yara_string(raw);
     let render_mods = render_string_modifiers(&string_mods);
     RawSubsigLowering::String(format!("{id} = \"{}\"{}", escaped, render_mods))
@@ -4779,6 +4786,12 @@ fn lower_pcre_offset_condition(
             Some("false".to_string())
         }
     }
+}
+
+fn looks_like_pcre_subsignature(raw: &str) -> bool {
+    // ClamAV loader path (`readdb.c`) routes any subsignature containing '/'
+    // to PCRE handling before plain content-match handling.
+    raw.contains('/')
 }
 
 fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
