@@ -89,6 +89,10 @@ fn lowers_target_description_container_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("Container=CL_TYPE_ZIP"))));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_unsupported" && value == "target_description_container_constraint")));
 }
 
 #[test]
@@ -101,6 +105,10 @@ fn lowers_target_description_intermediates_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("Intermediates=1"))));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_unsupported" && value == "target_description_intermediates_constraint")));
 }
 
 #[test]
