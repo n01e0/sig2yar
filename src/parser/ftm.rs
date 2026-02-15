@@ -72,17 +72,25 @@ impl<'p> FtmSignature<'p> {
         }
 
         let min_flevel = if parts.len() >= 7 {
-            Some(parts[6].parse::<u32>().map_err(|_| {
-                anyhow!("Invalid ftm signature: malformed MinFL field (expected numeric)")
-            })?)
+            if parts[6].is_empty() {
+                None
+            } else {
+                Some(parts[6].parse::<u32>().map_err(|_| {
+                    anyhow!("Invalid ftm signature: malformed MinFL field (expected numeric)")
+                })?)
+            }
         } else {
             None
         };
 
         let max_flevel = if parts.len() == 8 {
-            Some(parts[7].parse::<u32>().map_err(|_| {
-                anyhow!("Invalid ftm signature: malformed MaxFL field (expected numeric)")
-            })?)
+            if parts[7].is_empty() {
+                None
+            } else {
+                Some(parts[7].parse::<u32>().map_err(|_| {
+                    anyhow!("Invalid ftm signature: malformed MaxFL field (expected numeric)")
+                })?)
+            }
         } else {
             None
         };
@@ -172,6 +180,15 @@ mod tests {
         assert_eq!(parsed.magic_bytes, "25504446");
         assert_eq!(parsed.min_flevel, Some(120));
         assert_eq!(parsed.max_flevel, Some(255));
+    }
+
+    #[test]
+    fn parse_type1_ftm_allows_empty_min_flevel_with_max() {
+        let sig = "0:0:89504e47:PNG:CL_TYPE_ANY:CL_TYPE_GRAPHICS::121";
+        let parsed = FtmSignature::parse(sig).unwrap();
+
+        assert_eq!(parsed.min_flevel, None);
+        assert_eq!(parsed.max_flevel, Some(121));
     }
 
     #[test]

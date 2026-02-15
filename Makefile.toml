@@ -7,7 +7,7 @@ command = "bash"
 args = ["scripts/clamav-unpack.sh"]
 
 [tasks.itest]
-#dependencies = ["clamav-update", "clamav-unpack"]
+dependencies = ["clamav-update", "clamav-unpack"]
 command = "cargo"
 args = ["test", "--test", "clamav_db"]
-env = { CLAMAV_DB_DIR = "clamav-db/unpacked", CLAMAV_DB_REQUIRED = "1", TMPDIR = "tmp", CARGO_HOME = "target/cargo-home" }
+env = { CLAMAV_DB_DIR = "clamav-db/unpacked", CLAMAV_DB_REQUIRED = "1", CARGO_HOME = "target/cargo-home" }
