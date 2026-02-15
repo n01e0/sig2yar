@@ -164,6 +164,32 @@ fn yara_rule_with_re_range_offset_nonmatch_fixture_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_encompass_match_end_boundary_nonmatch_fixture_rejects_scan() {
+    // ClamAV reference:
+    // - unit_tests/check_matchers.c:144 (Test7 `/34567890/e` with `3,7` expected CL_SUCCESS)
+    // - matcher-pcre.c:624-629 (`e` uses bounded adjlength=adjshift)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;3,7:0/34567890/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("(@s1[j] + !s1[j]) <= 10"));
+    assert_eq!(scan_match_count(src.as_str(), b"not34567890truly"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_encompass_match_end_boundary_match_fixture_matches_scan() {
+    // ClamAV reference:
+    // - unit_tests/check_matchers.c:142 (Test5 `/12345678/e` with `3,8` expected CL_VIRUS)
+    // - matcher-pcre.c:624-629 (`e` uses bounded adjlength=adjshift)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;3,8:0/12345678/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("(@s1[j] + !s1[j]) <= 11"));
+    assert_eq!(scan_match_count(src.as_str(), b"not12345678truly"), 1);
+}
+
+#[test]
 fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

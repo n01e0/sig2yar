@@ -4577,7 +4577,9 @@ fn pcre_occurrence_exact_expr(core: &str, start: &str, rolling: bool) -> String 
 }
 
 fn pcre_occurrence_window_expr(core: &str, start: &str, end: &str) -> String {
-    format!("for any j in (1..#{core}) : (@{core}[j] >= {start} and @{core}[j] <= {end})")
+    format!(
+        "for any j in (1..#{core}) : (@{core}[j] >= {start} and (@{core}[j] + !{core}[j]) <= {end})"
+    )
 }
 
 fn lower_pcre_offset_window_condition(
@@ -4605,6 +4607,8 @@ fn lower_pcre_offset_window_condition(
             }
 
             if encompass {
+                // ClamAV encompass mode bounds the scanned buffer length to `adjshift`
+                // (`matcher-pcre.c`), so match *end* must stay within `start + maxshift`.
                 pcre_occurrence_window_expr(core, &start, &end)
             } else {
                 notes.push(format!(
