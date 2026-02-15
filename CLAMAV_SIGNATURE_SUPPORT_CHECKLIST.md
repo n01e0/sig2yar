@@ -94,7 +94,7 @@ Last update: 2026-02-15
 
 （継続トラック）
 - [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8・decimal-base hex-alpha strict false・non-raw auto-base strict false は対応済み）
-- [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset は実装済み。残は CLI経路連携・対象拡張）
+- [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset 実装、2026-02-15: CLI `--ndb-context` 連携まで実装済み。残は対象拡張）
 - [ ] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記45: `macro` の ndb strict subset 連携を CLI 経路へ接続。
+  - 背景: 既存の `lower_logical_signature_with_ndb_context(...)` は API 経路のみで、CLI から linked NDB を渡せなかった。
+  - 変更: `sig2yar logical` に `--ndb-context <NDB_SIG>`（repeatable）を追加し、指定時は linked NDB を parse して strict subset 連携を有効化。
+  - テスト: `src/bin/sig2yar/main.rs` に unit test 追加（context なし strict-false / context あり link 成立 / invalid context エラー）、`src/bin/sig2yar/args.rs` に引数parse test追加。
 - 2026-02-15 追記44: `byte_comparison` threshold の leading-zero token 境界（base-0/octal）を fixture で固定。
   - 背景: ClamAV source の compare value parse（`strtoll(..., 0)`）に合わせ、digit-only かつ先頭 `0` の token を octal として扱う必要がある。
   - 変更: `010` は 8 として受理、`08` のような invalid octal は malformed 扱い。
