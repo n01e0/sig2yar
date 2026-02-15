@@ -821,14 +821,20 @@ fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_byte_comparison_raw_variable_size_with_shift_expr() {
+fn lowers_byte_comparison_raw_size_3_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher-byte-comp.c accepts binary byte_len only in {1,2,4,8}.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#ib3#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("for any j in (1..#s0)"));
-    assert!(rule.condition.contains("(@s0[j] + 4) + 3 <= filesize"));
-    assert!(rule.condition.contains("<< 16"));
-    assert!(!rule.condition.contains("and false"));
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("raw size 3 unsupported")
+                && value.contains("supports only 1/2/4/8 bytes")
+                && value.contains("lowered to false for safety")
+    )));
 }
 
 #[test]
