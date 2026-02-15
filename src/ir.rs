@@ -8,6 +8,7 @@ pub enum Signature {
     Mdu(MduSignature),
     Msu(MsuSignature),
     Ndb(NdbSignature),
+    Ndu(NduSignature),
     Idb(IdbSignature),
     Cbc(CbcSignature),
     Cdb(CdbSignature),
@@ -95,6 +96,16 @@ pub struct MsuSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NdbSignature {
+    pub name: String,
+    pub target_type: String,
+    pub offset: String,
+    pub body: String,
+    pub min_flevel: Option<u32>,
+    pub max_flevel: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NduSignature {
     pub name: String,
     pub target_type: String,
     pub offset: String,

@@ -2,7 +2,8 @@ use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
     hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
     ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-    msu::MsuSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1893,6 +1894,36 @@ fn lowers_msu_signature_to_strict_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("PUA-gated section-hash signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_ndu_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures (`*.ndb`/`*.ndu` use extended signature record format)
+    let raw = "PUA.Win.Packer.YodaProt-1:1:EP+0:e803000000eb01??bb55000000e803000000eb01??e88e000000e803000000eb01??e881000000e803000000eb01??e8b7000000e803000000eb01??e8aa000000e803000000eb01??83fb55e803000000eb01??752d:18";
+    let sig = NduSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("NDU_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "ndu_pua_extended_signature_semantics"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_target_type" && value == "1"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("PUA-gated extended signatures")
                 && value.contains("lowered to false for safety")
     )));
 }

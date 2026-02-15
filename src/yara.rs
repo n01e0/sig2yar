@@ -24,6 +24,7 @@ use crate::{
         mdu::MduSignature,
         msu::MsuSignature,
         ndb::NdbSignature,
+        ndu::NduSignature,
         pdb::PdbSignature,
         sfp::SfpSignature,
         wdb::WdbSignature,
@@ -104,6 +105,10 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
 
 pub fn render_ndb_signature(value: &ir::NdbSignature) -> String {
     lower_ndb_signature(value).to_string()
+}
+
+pub fn render_ndu_signature(value: &ir::NduSignature) -> String {
+    lower_ndu_signature(value).to_string()
 }
 
 pub fn render_idb_signature(value: &ir::IdbSignature) -> String {
@@ -1113,6 +1118,81 @@ pub fn lower_msu_signature(value: &ir::MsuSignature) -> YaraRule {
             normalize_rule_name(&value.name),
             hash_tag(&value.hash)
         ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_ndu_signature(value: &ir::NduSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures (`*.ndb`/`*.ndu` use extended signature record format)
+    let note = "ndu signatures are PUA-gated extended signatures in ClamAV runtime flow; standalone YARA cannot preserve equivalent PUA/runtime gating semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_target_type".to_string(),
+            value: value.target_type.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_offset".to_string(),
+            value: value.offset.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_body_len".to_string(),
+            value: value.body.len().to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_body_preview".to_string(),
+            value: preview_for_meta(&value.body, 128),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "ndu_pua_extended_signature_semantics".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+    if let Some(max) = value.max_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "max_flevel".to_string(),
+            value: max.to_string(),
+        });
+    }
+
+    let fingerprint = stable_fnv1a_32(&format!(
+        "{}:{}:{}:{}:{}:{}",
+        value.name,
+        value.target_type,
+        value.offset,
+        value.body,
+        value
+            .min_flevel
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        value
+            .max_flevel
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+    ));
+
+    YaraRule {
+        name: format!("NDU_{fingerprint:08x}"),
         meta,
         strings: Vec::new(),
         condition: "false".to_string(),
@@ -5129,6 +5209,39 @@ impl<'p> TryFrom<MsuSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::NduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::NduSignature) -> Result<Self> {
+        Ok(lower_ndu_signature(value))
+    }
+}
+
+impl TryFrom<ir::NduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::NduSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&NduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &NduSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<NduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: NduSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -5170,6 +5283,12 @@ impl<'p> From<&HashSignature<'p>> for ir::HashSignature {
 
 impl<'p> From<&NdbSignature<'p>> for ir::NdbSignature {
     fn from(value: &NdbSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&NduSignature<'p>> for ir::NduSignature {
+    fn from(value: &NduSignature<'p>) -> Self {
         value.to_ir()
     }
 }

@@ -2,8 +2,8 @@ use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
     hash::HashSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature,
     ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature,
-    mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature,
-    wdb::WdbSignature,
+    mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 use std::collections::HashSet;
@@ -149,6 +149,44 @@ fn sample_logical_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Ve
 
 fn sample_ndb_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
     let files = collect_files(db_dir, &["ndb"]);
+    let mut rng = XorShift64::new(seed);
+    let mut samples: Vec<Sample> = Vec::new();
+    let mut seen = 0usize;
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            seen += 1;
+            let sample = Sample {
+                line: line.to_string(),
+                origin: format!("{}:{}", path.display(), line_no + 1),
+            };
+
+            if samples.len() < sample_size {
+                samples.push(sample);
+                continue;
+            }
+
+            let idx = rng.gen_range(seen);
+            if idx < sample_size {
+                samples[idx] = sample;
+            }
+        }
+    }
+
+    samples
+}
+
+fn sample_ndu_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
+    let files = collect_files(db_dir, &["ndu"]);
     let mut rng = XorShift64::new(seed);
     let mut samples: Vec<Sample> = Vec::new();
     let mut seen = 0usize;
@@ -1165,6 +1203,59 @@ fn parse_ndb_signatures_from_clamav_db() {
 }
 
 #[test]
+fn parse_ndu_signatures_from_clamav_db() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let files = collect_files(&db_dir, &["ndu"]);
+    if files.is_empty() {
+        if clamav_db_required() {
+            panic!("No .ndu files found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut total = 0usize;
+    let mut failures = 0usize;
+    let mut samples: Vec<String> = Vec::new();
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            total += 1;
+            if let Err(err) = NduSignature::parse(line) {
+                failures += 1;
+                if samples.len() < MAX_ERROR_SAMPLES {
+                    samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
+                }
+            }
+        }
+    }
+
+    if total == 0 {
+        panic!("No ndu signatures found under {:?}", db_dir);
+    }
+    if failures > 0 {
+        panic!(
+            "Failed to parse {failures} of {total} ndu signatures. Samples:\n{}",
+            samples.join("\n")
+        );
+    }
+}
+
+#[test]
 fn parse_idb_signatures_from_clamav_db() {
     let Some(db_dir) = clamav_db_dir() else {
         if clamav_db_required() {
@@ -2014,6 +2105,37 @@ fn yara_ndb_rules_from_db_samples_compile() {
             .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
         let ir = sig.to_ir();
         let src = yara::render_ndb_signature(&ir);
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_ndu_rules_from_db_samples_compile() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let sample_size = parse_sample_size();
+    let seed = parse_seed();
+    let samples = sample_ndu_signatures(&db_dir, sample_size, seed);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No ndu signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    for sample in samples {
+        let sig = NduSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
+        let ir = sig.to_ir();
+        let src = yara::render_ndu_signature(&ir);
 
         yara_x::compile(src.as_str())
             .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
