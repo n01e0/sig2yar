@@ -3010,12 +3010,7 @@ fn lower_raw_or_pcre_subsignature(
                         inline_flags.push('U');
                     }
                 }
-                'a' => {
-                    anchored = true;
-                    notes.push(format!(
-                        "subsig[{idx}] legacy pcre flag 'a' treated as anchored"
-                    ));
-                }
+                'a' => unsupported_flags.push('a'),
                 'd' => unsupported_flags.push('d'),
                 other => unsupported_flags.push(other),
             }
