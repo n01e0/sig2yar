@@ -57,6 +57,7 @@ pub enum YaraString {
 struct MacroGroupMember {
     source_name: String,
     lowered_body: String,
+    target_guard: Option<String>,
 }
 
 type MacroGroupIndex = HashMap<u32, Vec<MacroGroupMember>>;
@@ -2237,13 +2238,17 @@ fn build_macro_group_index(
             continue;
         }
 
-        if sig.target_type != "0" {
-            notes.push(format!(
-                "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0); ignored for strict macro lowering",
-                sig.name, sig.target_type
-            ));
-            continue;
-        }
+        let target_guard = match sig.target_type.as_str() {
+            "0" => None,
+            "1" => Some("uint16(0) == 0x5A4D".to_string()),
+            _ => {
+                notes.push(format!(
+                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0 or 1); ignored for strict macro lowering",
+                    sig.name, sig.target_type
+                ));
+                continue;
+            }
+        };
 
         let mut body_notes = Vec::new();
         let Some(lowered_body) = lower_ndb_body_pattern(&sig.body, &mut body_notes) else {
@@ -2262,6 +2267,7 @@ fn build_macro_group_index(
         groups.entry(group_id).or_default().push(MacroGroupMember {
             source_name: sig.name.to_string(),
             lowered_body,
+            target_guard,
         });
     }
 
@@ -4141,13 +4147,20 @@ fn lower_macro_subsignature_condition(
         lines.push(format!("{member_id} = {{ {} }}", member.lowered_body));
 
         let member_core = member_id.trim_start_matches('$');
-        let clause = if macro_sig.min == macro_sig.max {
+        let window_clause = if macro_sig.min == macro_sig.max {
             format!("for any j in (1..#{member_core}) : ( @{member_core}[j] == {start_expr} )")
         } else {
             format!(
                 "for any j in (1..#{member_core}) : ( @{member_core}[j] >= {start_expr} and @{member_core}[j] <= {end_expr} )"
             )
         };
+
+        let clause = if let Some(target_guard) = &member.target_guard {
+            format!("({target_guard}) and ({window_clause})")
+        } else {
+            window_clause
+        };
+
         member_clauses.push(clause);
         member_names.push(member.source_name.as_str());
     }
