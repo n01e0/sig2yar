@@ -53,7 +53,7 @@ Last update: 2026-02-15
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octalを受理し bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..` 形式を受理、decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octalを受理し bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記44: `byte_comparison` threshold の leading-zero token 境界（base-0/octal）を fixture で固定。
+  - 背景: ClamAV source の compare value parse（`strtoll(..., 0)`）に合わせ、digit-only かつ先頭 `0` の token を octal として扱う必要がある。
+  - 変更: `010` は 8 として受理、`08` のような invalid octal は malformed 扱い。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（`0(>>0#de2#=010)` は `"08"` match、`0(>>0#de2#=08)` は strict-false）。
 - 2026-02-15 追記43: `byte_comparison` threshold の `0x..` 受理境界を fixture で固定。
   - 背景: compare value は source上 signed/auto-base 側の文脈を持つため、`0x` プレフィックス token の受理可否を明示し、bare hex-alpha との境界を固定したい。
   - 変更: decimal base では bare hex-alpha（例: `A0`）のみ strict false とし、`0xA` は受理して `10` 相当で lower。

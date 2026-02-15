@@ -3398,18 +3398,17 @@ fn parse_clamav_numeric(input: &str) -> Option<u64> {
         return None;
     }
 
-    if let Some(rest) = input
+    // ClamAV uses `strtol/strtoll(..., 0)` for numeric fields, so digit-only
+    // tokens with a leading zero are octal (`010` => 8). We still keep
+    // bare hex-alpha token parsing for strict-safe boundary reporting
+    // (e.g. decimal base `A0` => parsed then rejected to false with note).
+    if input
         .strip_prefix("0x")
         .or_else(|| input.strip_prefix("0X"))
+        .is_some()
+        || input.chars().all(|c| c.is_ascii_digit())
     {
-        if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_hexdigit()) {
-            return None;
-        }
-        return u64::from_str_radix(rest, 16).ok();
-    }
-
-    if input.chars().all(|c| c.is_ascii_digit()) {
-        return input.parse::<u64>().ok();
+        return parse_clamav_base0_u64(input);
     }
 
     if input.chars().all(|c| c.is_ascii_hexdigit()) {
