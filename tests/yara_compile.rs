@@ -562,6 +562,22 @@ fn yara_rule_with_macro_group_linked_ndb_target_type_11_matches_with_swf_guard()
 }
 
 #[test]
+fn yara_rule_with_macro_group_linked_ndb_target_type_12_matches_with_java_class_guard() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![NdbSignature::parse("D1:12:$12:626262").unwrap().to_ir()];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("uint32(0) == 0xBEBAFECA"));
+    assert_eq!(
+        scan_match_count(src.as_str(), b"\xCA\xFE\xBA\xBEaaaxxxbbb"),
+        1
+    );
+    assert_eq!(scan_match_count(src.as_str(), b"MZaaaxxxbbb"), 0);
+}
+
+#[test]
 fn yara_rule_with_macro_group_linked_ndb_invalid_target_strict_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
     let ndb_links = vec![NdbSignature::parse("D1:2:$12:626262").unwrap().to_ir()];
@@ -569,7 +585,7 @@ fn yara_rule_with_macro_group_linked_ndb_invalid_target_strict_false_rejects_sca
     let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("target_type=2 (expected 0, 1, 6, 9, 10, or 11)"));
+    assert!(src.contains("target_type=2 (expected 0, 1, 6, 9, 10, 11, or 12)"));
     assert_eq!(scan_match_count(src.as_str(), b"MZaaaxxxbbb"), 0);
 }
 
