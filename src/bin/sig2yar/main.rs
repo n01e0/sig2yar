@@ -6,9 +6,10 @@ use clap::Parser;
 use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
-        ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, ndb::NdbSignature,
-        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
+        ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
+        idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
+        logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature,
+        wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -27,6 +28,16 @@ fn main() -> Result<()> {
             let ir = sig.to_ir();
             let rule = yara::lower_logical_signature(&ir)?;
             println!("{}", rule);
+        }
+        DbType::Hdu => {
+            let sig = HduSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_hdu_signature(&ir));
+        }
+        DbType::Hsu => {
+            let sig = HsuSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_hsu_signature(&ir));
         }
         DbType::Ldu => {
             let sig = LduSignature::parse(&args.signature)?;

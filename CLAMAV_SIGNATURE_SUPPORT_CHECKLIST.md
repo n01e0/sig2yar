@@ -1,6 +1,6 @@
 # ClamAV Signature Support Checklist
 
-Last update: 2026-02-14
+Last update: 2026-02-15
 
 このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
 
@@ -34,7 +34,7 @@ Last update: 2026-02-14
 
 ### 1.3 更新/差分系ファイル（取り込み方針未整理）
 
-- [ ] `hdu` / `hsu`
+- [x] `hdu` / `hsu` (parse + strict-safe lower)
 - [x] `ldu` (parse + strict-safe lower)
 - [ ] `mdu` / `msu`
 - [ ] `ndu`
@@ -109,6 +109,10 @@ Last update: 2026-02-14
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記30: `hdu/hsu`（PUA-gated hash signature DB）の最小スライスとして `parse対象` を追加。`src/parser/hdu.rs` / `src/parser/hsu.rs` を新設し、Hash signature parserを土台に `.hdu` は **MD5 file hashのみ**、`.hsu` は **SHA1/SHA256 file hashのみ**を受理、section-hash形式は strict に拒否するよう実装。`DbType::Hdu` / `DbType::Hsu` を CLI へ接続し、`src/ir.rs` に `HduSignature` / `HsuSignature` を追加。
+  - source根拠: docs `manual/Signatures`（`*u` 拡張子は PUA mode でロード）, docs `manual/Signatures/HashSignatures`（`HashString:FileSize:MalwareName[:MinFL]`）。
+  - `src/yara.rs` に `render/lower_hdu_signature` / `render/lower_hsu_signature` を追加。PUA mode/runtime gating を YARA単体で厳密再現しない方針として **strict-safe false + note** に統一（近似禁止）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-14 追記29: `ldu`（PUA-gated logical signature DB）の最小スライスとして `parse対象` を追加。`src/parser/ldu.rs` を新設し、最小バリデーション（empty拒否・`;` delimiter必須・signature name必須）を実装。`DbType::Ldu` を CLI へ接続し、`src/ir.rs` に `LduSignature` を追加。
   - source根拠: docs `manual/Signatures`（`*.ldb *.ldu; *.idb: Logical Signatures`、`*u` 拡張子は PUA mode でロード）。
   - `src/yara.rs` に `render/lower_ldu_signature` を追加し、PUA mode 依存の logical runtime semantics は YARA単体で厳密再現不可のため **strict-safe false + note** に統一（近似禁止）。

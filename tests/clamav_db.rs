@@ -1,8 +1,8 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    hash::HashSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
-    ldu::LduSignature, logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature,
-    sfp::SfpSignature, wdb::WdbSignature,
+    hash::HashSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature,
+    ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature,
+    ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 use std::collections::HashSet;
@@ -450,6 +450,82 @@ fn sample_fp_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sam
 
 fn sample_sfp_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
     let files = collect_files(db_dir, &["sfp"]);
+    let mut rng = XorShift64::new(seed);
+    let mut samples: Vec<Sample> = Vec::new();
+    let mut seen = 0usize;
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            seen += 1;
+            let sample = Sample {
+                line: line.to_string(),
+                origin: format!("{}:{}", path.display(), line_no + 1),
+            };
+
+            if samples.len() < sample_size {
+                samples.push(sample);
+                continue;
+            }
+
+            let idx = rng.gen_range(seen);
+            if idx < sample_size {
+                samples[idx] = sample;
+            }
+        }
+    }
+
+    samples
+}
+
+fn sample_hdu_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
+    let files = collect_files(db_dir, &["hdu"]);
+    let mut rng = XorShift64::new(seed);
+    let mut samples: Vec<Sample> = Vec::new();
+    let mut seen = 0usize;
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            seen += 1;
+            let sample = Sample {
+                line: line.to_string(),
+                origin: format!("{}:{}", path.display(), line_no + 1),
+            };
+
+            if samples.len() < sample_size {
+                samples.push(sample);
+                continue;
+            }
+
+            let idx = rng.gen_range(seen);
+            if idx < sample_size {
+                samples[idx] = sample;
+            }
+        }
+    }
+
+    samples
+}
+
+fn sample_hsu_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
+    let files = collect_files(db_dir, &["hsu"]);
     let mut rng = XorShift64::new(seed);
     let mut samples: Vec<Sample> = Vec::new();
     let mut seen = 0usize;
@@ -1434,6 +1510,112 @@ fn parse_sfp_signatures_from_clamav_db() {
 }
 
 #[test]
+fn parse_hdu_signatures_from_clamav_db() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let files = collect_files(&db_dir, &["hdu"]);
+    if files.is_empty() {
+        if clamav_db_required() {
+            panic!("No .hdu files found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut total = 0usize;
+    let mut failures = 0usize;
+    let mut samples: Vec<String> = Vec::new();
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            total += 1;
+            if let Err(err) = HduSignature::parse(line) {
+                failures += 1;
+                if samples.len() < MAX_ERROR_SAMPLES {
+                    samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
+                }
+            }
+        }
+    }
+
+    if total == 0 {
+        panic!("No hdu signatures found under {:?}", db_dir);
+    }
+    if failures > 0 {
+        panic!(
+            "Failed to parse {failures} of {total} hdu signatures. Samples:\n{}",
+            samples.join("\n")
+        );
+    }
+}
+
+#[test]
+fn parse_hsu_signatures_from_clamav_db() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let files = collect_files(&db_dir, &["hsu"]);
+    if files.is_empty() {
+        if clamav_db_required() {
+            panic!("No .hsu files found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut total = 0usize;
+    let mut failures = 0usize;
+    let mut samples: Vec<String> = Vec::new();
+
+    for path in files {
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line) in reader.lines().flatten().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            total += 1;
+            if let Err(err) = HsuSignature::parse(line) {
+                failures += 1;
+                if samples.len() < MAX_ERROR_SAMPLES {
+                    samples.push(format!("{}:{}: {}", path.display(), line_no + 1, err));
+                }
+            }
+        }
+    }
+
+    if total == 0 {
+        panic!("No hsu signatures found under {:?}", db_dir);
+    }
+    if failures > 0 {
+        panic!(
+            "Failed to parse {failures} of {total} hsu signatures. Samples:\n{}",
+            samples.join("\n")
+        );
+    }
+}
+
+#[test]
 fn parse_ign_signatures_from_clamav_db() {
     let Some(db_dir) = clamav_db_dir() else {
         if clamav_db_required() {
@@ -1897,6 +2079,68 @@ fn yara_sfp_rules_from_db_samples_compile() {
             .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
         let ir = sig.to_ir();
         let src = yara::render_sfp_signature(&ir);
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_hdu_rules_from_db_samples_compile() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let sample_size = parse_sample_size();
+    let seed = parse_seed();
+    let samples = sample_hdu_signatures(&db_dir, sample_size, seed);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No hdu signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    for sample in samples {
+        let sig = HduSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
+        let ir = sig.to_ir();
+        let src = yara::render_hdu_signature(&ir);
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_hsu_rules_from_db_samples_compile() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let sample_size = parse_sample_size();
+    let seed = parse_seed();
+    let samples = sample_hsu_signatures(&db_dir, sample_size, seed);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No hsu signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    for sample in samples {
+        let sig = HsuSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
+        let ir = sig.to_ir();
+        let src = yara::render_hsu_signature(&ir);
 
         yara_x::compile(src.as_str())
             .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));

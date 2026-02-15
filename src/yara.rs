@@ -14,6 +14,8 @@ use crate::{
         fp::FpSignature,
         ftm::FtmSignature,
         hash::HashSignature,
+        hdu::HduSignature,
+        hsu::HsuSignature,
         idb::IdbSignature,
         ign::IgnSignature,
         ign2::Ign2Signature,
@@ -136,6 +138,14 @@ pub fn render_fp_signature(value: &ir::FpSignature) -> String {
 
 pub fn render_sfp_signature(value: &ir::SfpSignature) -> String {
     lower_sfp_signature(value).to_string()
+}
+
+pub fn render_hdu_signature(value: &ir::HduSignature) -> String {
+    lower_hdu_signature(value).to_string()
+}
+
+pub fn render_hsu_signature(value: &ir::HsuSignature) -> String {
+    lower_hsu_signature(value).to_string()
 }
 
 pub fn render_ign_signature(value: &ir::IgnSignature) -> String {
@@ -693,6 +703,119 @@ pub fn lower_sfp_signature(value: &ir::SfpSignature) -> YaraRule {
     YaraRule {
         name: format!(
             "SFP_{}_{}_{}",
+            hash_fn(&value.hash_type),
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_hdu_signature(value: &ir::HduSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`HashString:FileSize:MalwareName[:MinFL]`)
+    let note = "hdu signatures are PUA-gated hash signatures in ClamAV database load/scan flow; standalone YARA cannot model PUA mode/runtime gating semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hdu_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hdu_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hdu_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "hdu_pua_hash_signature_semantics".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "HDU_{}_{}",
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_hsu_signature(value: &ir::HsuSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`HashString:FileSize:MalwareName[:MinFL]`)
+    let note = "hsu signatures are PUA-gated hash signatures in ClamAV database load/scan flow; standalone YARA cannot model PUA mode/runtime gating semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hsu_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hsu_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_hsu_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "hsu_pua_hash_signature_semantics".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "HSU_{}_{}_{}",
             hash_fn(&value.hash_type),
             normalize_rule_name(&value.name),
             hash_tag(&value.hash)
@@ -4652,6 +4775,72 @@ impl<'p> TryFrom<SfpSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::HduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::HduSignature) -> Result<Self> {
+        Ok(lower_hdu_signature(value))
+    }
+}
+
+impl TryFrom<ir::HduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::HduSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&HduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &HduSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<HduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: HduSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::HsuSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::HsuSignature) -> Result<Self> {
+        Ok(lower_hsu_signature(value))
+    }
+}
+
+impl TryFrom<ir::HsuSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::HsuSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&HsuSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &HsuSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<HsuSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: HsuSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::IgnSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -4846,6 +5035,18 @@ impl<'p> From<&FpSignature<'p>> for ir::FpSignature {
 
 impl<'p> From<&SfpSignature<'p>> for ir::SfpSignature {
     fn from(value: &SfpSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&HduSignature<'p>> for ir::HduSignature {
+    fn from(value: &HduSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&HsuSignature<'p>> for ir::HsuSignature {
+    fn from(value: &HsuSignature<'p>) -> Self {
         value.to_ir()
     }
 }
