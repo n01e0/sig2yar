@@ -1,8 +1,8 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
     hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
-    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, ndb::NdbSignature,
-    pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+    msu::MsuSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1832,6 +1832,67 @@ fn lowers_hsu_signature_to_strict_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("PUA-gated hash signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_mdu_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`PESectionSize:Hash:MalwareName[:MinFL]`)
+    let raw = "45056:3ea7d00dedd30bcdf46191358c36ffa4:Eicar-Test-Signature:73";
+    let sig = MduSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("MDU_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "mdu_pua_section_hash_signature_semantics"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_mdu_hash_type" && value == "md5"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("PUA-gated section-hash signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_msu_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`PESectionSize:Hash:MalwareName[:MinFL]`)
+    let raw =
+        "45056:f9b304ced34fcce3ab75c6dc58ad59e4d62177ffed35494f79f09bc4e8986c16:Eicar-Test-Signature:73";
+    let sig = MsuSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("MSU_sha256_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "msu_pua_section_hash_signature_semantics"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_msu_hash_type" && value == "sha256"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("PUA-gated section-hash signatures")
                 && value.contains("lowered to false for safety")
     )));
 }
