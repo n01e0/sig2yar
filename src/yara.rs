@@ -4417,6 +4417,13 @@ fn lower_pcre_trigger_condition(
         return Some("false".to_string());
     }
 
+    if !pcre_trigger_expression_is_strictly_representable(&trigger_ir) {
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression uses count/distinct operators unsupported for strict lowering; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     let trigger_expr = lower_condition(&trigger_ir, known_ids, notes);
     if trigger_expr == "false" {
         notes.push(format!(
@@ -4479,6 +4486,24 @@ fn pcre_trigger_refs_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool
         | ir::LogicalExpression::MultiMatchCount(inner, _, _)
         | ir::LogicalExpression::MultiGt(inner, _, _)
         | ir::LogicalExpression::MultiLt(inner, _, _) => pcre_trigger_refs_self(inner, self_idx),
+    }
+}
+
+fn pcre_trigger_expression_is_strictly_representable(expr: &ir::LogicalExpression) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(_) => true,
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(pcre_trigger_expression_is_strictly_representable)
+        }
+        ir::LogicalExpression::MatchCount(_, _)
+        | ir::LogicalExpression::Gt(_, _)
+        | ir::LogicalExpression::Lt(_, _)
+        | ir::LogicalExpression::MultiMatchCount(_, _, _)
+        | ir::LogicalExpression::MultiGt(_, _, _)
+        | ir::LogicalExpression::MultiLt(_, _, _) => false,
     }
 }
 

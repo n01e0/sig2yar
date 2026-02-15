@@ -637,6 +637,18 @@ fn yara_rule_with_pcre_mixed_self_referential_trigger_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_count_trigger_prefix_false_rejects_scan() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_target_description_constraints_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1,FileSize:10-20,EntryPoint:100-200,NumberOfSections:2-4;0;41414141",
