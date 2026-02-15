@@ -2339,11 +2339,9 @@ pub fn lower_logical_signature_with_ndb_context(
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
 
     let mut condition_parts = vec![base_condition.clone()];
-    condition_parts.extend(lower_target_description_conditions(
-        &value.target_description,
-        &mut imports,
-        &mut notes,
-    ));
+    let target_desc =
+        lower_target_description_conditions(&value.target_description, &mut imports, &mut notes);
+    condition_parts.extend(target_desc.conditions);
 
     let condition = join_condition(condition_parts, "and");
     let strings = drop_unreferenced_strings(strings, &condition, &mut notes);
@@ -2352,6 +2350,20 @@ pub fn lower_logical_signature_with_ndb_context(
         meta.push(YaraMeta::Entry {
             key: "clamav_unsupported".to_string(),
             value: "fuzzy_img_hash_runtime_match".to_string(),
+        });
+    }
+
+    if target_desc.saw_container {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "target_description_container_constraint".to_string(),
+        });
+    }
+
+    if target_desc.saw_intermediates {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "target_description_intermediates_constraint".to_string(),
         });
     }
 
@@ -2371,12 +2383,20 @@ pub fn lower_logical_signature_with_ndb_context(
     })
 }
 
+struct TargetDescriptionLowering {
+    conditions: Vec<String>,
+    saw_container: bool,
+    saw_intermediates: bool,
+}
+
 fn lower_target_description_conditions(
     target: &ir::TargetDescription,
     imports: &mut Vec<String>,
     notes: &mut Vec<String>,
-) -> Vec<String> {
+) -> TargetDescriptionLowering {
     let mut out = Vec::new();
+    let mut saw_container = false;
+    let mut saw_intermediates = false;
 
     if let Some((min, max)) = target.file_size {
         out.push(range_condition("filesize", min, max));
@@ -2397,6 +2417,7 @@ fn lower_target_description_conditions(
             "target description Container={container} is not observable in standalone YARA scans; constrained to false for safety"
         ));
         out.push("false".to_string());
+        saw_container = true;
     }
 
     if let Some(intermediates) = target.intermediates.as_deref() {
@@ -2404,9 +2425,14 @@ fn lower_target_description_conditions(
             "target description Intermediates={intermediates} is not observable in standalone YARA scans; constrained to false for safety"
         ));
         out.push("false".to_string());
+        saw_intermediates = true;
     }
 
-    out
+    TargetDescriptionLowering {
+        conditions: out,
+        saw_container,
+        saw_intermediates,
+    }
 }
 
 fn push_import(imports: &mut Vec<String>, module: &str) {
