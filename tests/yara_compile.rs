@@ -182,6 +182,17 @@ fn yara_rule_with_pcre_ep_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_anchored_offset_prefix_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/A").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile anchored-offset-prefix safety-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_star_offset_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

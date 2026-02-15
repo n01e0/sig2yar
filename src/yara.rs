@@ -3030,6 +3030,19 @@ fn lower_raw_or_pcre_subsignature(
             return RawSubsigLowering::Expr("false".to_string());
         }
 
+        let has_explicit_offset_prefix = pcre
+            .prefix
+            .and_then(|prefix| parse_pcre_trigger_prefix(prefix).ok())
+            .and_then(|parsed| parsed.offset)
+            .is_some();
+
+        if anchored && has_explicit_offset_prefix {
+            notes.push(format!(
+                "subsig[{idx}] pcre anchored flag with explicit offset prefix cannot be represented safely (anchor is evaluated relative to ClamAV scan start offset); lowered to false for safety"
+            ));
+            return RawSubsigLowering::Expr("false".to_string());
+        }
+
         if !unsupported_flags.is_empty() {
             unsupported_flags.sort_unstable();
             unsupported_flags.dedup();
