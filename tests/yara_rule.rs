@@ -1306,6 +1306,11 @@ fn lowers_fuzzy_img_as_safe_false() {
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "fuzzy_img_hash_runtime_match"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes" && value.contains("fuzzy_img")
     )));
 }
@@ -1317,6 +1322,11 @@ fn lowers_malformed_fuzzy_img_to_safe_false_instead_of_raw_string() {
 
     assert_eq!(rule.condition, "false");
     assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "fuzzy_img_hash_runtime_match"
+    )));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }

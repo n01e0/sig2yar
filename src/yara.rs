@@ -2327,7 +2327,7 @@ pub fn lower_logical_signature_with_ndb_context(
         });
     }
 
-    let (strings, id_map, subsig_notes) =
+    let (strings, id_map, subsig_notes, saw_fuzzy_img_subsig) =
         lower_subsignatures(&value.subsignatures, &mut imports, &macro_groups);
     notes.extend(subsig_notes);
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
@@ -2341,6 +2341,13 @@ pub fn lower_logical_signature_with_ndb_context(
 
     let condition = join_condition(condition_parts, "and");
     let strings = drop_unreferenced_strings(strings, &condition, &mut notes);
+
+    if saw_fuzzy_img_subsig {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "fuzzy_img_hash_runtime_match".to_string(),
+        });
+    }
 
     if !notes.is_empty() {
         meta.push(YaraMeta::Entry {
@@ -2413,10 +2420,11 @@ fn lower_subsignatures(
     subsigs: &[ir::Subsignature],
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
-) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>) {
+) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>, bool) {
     let mut strings = Vec::new();
     let mut id_map = Vec::with_capacity(subsigs.len());
     let mut notes = Vec::new();
+    let mut saw_fuzzy_img_subsig = false;
 
     for (idx, subsig) in subsigs.iter().enumerate() {
         let id = format!("$s{idx}");
@@ -2472,6 +2480,7 @@ fn lower_subsignatures(
                 imports,
                 macro_groups,
                 &mut notes,
+                &mut saw_fuzzy_img_subsig,
             ) {
                 RawSubsigLowering::String(line) => {
                     strings.push(YaraString::Raw(line));
@@ -2498,7 +2507,7 @@ fn lower_subsignatures(
         }
     }
 
-    (strings, id_map, notes)
+    (strings, id_map, notes, saw_fuzzy_img_subsig)
 }
 
 fn lower_condition(
@@ -2915,6 +2924,7 @@ fn lower_raw_or_pcre_subsignature(
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
     notes: &mut Vec<String>,
+    saw_fuzzy_img_subsig: &mut bool,
 ) -> RawSubsigLowering {
     if raw.trim().is_empty() {
         notes.push(format!("subsig[{idx}] skipped: empty raw pattern"));
@@ -2965,6 +2975,7 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(parsed_fuzzy) = parse_fuzzy_img_subsignature(raw) {
+        *saw_fuzzy_img_subsig = true;
         match parsed_fuzzy {
             Ok(fuzzy) => {
                 notes.push(format!(
