@@ -2243,6 +2243,7 @@ fn build_macro_group_index(
             "1" => Some("uint16(0) == 0x5A4D".to_string()),
             "2" => Some("uint32(0) == 0xE011CFD0 and uint32(4) == 0xE11AB1A1".to_string()),
             "3" => Some(ndb_html_target_condition()),
+            "4" => Some(ndb_mail_target_condition()),
             "5" => Some(ndb_graphics_target_condition()),
             "6" => Some("uint32(0) == 0x464C457F".to_string()),
             "7" => Some(ndb_ascii_target_condition()),
@@ -2255,7 +2256,7 @@ fn build_macro_group_index(
             "12" => Some("uint32(0) == 0xBEBAFECA".to_string()),
             _ => {
                 notes.push(format!(
-                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 2, 3, 5, 6, 7, 9, 10, 11, or 12); ignored for strict macro lowering",
+                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, or 12); ignored for strict macro lowering",
                     sig.name, sig.target_type
                 ));
                 continue;
