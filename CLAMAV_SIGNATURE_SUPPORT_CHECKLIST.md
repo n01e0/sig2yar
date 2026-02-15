@@ -58,7 +58,7 @@ Last update: 2026-02-16
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
   - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,2,3,4,5,6,7,9,10,11,12}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=2` は OLE2 guard、`target_type=3` は HTML guard、`target_type=4` は MAIL guard、`target_type=5` は graphics guard、`target_type=6` は `uint32(0)==0x464C457F`、`target_type=7` は ASCII guard、`target_type=9` は Mach-O/FAT guard、`target_type=10` は PDF guard、`target_type=11` は SWF guard、`target_type=12` は Java class guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,2,3,4,5,6,7,9,10,11,12} target / 非表現body）は **false + note** を維持。
-- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一し、`clamav_unsupported=fuzzy_img_hash_runtime_match` を付与）
+- [x] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一し、`clamav_unsupported=fuzzy_img_hash_runtime_match` を付与）
 
 ### 2.3 未対応/不足
 
@@ -95,7 +95,7 @@ Last update: 2026-02-16
 （継続トラック）
 - [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8・decimal-base hex-alpha strict false・non-raw auto-base strict false は対応済み）
 - [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset 実装、2026-02-15: CLI `--ndb-context` 連携まで実装済み。残は対象拡張）
-- [ ] `fuzzy_img` の専用 lower
+- [x] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
   - `idb`（件数: 223）※2026-02-13 parse + strict-safe lower (`false` + note) 済み
@@ -109,6 +109,10 @@ Last update: 2026-02-16
 
 ## 4) メモ（現状観測）
 
+- 2026-02-16 追記68: `fuzzy_img` strict-safe path を専用lower関数へ切り出し、malformed境界の fixture を追加して挙動を固定。
+  - 背景: 既存実装は分岐内 inline で `false + note` を生成しており、`fuzzy_img` ルールの境界ケース（missing hash / extra separators）を将来変更時に壊しやすかった。
+  - 変更: `src/yara.rs` に `lower_fuzzy_img_subsignature(...)` を追加し、`fuzzy_img#` 系の判定・note付与・strict-false を専用化。既存の `clamav_unsupported=fuzzy_img_hash_runtime_match` は維持。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `fuzzy_img#af2ad01ed42993c7#0#1`（separator過多）と `fuzzy_img##0`（missing hash）の strict-false fixture を追加。
 - 2026-02-16 追記67: target description の `Container` / `Intermediates` strict-false 経路に machine-readable unsupported meta を追加。
   - 背景: 既存実装は `false + note` で安全化していたが、他の未同型要素と同様に unsupported分類を機械可読で収集できなかった。
   - 変更: logical lowering で `Container` 検出時に `clamav_unsupported=target_description_container_constraint`、`Intermediates` 検出時に `clamav_unsupported=target_description_intermediates_constraint` を付与。

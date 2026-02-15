@@ -3009,28 +3009,9 @@ fn lower_raw_or_pcre_subsignature(
         return RawSubsigLowering::Expr("false".to_string());
     }
 
-    if let Some(parsed_fuzzy) = parse_fuzzy_img_subsignature(raw) {
-        *saw_fuzzy_img_subsig = true;
-        match parsed_fuzzy {
-            Ok(fuzzy) => {
-                notes.push(format!(
-                    "subsig[{idx}] fuzzy_img hash '{}' is not representable in YARA; lowered to false",
-                    preview_for_meta(&fuzzy.hash, 16)
-                ));
-                if fuzzy.distance != 0 {
-                    notes.push(format!(
-                        "subsig[{idx}] fuzzy_img distance={} unsupported; lowered to false",
-                        fuzzy.distance
-                    ));
-                }
-            }
-            Err(reason) => {
-                notes.push(format!(
-                    "subsig[{idx}] fuzzy_img format unsupported/invalid ({reason}); lowered to false for safety"
-                ));
-            }
-        }
-        return RawSubsigLowering::Expr("false".to_string());
+    if let Some(lowered_fuzzy) = lower_fuzzy_img_subsignature(idx, raw, saw_fuzzy_img_subsig, notes)
+    {
+        return lowered_fuzzy;
     }
 
     let mut string_mods = StringModifierSet::default();
@@ -4263,6 +4244,38 @@ const FUZZY_IMG_HASH_HEX_LEN: usize = 16;
 struct ParsedFuzzyImg {
     hash: String,
     distance: u32,
+}
+
+fn lower_fuzzy_img_subsignature(
+    idx: usize,
+    raw: &str,
+    saw_fuzzy_img_subsig: &mut bool,
+    notes: &mut Vec<String>,
+) -> Option<RawSubsigLowering> {
+    let parsed_fuzzy = parse_fuzzy_img_subsignature(raw)?;
+    *saw_fuzzy_img_subsig = true;
+
+    match parsed_fuzzy {
+        Ok(fuzzy) => {
+            notes.push(format!(
+                "subsig[{idx}] fuzzy_img hash '{}' is not representable in YARA; lowered to false",
+                preview_for_meta(&fuzzy.hash, 16)
+            ));
+            if fuzzy.distance != 0 {
+                notes.push(format!(
+                    "subsig[{idx}] fuzzy_img distance={} unsupported; lowered to false",
+                    fuzzy.distance
+                ));
+            }
+        }
+        Err(reason) => {
+            notes.push(format!(
+                "subsig[{idx}] fuzzy_img format unsupported/invalid ({reason}); lowered to false for safety"
+            ));
+        }
+    }
+
+    Some(RawSubsigLowering::Expr("false".to_string()))
 }
 
 fn parse_fuzzy_img_subsignature(raw: &str) -> Option<Result<ParsedFuzzyImg, String>> {
