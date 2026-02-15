@@ -2241,9 +2241,10 @@ fn build_macro_group_index(
         let target_guard = match sig.target_type.as_str() {
             "0" => None,
             "1" => Some("uint16(0) == 0x5A4D".to_string()),
+            "6" => Some("uint32(0) == 0x464C457F".to_string()),
             _ => {
                 notes.push(format!(
-                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0 or 1); ignored for strict macro lowering",
+                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, or 6); ignored for strict macro lowering",
                     sig.name, sig.target_type
                 ));
                 continue;
