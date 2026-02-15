@@ -683,6 +683,16 @@ fn yara_rule_with_byte_comparison_three_clauses_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_negative_threshold_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>3#ib2#>-1)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("negative comparison value unsupported for strict lowering"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA\x00\x10"), 0);
+}
+
+#[test]
 fn yara_rule_with_invalid_byte_comparison_format_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

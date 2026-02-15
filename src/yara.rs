@@ -3156,6 +3156,7 @@ struct ByteCmpOptions {
 struct ByteCmpClause {
     op: ByteCmpOp,
     value: u64,
+    negative: bool,
     contains_hex_alpha: bool,
 }
 
@@ -3322,13 +3323,24 @@ fn parse_byte_comparison_clauses(
         };
 
         let value_str = value_str.trim();
-        let value = parse_byte_comparison_threshold(value_str, base)?;
-        let contains_hex_alpha = value_str
+        let (negative, unsigned_token) = if let Some(rest) = value_str.strip_prefix('-') {
+            let rest = rest.trim();
+            if rest.is_empty() {
+                return None;
+            }
+            (true, rest)
+        } else {
+            (false, value_str)
+        };
+
+        let value = parse_byte_comparison_threshold(unsigned_token, base)?;
+        let contains_hex_alpha = unsigned_token
             .bytes()
             .any(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'));
         out.push(ByteCmpClause {
             op,
             value,
+            negative,
             contains_hex_alpha,
         });
     }
@@ -3432,6 +3444,13 @@ fn lower_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison with {} clauses unsupported (ClamAV supports at most 2); lowered to false for safety",
             byte_cmp.comparisons.len()
+        ));
+        return Some("false".to_string());
+    }
+
+    if byte_cmp.comparisons.iter().any(|cmp| cmp.negative) {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison negative comparison value unsupported for strict lowering; lowered to false for safety"
         ));
         return Some("false".to_string());
     }
