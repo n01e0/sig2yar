@@ -192,6 +192,26 @@ fn yara_rule_with_pcre_ep_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_ep_offset_prefix_on_non_exec_target_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;1;41414141;EP+10:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre offset prefix 'EP+/-' is invalid for target_type=any"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_section_offset_prefix_on_non_exec_target_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;1;41414141;S2+4,8:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre offset prefix 'Sx+' is invalid for target_type=any"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_anchored_offset_prefix_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/A").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

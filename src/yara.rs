@@ -1895,7 +1895,9 @@ fn lower_ndb_offset_condition(
 fn ndb_target_type_supports_relative_offsets(target_type: &str) -> bool {
     // ClamAV reference: libclamav/matcher.c (`cli_caloff`) only permits EP/Sx/SE/SL
     // relative offsets when target is PE/ELF/Mach-O.
-    matches!(target_type, "1" | "6" | "9")
+    // NDB uses numeric target_type literals (`1/6/9`), while logical signatures
+    // carry normalized names (`pe/elf/macho`) in target_description.
+    matches!(target_type, "1" | "6" | "9" | "pe" | "elf" | "macho")
 }
 
 fn ensure_import(imports: &mut Vec<String>, name: &str) {
@@ -2327,8 +2329,12 @@ pub fn lower_logical_signature_with_ndb_context(
         });
     }
 
-    let (strings, id_map, subsig_notes, saw_fuzzy_img_subsig) =
-        lower_subsignatures(&value.subsignatures, &mut imports, &macro_groups);
+    let (strings, id_map, subsig_notes, saw_fuzzy_img_subsig) = lower_subsignatures(
+        &value.subsignatures,
+        value.target_description.target_type.as_deref(),
+        &mut imports,
+        &macro_groups,
+    );
     notes.extend(subsig_notes);
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
 
@@ -2418,6 +2424,7 @@ fn range_condition(name: &str, min: u64, max: u64) -> String {
 
 fn lower_subsignatures(
     subsigs: &[ir::Subsignature],
+    target_type: Option<&str>,
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
 ) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>, bool) {
@@ -2476,6 +2483,7 @@ fn lower_subsignatures(
                 &id,
                 raw,
                 &subsig.modifiers,
+                target_type,
                 &id_map,
                 imports,
                 macro_groups,
@@ -2920,6 +2928,7 @@ fn lower_raw_or_pcre_subsignature(
     id: &str,
     raw: &str,
     modifiers: &[ir::SubsignatureModifier],
+    target_type: Option<&str>,
     known_ids: &[Option<String>],
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
@@ -3113,6 +3122,7 @@ fn lower_raw_or_pcre_subsignature(
             pcre.prefix,
             rolling,
             encompass,
+            target_type,
             known_ids,
             imports,
             notes,
@@ -4331,6 +4341,7 @@ fn lower_pcre_trigger_condition(
     prefix: Option<&str>,
     rolling: bool,
     encompass: bool,
+    target_type: Option<&str>,
     known_ids: &[Option<String>],
     imports: &mut Vec<String>,
     notes: &mut Vec<String>,
@@ -4382,6 +4393,7 @@ fn lower_pcre_trigger_condition(
         parsed_prefix.offset,
         rolling,
         encompass,
+        target_type,
         imports,
         notes,
     ) {
@@ -4610,6 +4622,7 @@ fn lower_pcre_offset_condition(
     offset: Option<PcreOffsetSpec>,
     rolling: bool,
     encompass: bool,
+    target_type: Option<&str>,
     imports: &mut Vec<String>,
     notes: &mut Vec<String>,
 ) -> Option<String> {
@@ -4635,6 +4648,15 @@ fn lower_pcre_offset_condition(
         } else {
             format!("{guard} and ({inner})")
         }
+    };
+
+    let target_type = target_type.unwrap_or("unknown");
+    let supports_relative_exec_offsets = ndb_target_type_supports_relative_offsets(target_type);
+    let mut reject_relative_exec_offset = |offset_name: &str| {
+        notes.push(format!(
+            "subsig[{idx}] pcre offset prefix '{offset_name}' is invalid for target_type={target_type}; ClamAV allows EP/Sx/SE/SL offsets only for PE/ELF/MachO targets; lowered to false for safety"
+        ));
+        Some("false".to_string())
     };
 
     match offset {
@@ -4666,6 +4688,9 @@ fn lower_pcre_offset_condition(
             ))
         }
         PcreOffsetSpec::EntryPoint { delta, maxshift } => {
+            if !supports_relative_exec_offsets {
+                return reject_relative_exec_offset("EP+/-");
+            }
             push_import(imports, "pe");
             let start = apply_signed_delta("pe.entry_point", delta);
             let window = match maxshift {
@@ -4684,6 +4709,9 @@ fn lower_pcre_offset_condition(
             delta,
             maxshift,
         } => {
+            if !supports_relative_exec_offsets {
+                return reject_relative_exec_offset("Sx+");
+            }
             push_import(imports, "pe");
             let start = apply_unsigned_delta(
                 &format!("pe.sections[{section_idx}].raw_data_offset"),
@@ -4704,6 +4732,9 @@ fn lower_pcre_offset_condition(
             ))
         }
         PcreOffsetSpec::LastSectionStart { delta, maxshift } => {
+            if !supports_relative_exec_offsets {
+                return reject_relative_exec_offset("SL+");
+            }
             push_import(imports, "pe");
             let start = apply_unsigned_delta(
                 "pe.sections[pe.number_of_sections - 1].raw_data_offset",
@@ -4724,6 +4755,9 @@ fn lower_pcre_offset_condition(
             section_idx,
             extra_maxshift,
         } => {
+            if !supports_relative_exec_offsets {
+                return reject_relative_exec_offset("SE");
+            }
             push_import(imports, "pe");
             let start = format!("pe.sections[{section_idx}].raw_data_offset");
             let end =
