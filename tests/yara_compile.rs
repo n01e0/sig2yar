@@ -600,6 +600,16 @@ fn yara_rule_with_non_raw_hex_numeric_threshold_rejects_decimal_interpretation_f
 }
 
 #[test]
+fn yara_rule_with_non_raw_decimal_0x_prefixed_threshold_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3130;0(>>0#de2#=0xA)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"10"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"11"), 0);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_gt_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

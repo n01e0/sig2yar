@@ -3157,6 +3157,7 @@ struct ByteCmpClause {
     op: ByteCmpOp,
     value: u64,
     negative: bool,
+    has_hex_prefix: bool,
     contains_hex_alpha: bool,
 }
 
@@ -3364,6 +3365,7 @@ fn parse_byte_comparison_clauses(
         };
 
         let value = parse_byte_comparison_threshold(unsigned_token, base)?;
+        let has_hex_prefix = unsigned_token.starts_with("0x") || unsigned_token.starts_with("0X");
         let contains_hex_alpha = unsigned_token
             .bytes()
             .any(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'));
@@ -3371,6 +3373,7 @@ fn parse_byte_comparison_clauses(
             op,
             value,
             negative,
+            has_hex_prefix,
             contains_hex_alpha,
         });
     }
@@ -3393,6 +3396,16 @@ fn parse_byte_comparison_threshold(input: &str, base: Option<ByteCmpBase>) -> Op
 fn parse_clamav_numeric(input: &str) -> Option<u64> {
     if input.is_empty() {
         return None;
+    }
+
+    if let Some(rest) = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+    {
+        if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        return u64::from_str_radix(rest, 16).ok();
     }
 
     if input.chars().all(|c| c.is_ascii_digit()) {
@@ -3637,10 +3650,10 @@ fn lower_textual_byte_comparison_condition(
         && byte_cmp
             .comparisons
             .iter()
-            .any(|cmp| cmp.contains_hex_alpha)
+            .any(|cmp| cmp.contains_hex_alpha && !cmp.has_hex_prefix)
     {
         notes.push(format!(
-            "subsig[{idx}] byte_comparison decimal base cannot use hex-alpha threshold token; lowered to false for safety"
+            "subsig[{idx}] byte_comparison decimal base cannot use bare hex-alpha threshold token; lowered to false for safety"
         ));
         return Some("false".to_string());
     }
