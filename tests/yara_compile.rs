@@ -627,6 +627,16 @@ fn yara_rule_with_pcre_self_referential_trigger_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_mixed_self_referential_trigger_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0|1/abc/i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("self-referential"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_target_description_constraints_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1,FileSize:10-20,EntryPoint:100-200,NumberOfSections:2-4;0;41414141",

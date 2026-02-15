@@ -262,6 +262,22 @@ fn lowers_pcre_self_referential_trigger_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_with_mixed_self_reference_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher-pcre.c:232-239 rejects self-referential PCRE triggers.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0|1/abc/i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("self-referential")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_trigger_prefix_to_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
