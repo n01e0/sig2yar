@@ -64,7 +64,7 @@ Last update: 2026-02-15
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U` と ClamAV側 `r/e` を部分反映。`A`・maxshift without `e`・`E`・`g`・legacy `a`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化済み。残は runtime semantics 自体の厳密再現可否。
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59で **self-referential trigger**（ClamAV loader が malformed 扱い）を false+note 化済み。残は runtime semantics 自体の厳密再現可否。
 - [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -109,6 +109,11 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記59: PCRE trigger-prefix strict化の残スライスとして、self-referential trigger を **false + note** に厳密化。
+  - 背景: 既存lowerでは trigger式が self-reference の場合に implicit self-match 扱いへ逃がしていたが、ClamAV source では loader 時点で malformed（`CL_EMALFDB`）として拒否される。
+  - 変更: `src/yara.rs` の `lower_pcre_trigger_condition(...)` で self-referential trigger を検出したら `false + note` を返すよう変更。
+  - source根拠: `libclamav/matcher-pcre.c:232-239`（`logical trigger is self-referential` で error return）。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に self-referential fixture（`0;0/abc/i`）の strict-false を追加。既存の inline flag (`sm/x/U`) fixture は non-self trigger へ移して継続検証。
 - 2026-02-15 追記58: `fuzzy_img` subsig を含む logical rule に `clamav_unsupported=fuzzy_img_hash_runtime_match` を付与するよう更新。
   - 背景: `fuzzy_img` は false+note で安全化済みだが、他DB typeと同様に unsupported分類を機械可読に載せたい。
   - 変更: `lower_subsignatures(...)` で `fuzzy_img#` subsig検出フラグを集約し、`lower_logical_signature_with_ndb_context(...)` で meta へ unsupported key を追加（valid/malformed の双方で付与）。
