@@ -319,6 +319,16 @@ fn yara_rule_with_pcre_global_flag_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_legacy_a_flag_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/a").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre-a safety-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_unsupported_flag_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/d").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

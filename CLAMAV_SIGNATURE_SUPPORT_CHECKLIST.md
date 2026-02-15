@@ -63,7 +63,7 @@ Last update: 2026-02-15
 ### 2.3 未対応/不足
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
-- [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・`g`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
+- [ ] PCRE flags は `i/s/m/x/U/A` と ClamAV側 `r/e` を部分反映。maxshift without `e`・`E`・`g`・legacy `a`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
 - [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化済み。残は runtime semantics 自体の厳密再現可否。
 - [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記36: PCRE flags 残課題の1スライスとして、legacy `a` を anchored扱いから外し **strict-safe false + note** へ変更。
+  - 背景: `a` は legacy 互換フラグで source準拠の同型化根拠を保持しづらく、`A` と同義に寄せると近似リスクが残るため。
+  - 変更: `src/yara.rs` で `a` を unsupported flag として扱い、rule条件を `false` に倒す。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（`0/abc/a`）。
 - 2026-02-15 追記35: PCRE flags 残課題の1スライスとして、`g` を no-op 扱いから外し **strict-safe false + note** へ変更。
   - 背景: standalone YARA と ClamAV matcher runtime の探索/再走査挙動を同型化できる根拠が薄く、近似回避を優先。
   - 変更: `src/yara.rs` で `g` を unsupported flag として扱い、rule条件を `false` に倒す。
