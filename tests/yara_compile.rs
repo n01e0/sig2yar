@@ -111,6 +111,16 @@ fn yara_rule_with_pcre_trigger_prefix_resolved_false_rejects_scan_for_safety() {
 }
 
 #[test]
+fn yara_rule_with_malformed_pcre_subsignature_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre subsignature format unsupported/invalid"));
+    assert_eq!(scan_match_count(src.as_str(), b"xx0/abcxx"), 0);
+}
+
+#[test]
 fn yara_rule_with_exact_pcre_offset_compiles_with_yara_x_from_clamav_regex_fixture() {
     // ClamAV reference: unit_tests/clamscan/regex_test.py:127-129,152-174
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;68656c6c6f20;5:0/hello blee/").unwrap();
