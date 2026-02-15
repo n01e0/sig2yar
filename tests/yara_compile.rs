@@ -560,6 +560,17 @@ fn yara_rule_with_byte_comparison_offset_bare_hex_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_offset_octal_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>010#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    // `010` is octal (=8), so this fixture should match at offset 8 from $s0 start.
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzA"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzA"), 0);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
