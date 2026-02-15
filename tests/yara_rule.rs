@@ -779,6 +779,31 @@ fn lowers_byte_comparison_non_raw_decimal_with_0x_prefixed_threshold() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_decimal_with_leading_zero_octal_threshold() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=010)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    // ClamAV compare value parse uses base-0: `010` => octal 8, so width=2 decimal text is "08".
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x30"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x38"));
+    assert!(!rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x30")); // avoid accidental "10"
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_decimal_invalid_octal_threshold_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=08)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison format unsupported/invalid")
+    )));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_decimal_exact_gt() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
