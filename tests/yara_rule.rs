@@ -598,6 +598,20 @@ fn lowers_pcre_flag_e_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_global_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/g").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("unsupported pcre flag(s) 'g'; lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_unsupported_flag_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/d").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
