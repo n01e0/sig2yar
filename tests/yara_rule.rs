@@ -906,6 +906,23 @@ fn lowers_byte_comparison_with_more_than_two_clauses_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_negative_threshold_to_false_for_safety() {
+    // ClamAV source parses comparison values as signed (`strtoll`).
+    // Current strict-safe lowering does not model signed extraction semantics.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>3#ib2#>-1)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("negative comparison value unsupported for strict lowering")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_invalid_byte_comparison_format_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
