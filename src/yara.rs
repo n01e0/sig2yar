@@ -2998,9 +2998,7 @@ fn lower_raw_or_pcre_subsignature(
                 'A' => anchored = true,
                 'r' => rolling = true,
                 'e' => encompass = true,
-                'g' => notes.push(format!(
-                    "subsig[{idx}] pcre flag 'g' treated as no-op (YARA already searches globally)"
-                )),
+                'g' => unsupported_flags.push('g'),
                 'x' => {
                     if !inline_flags.contains('x') {
                         inline_flags.push('x');
