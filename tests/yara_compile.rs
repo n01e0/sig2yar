@@ -233,6 +233,16 @@ fn yara_rule_with_pcre_star_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_star_with_maxshift_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*,10:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre offset prefix '*,10' unsupported"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_section_offset_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S2+4,8:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

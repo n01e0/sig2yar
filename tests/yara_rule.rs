@@ -462,6 +462,23 @@ fn lowers_pcre_star_offset_prefix_to_unbounded_condition_and_ignores_re_flags() 
 }
 
 #[test]
+fn lowers_pcre_star_with_maxshift_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:360-363 accepts only exact "*" for CLI_OFF_ANY.
+    // - forms like "*,10" are malformed (fall through to invalid absolute parse).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*,10:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset prefix '*,10' unsupported")
+    )));
+}
+
+#[test]
 fn lowers_pcre_section_offset_prefix_with_encompass_window() {
     // ClamAV reference:
     // - libclamav/matcher.c:383-391 (`Sx+` parsed as CLI_OFF_SX_PLUS)
