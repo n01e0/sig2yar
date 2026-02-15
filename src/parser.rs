@@ -1,5 +1,6 @@
 pub mod cbc;
 pub mod cdb;
+pub mod cfg;
 pub mod crb;
 pub mod fp;
 pub mod ftm;
@@ -9,6 +10,7 @@ pub mod hsu;
 pub mod idb;
 pub mod ign;
 pub mod ign2;
+pub mod info;
 pub mod ldu;
 pub mod logical;
 pub mod mdu;
@@ -35,6 +37,7 @@ pub enum DbType {
     Idb,
     Cbc,
     Cdb,
+    Cfg,
     Crb,
     Pdb,
     Wdb,
@@ -43,4 +46,5 @@ pub enum DbType {
     Sfp,
     Ign,
     Ign2,
+    Info,
 }

@@ -1,10 +1,11 @@
 use sig2yar::{
     parser::{
-        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
-        idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
-        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, ndu::NduSignature,
-        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+        cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
+        fp::FpSignature, ftm::FtmSignature, hash::HashSignature, hdu::HduSignature,
+        hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
+        info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+        msu::MsuSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
+        wdb::WdbSignature,
     },
     yara,
 };
@@ -112,6 +113,15 @@ fn cdb_ir_render_matches_display() {
 }
 
 #[test]
+fn cfg_ir_render_matches_display() {
+    let raw = "DOCUMENT:0x5:11:13";
+    let sig = CfgSignature::parse(raw).expect("cfg parse failed");
+
+    let rendered = yara::render_cfg_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
 fn crb_ir_render_matches_display() {
     let raw = "Trusted.Cert-1;1;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;A1B2C3D4;010001;1;0;1;0;baseline-comment;120;255";
     let sig = CrbSignature::parse(raw).expect("crb parse failed");
@@ -181,5 +191,15 @@ fn ign2_ir_render_matches_display() {
     let sig = Ign2Signature::parse(raw).expect("ign2 parse failed");
 
     let rendered = yara::render_ign2_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn info_ir_render_matches_display() {
+    let raw =
+        "ClamAV-VDB:14 Feb 2026 07-25 +0000:27912:355104:90:X:X:svc.clamav-publisher:1771053920";
+    let sig = InfoSignature::parse(raw).expect("info parse failed");
+
+    let rendered = yara::render_info_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }

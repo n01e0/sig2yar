@@ -5,11 +5,12 @@ use args::Args;
 use clap::Parser;
 use sig2yar::{
     parser::{
-        cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
-        idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
-        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature,
-        ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
+        cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
+        fp::FpSignature, ftm::FtmSignature, hash::HashSignature, hdu::HduSignature,
+        hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
+        info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+        msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
+        sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -79,6 +80,11 @@ fn main() -> Result<()> {
             let ir = sig.to_ir();
             println!("{}", yara::render_cdb_signature(&ir));
         }
+        DbType::Cfg => {
+            let sig = CfgSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_cfg_signature(&ir));
+        }
         DbType::Crb => {
             let sig = CrbSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
@@ -118,6 +124,11 @@ fn main() -> Result<()> {
             let sig = Ign2Signature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_ign2_signature(&ir));
+        }
+        DbType::Info => {
+            let sig = InfoSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_info_signature(&ir));
         }
     };
 

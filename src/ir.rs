@@ -12,6 +12,7 @@ pub enum Signature {
     Idb(IdbSignature),
     Cbc(CbcSignature),
     Cdb(CdbSignature),
+    Cfg(CfgSignature),
     Crb(CrbSignature),
     Pdb(PdbSignature),
     Wdb(WdbSignature),
@@ -20,6 +21,7 @@ pub enum Signature {
     Sfp(SfpSignature),
     Ign(IgnSignature),
     Ign2(Ign2Signature),
+    Info(InfoSignature),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +146,15 @@ pub struct CdbSignature {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CfgSignature {
+    pub raw: String,
+    pub domain: String,
+    pub flags: String,
+    pub min_flevel: u32,
+    pub max_flevel: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrbSignature {
     pub name: String,
     pub trusted: String,
@@ -226,6 +237,13 @@ pub struct Ign2Signature {
     pub md5: Option<String>,
     pub legacy_prefix_1: Option<String>,
     pub legacy_prefix_2: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InfoSignature {
+    pub raw: String,
+    pub record_type: String,
+    pub payload: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
