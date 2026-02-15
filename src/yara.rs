@@ -3428,6 +3428,14 @@ fn lower_byte_comparison_condition(
     known_ids: &[Option<String>],
     notes: &mut Vec<String>,
 ) -> Option<String> {
+    if byte_cmp.comparisons.len() > 2 {
+        notes.push(format!(
+            "subsig[{idx}] byte_comparison with {} clauses unsupported (ClamAV supports at most 2); lowered to false for safety",
+            byte_cmp.comparisons.len()
+        ));
+        return Some("false".to_string());
+    }
+
     if byte_cmp_clauses_unsatisfiable(&byte_cmp.comparisons) {
         notes.push(format!(
             "subsig[{idx}] byte_comparison clauses are contradictory; lowered to false for safety"

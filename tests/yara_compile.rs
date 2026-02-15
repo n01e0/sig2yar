@@ -672,6 +672,17 @@ fn yara_rule_with_byte_comparison_contradictory_clauses_false_compiles_with_yara
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_three_clauses_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>3#de3#>100,<900,=123)")
+        .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("byte_comparison with 3 clauses unsupported"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA123"), 0);
+}
+
+#[test]
 fn yara_rule_with_invalid_byte_comparison_format_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

@@ -882,6 +882,24 @@ fn lowers_byte_comparison_non_raw_contradictory_clauses_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_with_more_than_two_clauses_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher-byte-comp.c accepts at most one comma
+    // in byte-compare comparisons (`comp_count` is 1 or 2 only).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>3#de3#>100,<900,=123)")
+        .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison with 3 clauses unsupported")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_invalid_byte_comparison_format_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he2#=1G)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
