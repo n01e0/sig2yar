@@ -350,7 +350,7 @@ fn yara_rule_with_pcre_unsupported_flag_false_compiles_with_yara_x() {
 
 #[test]
 fn yara_rule_with_pcre_x_flag_compiles_with_yara_x() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a b c/x").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/a b c/x").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
@@ -359,11 +359,21 @@ fn yara_rule_with_pcre_x_flag_compiles_with_yara_x() {
 
 #[test]
 fn yara_rule_with_pcre_u_flag_compiles_with_yara_x() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a.+b/U").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/a.+b/U").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre-U generated rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_self_referential_trigger_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("self-referential"));
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
 }
 
 #[test]

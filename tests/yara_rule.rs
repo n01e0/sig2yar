@@ -225,14 +225,32 @@ fn lowers_multilt_for_group_to_false_for_safety() {
 
 #[test]
 fn lowers_pcre_subsignature_with_nocase() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/i").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/i").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "$s0");
+    assert!(rule.condition.contains("$s0"));
+    assert!(rule.condition.contains("$s1"));
     assert!(rule
         .strings
         .iter()
-        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /abc/ nocase")));
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s1 = /abc/ nocase")));
+}
+
+#[test]
+fn lowers_pcre_self_referential_trigger_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher-pcre.c:232-239 rejects self-referential PCRE triggers.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/i").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.strings.is_empty());
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("self-referential")
+                && value.contains("lowered to false for safety")
+    )));
 }
 
 #[test]
@@ -655,35 +673,35 @@ fn lowers_pcre_unsupported_flag_to_false_for_safety() {
 
 #[test]
 fn lowers_pcre_inline_flags_for_dotall_multiline() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/sm").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/sm").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule
         .strings
         .iter()
-        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /(?sm:abc)/")));
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s1 = /(?sm:abc)/")));
 }
 
 #[test]
 fn lowers_pcre_inline_flag_extended_mode() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a b c/x").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/a b c/x").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule
         .strings
         .iter()
-        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /(?x:a b c)/")));
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s1 = /(?x:a b c)/")));
 }
 
 #[test]
 fn lowers_pcre_inline_flag_ungreedy_mode() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/a.+b/U").unwrap();
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/a.+b/U").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule
         .strings
         .iter()
-        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s0 = /(?U:a.+b)/")));
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$s1 = /(?U:a.+b)/")));
 }
 
 #[test]

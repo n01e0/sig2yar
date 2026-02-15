@@ -4357,14 +4357,13 @@ fn lower_pcre_trigger_condition(
     if trigger_expr == "false" {
         if pcre_trigger_refs_only_self(&trigger_ir, idx) {
             notes.push(format!(
-                "subsig[{idx}] pcre trigger expression is self-referential; treated as implicit self-match"
+                "subsig[{idx}] pcre trigger expression is self-referential (ClamAV rejects self-referential PCRE triggers); lowered to false for safety"
             ));
-            return None;
+        } else {
+            notes.push(format!(
+                "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
+            ));
         }
-
-        notes.push(format!(
-            "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
-        ));
         return Some("false".to_string());
     }
 
