@@ -268,6 +268,25 @@ fn lowers_pcre_offset_with_rolling_flag() {
 }
 
 #[test]
+fn lowers_pcre_anchored_with_offset_prefix_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher-pcre.c uses offset-adjusted scan start, and anchored matching is relative
+    //   to runtime scan position rather than global file start.
+    // - standalone YARA `\\A` anchors only to file start, so offset-prefixed anchored semantics
+    //   are not safely equivalent.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/A").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("anchored flag with explicit offset prefix cannot be represented safely")
+    )));
+}
+
+#[test]
 fn lowers_pcre_exact_offset_as_equality_from_clamav_regex_fixture() {
     // ClamAV reference:
     // - unit_tests/clamscan/regex_test.py:127-129 (exact offset semantics)
