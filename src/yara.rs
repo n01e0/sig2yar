@@ -10,6 +10,7 @@ use crate::{
     parser::{
         cbc::CbcSignature,
         cdb::CdbSignature,
+        cfg::CfgSignature,
         crb::CrbSignature,
         fp::FpSignature,
         ftm::FtmSignature,
@@ -19,6 +20,7 @@ use crate::{
         idb::IdbSignature,
         ign::IgnSignature,
         ign2::Ign2Signature,
+        info::InfoSignature,
         ldu::LduSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
         mdu::MduSignature,
@@ -123,6 +125,10 @@ pub fn render_cdb_signature(value: &ir::CdbSignature) -> String {
     lower_cdb_signature(value).to_string()
 }
 
+pub fn render_cfg_signature(value: &ir::CfgSignature) -> String {
+    lower_cfg_signature(value).to_string()
+}
+
 pub fn render_crb_signature(value: &ir::CrbSignature) -> String {
     lower_crb_signature(value).to_string()
 }
@@ -161,6 +167,10 @@ pub fn render_ign_signature(value: &ir::IgnSignature) -> String {
 
 pub fn render_ign2_signature(value: &ir::Ign2Signature) -> String {
     lower_ign2_signature(value).to_string()
+}
+
+pub fn render_info_signature(value: &ir::InfoSignature) -> String {
+    lower_info_signature(value).to_string()
 }
 
 pub fn render_ldu_signature(value: &ir::LduSignature) -> String {
@@ -319,6 +329,49 @@ pub fn lower_cdb_signature(value: &ir::CdbSignature) -> YaraRule {
     YaraRule {
         name: normalize_rule_name(&value.name),
         meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_cfg_signature(value: &ir::CfgSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*.cfg` is DB config metadata, not scan signature body)
+    let note = "cfg records define ClamAV DB/runtime configuration gates and are not standalone detection signatures; lowered to false for safety";
+
+    YaraRule {
+        name: format!("CFG_{:08x}", stable_fnv1a_32(&value.raw)),
+        meta: vec![
+            YaraMeta::Entry {
+                key: "clamav_cfg_domain".to_string(),
+                value: value.domain.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_cfg_flags".to_string(),
+                value: value.flags.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "min_flevel".to_string(),
+                value: value.min_flevel.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "max_flevel".to_string(),
+                value: value.max_flevel.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_cfg_raw".to_string(),
+                value: value.raw.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_unsupported".to_string(),
+                value: "cfg_runtime_configuration_metadata".to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_lowering_notes".to_string(),
+                value: note.to_string(),
+            },
+        ],
         strings: Vec::new(),
         condition: "false".to_string(),
         imports: Vec::new(),
@@ -972,6 +1025,41 @@ pub fn lower_ign2_signature(value: &ir::Ign2Signature) -> YaraRule {
     YaraRule {
         name: format!("IGN2_{:08x}", stable_fnv1a_32(&fingerprint)),
         meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_info_signature(value: &ir::InfoSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*.info` contains DB metadata/index info)
+    let note = "info records carry ClamAV database metadata/signature index data and are not standalone detection signatures; lowered to false for safety";
+
+    YaraRule {
+        name: format!("INFO_{:08x}", stable_fnv1a_32(&value.raw)),
+        meta: vec![
+            YaraMeta::Entry {
+                key: "clamav_info_record_type".to_string(),
+                value: value.record_type.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_info_payload".to_string(),
+                value: value.payload.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_info_raw".to_string(),
+                value: value.raw.to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_unsupported".to_string(),
+                value: "info_db_metadata_record".to_string(),
+            },
+            YaraMeta::Entry {
+                key: "clamav_lowering_notes".to_string(),
+                value: note.to_string(),
+            },
+        ],
         strings: Vec::new(),
         condition: "false".to_string(),
         imports: Vec::new(),
@@ -4780,6 +4868,39 @@ impl<'p> TryFrom<CdbSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::CfgSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::CfgSignature) -> Result<Self> {
+        Ok(lower_cfg_signature(value))
+    }
+}
+
+impl TryFrom<ir::CfgSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::CfgSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&CfgSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &CfgSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<CfgSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CfgSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::CrbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -5110,6 +5231,39 @@ impl<'p> TryFrom<Ign2Signature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::InfoSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::InfoSignature) -> Result<Self> {
+        Ok(lower_info_signature(value))
+    }
+}
+
+impl TryFrom<ir::InfoSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::InfoSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&InfoSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &InfoSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<InfoSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: InfoSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::LduSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -5311,6 +5465,12 @@ impl<'p> From<&CdbSignature<'p>> for ir::CdbSignature {
     }
 }
 
+impl<'p> From<&CfgSignature<'p>> for ir::CfgSignature {
+    fn from(value: &CfgSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
 impl<'p> From<&CrbSignature<'p>> for ir::CrbSignature {
     fn from(value: &CrbSignature<'p>) -> Self {
         value.to_ir()
@@ -5367,6 +5527,12 @@ impl<'p> From<&IgnSignature<'p>> for ir::IgnSignature {
 
 impl<'p> From<&Ign2Signature<'p>> for ir::Ign2Signature {
     fn from(value: &Ign2Signature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&InfoSignature<'p>> for ir::InfoSignature {
+    fn from(value: &InfoSignature<'p>) -> Self {
         value.to_ir()
     }
 }

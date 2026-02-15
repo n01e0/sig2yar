@@ -1,9 +1,9 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
-    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
-    wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature, fp::FpSignature,
+    ftm::FtmSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
+    ign2::Ign2Signature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
+    mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -1516,6 +1516,34 @@ fn lowers_cdb_signature_to_strict_false_for_safety() {
 }
 
 #[test]
+fn lowers_cfg_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*.cfg` is DB config metadata, not scan signature body)
+    let raw = "DOCUMENT:0x5:11:13";
+    let sig = CfgSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("CFG_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "cfg_runtime_configuration_metadata"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value } if key == "clamav_cfg_domain" && value == "DOCUMENT"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("runtime configuration")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_crb_signature_to_strict_false_for_safety() {
     // ClamAV references:
     // - docs: manual/Signatures/AuthenticodeRules.html (`Name;Trusted;Subject;Serial;Pubkey;Exponent;CodeSign;TimeSign;CertSign;NotBefore;Comment[;minFL[;maxFL]]`)
@@ -1924,6 +1952,36 @@ fn lowers_ndu_signature_to_strict_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("PUA-gated extended signatures")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_info_signature_to_strict_false_for_safety() {
+    // ClamAV references:
+    // - docs: manual/Signatures (`*.info` contains DB metadata/index info)
+    let raw =
+        "ClamAV-VDB:14 Feb 2026 07-25 +0000:27912:355104:90:X:X:svc.clamav-publisher:1771053920";
+    let sig = InfoSignature::parse(raw).unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.name.starts_with("INFO_"));
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "info_db_metadata_record"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_info_record_type" && value == "ClamAV-VDB"
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("metadata/signature index")
                 && value.contains("lowered to false for safety")
     )));
 }

@@ -38,7 +38,7 @@ Last update: 2026-02-15
 - [x] `ldu` (parse + strict-safe lower)
 - [x] `mdu` / `msu` (parse + strict-safe lower)
 - [x] `ndu` (parse + strict-safe lower)
-- [ ] `cfg` / `info` （シグネチャ本体ではないので扱い定義が必要）
+- [x] `cfg` / `info` （parse + strict-safe lower, 非シグネチャメタデータとして明示）
 
 ---
 
@@ -109,6 +109,11 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記33: `cfg/info` の扱い方針を確定。いずれも **シグネチャ本体ではなくDBメタデータ** として `parse対象` を追加し、YARAへの同型変換は行わず **strict-safe false + note** に統一。
+  - `cfg`: `src/parser/cfg.rs` を追加。`DOMAIN:FLAGS:MINFL:MAXFL`（`FLAGS` は `0x` hex、`MINFL<=MAXFL`）を受理。`DbType::Cfg` / `ir::CfgSignature` / `render/lower_cfg_signature` を追加。
+  - `info`: `src/parser/info.rs` を追加。`RecordType:Payload` を受理（`ClamAV-VDB` / `<file>:<size>:<sha256>` / `DSIG` などを包括）。`DbType::Info` / `ir::InfoSignature` / `render/lower_info_signature` を追加。
+  - source根拠: docs `manual/Signatures`（`.cfg` / `.info` はDB運用メタデータ）。
+  - `tests/yara_rule.rs` / `tests/yara_compile.rs` / `tests/ir_pipeline.rs` / `tests/clamav_db.rs` を拡張（parser単体 + strict-false compile/scan + 実DB parse/compileサンプル）。
 - 2026-02-15 追記32: `ndu`（PUA-gated extended signature DB）の最小スライスとして `parse対象` を追加。`src/parser/ndu.rs` を新設し、`NdbSignature::parse` を再利用して `.ndu` を `name:target_type:offset:body[:min[:max]]` 形式として取り込み、`DbType::Ndu` を CLI へ接続し、`src/ir.rs` に `NduSignature` を追加。
   - source根拠: docs `manual/Signatures`（`*u` 拡張子は PUA mode でロード, `.ndb/.ndu` は extended signature record）。
   - `src/yara.rs` に `render/lower_ndu_signature` を追加。PUA mode/runtime gating を YARA単体で厳密再現しない方針として **strict-safe false + note** に統一（近似禁止）。

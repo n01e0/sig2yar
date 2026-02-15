@@ -1,9 +1,9 @@
 use sig2yar::parser::{
-    cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
-    hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
-    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
-    wdb::WdbSignature,
+    cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature, fp::FpSignature,
+    ftm::FtmSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
+    ign2::Ign2Signature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
+    mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1016,6 +1016,16 @@ fn cdb_rule_strict_false_compiles_and_rejects_scan() {
 }
 
 #[test]
+fn cfg_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "DOCUMENT:0x5:11:13";
+    let sig = CfgSignature::parse(raw).unwrap();
+    let src = yara::render_cfg_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile cfg strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"DOCUMENT:0x5:11:13"), 0);
+}
+
+#[test]
 fn crb_rule_strict_false_compiles_and_rejects_scan() {
     let raw = "Trusted.Cert-1;1;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;A1B2C3D4;010001;1;0;1;0;baseline-comment;120;255";
     let sig = CrbSignature::parse(raw).unwrap();
@@ -1160,6 +1170,17 @@ fn ndu_rule_strict_false_compiles_and_rejects_scan() {
         scan_match_count(src.as_str(), b"PUA.Win.Packer.YodaProt-1"),
         0
     );
+}
+
+#[test]
+fn info_rule_strict_false_compiles_and_rejects_scan() {
+    let raw =
+        "ClamAV-VDB:14 Feb 2026 07-25 +0000:27912:355104:90:X:X:svc.clamav-publisher:1771053920";
+    let sig = InfoSignature::parse(raw).unwrap();
+    let src = yara::render_info_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile info strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"ClamAV-VDB"), 0);
 }
 
 #[test]
