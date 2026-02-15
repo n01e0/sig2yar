@@ -4693,15 +4693,19 @@ fn lower_pcre_offset_condition(
     let core = id.strip_prefix('$').unwrap_or(id);
 
     let Some(offset) = offset else {
-        if rolling {
+        if rolling || encompass {
+            let mut flags = Vec::new();
+            if rolling {
+                flags.push("'r'");
+            }
+            if encompass {
+                flags.push("'e'");
+            }
             notes.push(format!(
-                "subsig[{idx}] pcre flag 'r' ignored: no offset prefix"
+                "subsig[{idx}] pcre flag(s) {} require explicit offset/maxshift runtime semantics; lowered to false for safety",
+                flags.join(", ")
             ));
-        }
-        if encompass {
-            notes.push(format!(
-                "subsig[{idx}] pcre flag 'e' ignored: no maxshift in offset prefix"
-            ));
+            return Some("false".to_string());
         }
         return None;
     };
