@@ -304,6 +304,20 @@ fn lowers_pcre_anchored_with_rolling_or_encompass_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_anchored_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/A").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre anchored flag is not representable safely in standalone YARA")
+    )));
+}
+
+#[test]
 fn lowers_pcre_exact_offset_as_equality_from_clamav_regex_fixture() {
     // ClamAV reference:
     // - unit_tests/clamscan/regex_test.py:127-129 (exact offset semantics)
