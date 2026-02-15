@@ -1,9 +1,9 @@
 use sig2yar::{
     parser::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
-        ftm::FtmSignature, hash::HashSignature, idb::IdbSignature, ign::IgnSignature,
-        ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, pdb::PdbSignature,
-        sfp::SfpSignature, wdb::WdbSignature,
+        ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
+        idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
+        logical::LogicalSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -24,6 +24,25 @@ fn logical_ir_lower_matches_display() {
 
     let rule = yara::lower_logical_signature(&sig.to_ir()).expect("lowering failed");
     assert_eq!(rule.to_string(), sig.to_string());
+}
+
+#[test]
+fn hdu_ir_render_matches_display() {
+    let raw = "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature";
+    let sig = HduSignature::parse(raw).expect("hdu parse failed");
+
+    let rendered = yara::render_hdu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn hsu_ir_render_matches_display() {
+    let raw =
+        "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f:68:Eicar-Test-Signature";
+    let sig = HsuSignature::parse(raw).expect("hsu parse failed");
+
+    let rendered = yara::render_hsu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
 }
 
 #[test]

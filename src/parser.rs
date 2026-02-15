@@ -4,6 +4,8 @@ pub mod crb;
 pub mod fp;
 pub mod ftm;
 pub mod hash;
+pub mod hdu;
+pub mod hsu;
 pub mod idb;
 pub mod ign;
 pub mod ign2;
@@ -20,6 +22,8 @@ use clap::ValueEnum;
 pub enum DbType {
     Hash,
     Logical,
+    Hdu,
+    Hsu,
     Ldu,
     Ndb,
     Idb,
