@@ -4410,17 +4410,18 @@ fn lower_pcre_trigger_condition(
         }
     };
 
+    if pcre_trigger_refs_self(&trigger_ir, idx) {
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression is self-referential (ClamAV rejects self-referential PCRE triggers); lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     let trigger_expr = lower_condition(&trigger_ir, known_ids, notes);
     if trigger_expr == "false" {
-        if pcre_trigger_refs_only_self(&trigger_ir, idx) {
-            notes.push(format!(
-                "subsig[{idx}] pcre trigger expression is self-referential (ClamAV rejects self-referential PCRE triggers); lowered to false for safety"
-            ));
-        } else {
-            notes.push(format!(
-                "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
-            ));
-        }
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
+        ));
         return Some("false".to_string());
     }
 
@@ -4466,23 +4467,18 @@ fn parse_pcre_trigger_prefix(prefix: &str) -> Result<ParsedPcrePrefix<'_>, Strin
     })
 }
 
-fn pcre_trigger_refs_only_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool {
+fn pcre_trigger_refs_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool {
     match expr {
         ir::LogicalExpression::SubExpression(idx) => *idx == self_idx,
-        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
-            !nodes.is_empty()
-                && nodes
-                    .iter()
-                    .all(|node| pcre_trigger_refs_only_self(node, self_idx))
-        }
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => nodes
+            .iter()
+            .any(|node| pcre_trigger_refs_self(node, self_idx)),
         ir::LogicalExpression::MatchCount(inner, _)
         | ir::LogicalExpression::Gt(inner, _)
         | ir::LogicalExpression::Lt(inner, _)
         | ir::LogicalExpression::MultiMatchCount(inner, _, _)
         | ir::LogicalExpression::MultiGt(inner, _, _)
-        | ir::LogicalExpression::MultiLt(inner, _, _) => {
-            pcre_trigger_refs_only_self(inner, self_idx)
-        }
+        | ir::LogicalExpression::MultiLt(inner, _, _) => pcre_trigger_refs_self(inner, self_idx),
     }
 }
 
