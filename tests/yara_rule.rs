@@ -768,6 +768,17 @@ fn lowers_byte_comparison_non_raw_decimal_exact_eq() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_decimal_with_0x_prefixed_threshold() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3130;0(>>0#de2#=0xA)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    // `0xA` should be parsed as decimal 10, then represented in decimal textual width=2 => "10".
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x31"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x30"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_decimal_exact_gt() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#de3#>12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -787,7 +798,7 @@ fn lowers_byte_comparison_non_raw_decimal_with_hex_alpha_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("decimal base cannot use hex-alpha threshold token")
+                && value.contains("decimal base cannot use bare hex-alpha threshold token")
     )));
 }
 
