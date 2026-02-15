@@ -386,7 +386,7 @@ fn lowers_pcre_re_range_ignores_r_and_keeps_encompass_window_from_clamav_matcher
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= 2"));
-    assert!(rule.condition.contains("@s1[j] <= 8"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 8"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -404,8 +404,21 @@ fn lowers_pcre_re_range_nonmatch_fixture_to_narrow_encompass_window() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= 2"));
-    assert!(rule.condition.contains("@s1[j] <= 4"));
-    assert!(!rule.condition.contains("@s1[j] <= 8"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 4"));
+    assert!(!rule.condition.contains("(@s1[j] + !s1[j]) <= 8"));
+}
+
+#[test]
+fn lowers_pcre_encompass_window_with_match_end_guard_from_clamav_fixture() {
+    // ClamAV reference:
+    // - unit_tests/check_matchers.c:144 (Test7 `/34567890/e` with `3,7`, expected CL_SUCCESS)
+    // - libclamav/matcher-pcre.c:624-629 (`e` bounds adjlength to adjshift)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;3,7:0/34567890/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= 3"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 10"));
+    assert!(!rule.condition.contains("@s1[j] <= 10"));
 }
 
 #[test]
@@ -528,7 +541,7 @@ fn lowers_pcre_section_offset_prefix_with_encompass_window() {
         .contains("@s1[j] >= pe.sections[2].raw_data_offset + 4"));
     assert!(rule
         .condition
-        .contains("@s1[j] <= pe.sections[2].raw_data_offset + 4 + 8"));
+        .contains("(@s1[j] + !s1[j]) <= pe.sections[2].raw_data_offset + 4 + 8"));
 }
 
 #[test]
@@ -559,9 +572,9 @@ fn lowers_pcre_section_end_offset_with_e_to_section_window() {
     assert!(rule
         .condition
         .contains("@s1[j] >= pe.sections[1].raw_data_offset"));
-    assert!(rule
-        .condition
-        .contains("@s1[j] <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"));
+    assert!(rule.condition.contains(
+        "(@s1[j] + !s1[j]) <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"
+    ));
 }
 
 #[test]
@@ -667,7 +680,7 @@ fn lowers_pcre_encompass_with_range_offset() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= 200"));
-    assert!(rule.condition.contains("@s1[j] <= 500"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 500"));
 }
 
 #[test]
