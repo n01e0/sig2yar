@@ -502,6 +502,20 @@ fn lowers_pcre_section_entire_offset_prefix_on_non_exec_target_to_false_for_safe
 }
 
 #[test]
+fn lowers_pcre_eof_minus_encompass_window_with_match_end_guard() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:393-400 (`EOF-` parsed as CLI_OFF_EOF_MINUS)
+    // - libclamav/matcher-pcre.c:624-629 (`e` bounds adjlength to adjshift)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-5,3:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= filesize - 5"));
+    assert!(rule
+        .condition
+        .contains("(@s1[j] + !s1[j]) <= filesize - 5 + 3"));
+}
+
+#[test]
 fn lowers_pcre_eof_minus_offset_prefix_to_filesize_constraint() {
     // ClamAV reference:
     // - libclamav/matcher.c:393-400 (`EOF-` parsed as CLI_OFF_EOF_MINUS)

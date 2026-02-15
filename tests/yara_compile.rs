@@ -345,6 +345,26 @@ fn yara_rule_with_pcre_eof_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_eof_minus_encompass_window_nonmatch_fixture_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-5,3:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("(@s1[j] + !s1[j]) <= filesize - 5 + 3"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_eof_minus_encompass_window_match_fixture_matches_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-5,5:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("(@s1[j] + !s1[j]) <= filesize - 5 + 5"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxabc"), 1);
+}
+
+#[test]
 fn yara_rule_with_pcre_versioninfo_offset_prefix_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;VI:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
