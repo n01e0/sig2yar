@@ -64,7 +64,7 @@ Last update: 2026-02-15
 
 - [ ] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止）
 - [ ] PCRE flags は `i/s/m/x/U` と ClamAV側 `r/e` を部分反映。`A`・maxshift without `e`・`E`・`g`・legacy `a`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
-- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59で **self-referential trigger**（ClamAV loader が malformed 扱い）を false+note 化、追記60で **slash含有だがPCRE構文不正な subsig** の raw fallback 経路を閉じて false+note 化、追記61で **`*,maxshift` malformed offset** を false+note 化、追記62で **Target非exec時の `EP/Sx/SL/SE` offset** を false+note 化、追記63で **`e`（encompass）時の maxshift 上限を match-start だけでなく match-end (`@ + !`) でも拘束** するよう厳密化、追記64で **非exec target の `SL+` / `SE` fixture を追加して `EP/Sx/SL/SE` 全系統を strict-false で固定**、追記65で **`EOF-...,maxshift,e` でも `@ + ! <= end` を scan fixture で固定** 済み。残は runtime semantics 自体の厳密再現可否。
+- [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59で **self-referential trigger**（ClamAV loader が malformed 扱い）を false+note 化、追記60で **slash含有だがPCRE構文不正な subsig** の raw fallback 経路を閉じて false+note 化、追記61で **`*,maxshift` malformed offset** を false+note 化、追記62で **Target非exec時の `EP/Sx/SL/SE` offset** を false+note 化、追記63で **`e`（encompass）時の maxshift 上限を match-start だけでなく match-end (`@ + !`) でも拘束** するよう厳密化、追記64で **非exec target の `SL+` / `SE` fixture を追加して `EP/Sx/SL/SE` 全系統を strict-false で固定**、追記65で **`EOF-...,maxshift,e` でも `@ + ! <= end` を scan fixture で固定**、追記66で **exec target 側 `Sx/SE/SL` の valid/out-of-range section index を PE fixture scan で固定** 済み。残は runtime semantics 自体の厳密再現可否。
 - [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は ClamAV fullword境界（特に wide 時の `isalnum + NUL` 判定）を現状lower未実装のため **safety false + note** に厳密化済み
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化（意味反映自体は未対応）
 
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記66: exec target 側（PE）の `Sx/SE/SL` 境界挙動を section index の valid/out-of-range で scan fixture 固定。
+  - 背景: これまで offset prefix の式生成は固定されていたが、exec target での section index 境界（`nsections-1` / out-of-range）の実scan挙動が十分に固定されていなかった。
+  - 変更: `tests/yara_compile.rs` に最小PE fixture（2 sections）を追加し、`S1+4` / `SE1,4` / `SL+4` は match、`S2+4` / `SE2,4` は non-match を固定。
+  - source根拠: `libclamav/matcher.c` の `cli_caloff` 再計算分岐（`CLI_OFF_SX_PLUS` / `CLI_OFF_SE` / `CLI_OFF_SL_PLUS`、out-of-range section は `CLI_OFF_NONE`）。
 - 2026-02-15 追記65: `EOF-...,maxshift,e` の encompass 窓でも match-end 拘束（`@ + ! <= end`）が効くことを scan fixture で固定。
   - 背景: 追記63で `@ + !` 条件へ厳密化済みだが、fixture は absolute/section 系中心で `EOF-` 窓の実scan固定が不足していた。
   - 変更: `tests/yara_rule.rs` に `EOF-5,3:0/abc/e` の condition 生成チェックを追加。`tests/yara_compile.rs` に non-match（`EOF-5,3`）/match（`EOF-5,5`）の scan fixture を追加。

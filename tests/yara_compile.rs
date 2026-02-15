@@ -16,6 +16,97 @@ fn scan_match_count(src: &str, data: &[u8]) -> usize {
     results.matching_rules().len()
 }
 
+fn pe_two_sections_fixture_with_aaaa_and_abc_in_section1() -> Vec<u8> {
+    fn put_u16(buf: &mut [u8], off: usize, value: u16) {
+        buf[off..off + 2].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u32(buf: &mut [u8], off: usize, value: u32) {
+        buf[off..off + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    let mut data = vec![0u8; 0x800];
+
+    data[0..2].copy_from_slice(b"MZ");
+    put_u32(&mut data, 0x3c, 0x80); // e_lfanew
+
+    let nt = 0x80usize;
+    data[nt..nt + 4].copy_from_slice(b"PE\0\0");
+
+    let file_hdr = nt + 4;
+    put_u16(&mut data, file_hdr, 0x014c); // IMAGE_FILE_MACHINE_I386
+    put_u16(&mut data, file_hdr + 2, 2); // NumberOfSections
+    put_u16(&mut data, file_hdr + 16, 0x00E0); // SizeOfOptionalHeader
+    put_u16(&mut data, file_hdr + 18, 0x010F); // Characteristics
+
+    let opt = file_hdr + 20;
+    put_u16(&mut data, opt, 0x010b); // PE32
+    put_u32(&mut data, opt + 16, 0x200); // AddressOfEntryPoint (RVA)
+    put_u32(&mut data, opt + 28, 0x0040_0000); // ImageBase
+    put_u32(&mut data, opt + 32, 0x1000); // SectionAlignment
+    put_u32(&mut data, opt + 36, 0x200); // FileAlignment
+    put_u32(&mut data, opt + 56, 0x3000); // SizeOfImage
+    put_u32(&mut data, opt + 60, 0x200); // SizeOfHeaders
+    put_u32(&mut data, opt + 92, 16); // NumberOfRvaAndSizes
+
+    let sec = opt + 0xE0;
+
+    // section 0: raw [0x200, 0x3ff]
+    data[sec..sec + 8].copy_from_slice(b".s0\0\0\0\0\0");
+    put_u32(&mut data, sec + 8, 0x200); // VirtualSize
+    put_u32(&mut data, sec + 12, 0x1000); // VirtualAddress
+    put_u32(&mut data, sec + 16, 0x200); // SizeOfRawData
+    put_u32(&mut data, sec + 20, 0x200); // PointerToRawData
+    put_u32(&mut data, sec + 36, 0x6000_0020); // Characteristics
+
+    // section 1: raw [0x400, 0x5ff]
+    let sec1 = sec + 40;
+    data[sec1..sec1 + 8].copy_from_slice(b".s1\0\0\0\0\0");
+    put_u32(&mut data, sec1 + 8, 0x200); // VirtualSize
+    put_u32(&mut data, sec1 + 12, 0x2000); // VirtualAddress
+    put_u32(&mut data, sec1 + 16, 0x200); // SizeOfRawData
+    put_u32(&mut data, sec1 + 20, 0x400); // PointerToRawData
+    put_u32(&mut data, sec1 + 36, 0x6000_0020); // Characteristics
+
+    // Trigger subsig fixture (`41414141`) and section-1 payload (`abc` at 0x404)
+    data[0x200..0x204].copy_from_slice(b"AAAA");
+    data[0x404..0x407].copy_from_slice(b"abc");
+
+    data
+}
+
+#[test]
+fn pe_fixture_is_recognized_as_pe_for_offset_tests() {
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    let src = r#"
+import "pe"
+rule PEFixtureIsPE {
+    condition:
+        pe.is_pe
+}
+"#;
+
+    assert_eq!(scan_match_count(src, &data), 1);
+}
+
+#[test]
+fn pe_fixture_exposes_expected_section_metadata_for_offset_tests() {
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    let src = r#"
+import "pe"
+rule PEFixtureSanity {
+    condition:
+        pe.number_of_sections == 2 and
+        pe.sections[0].raw_data_offset == 0x200 and
+        pe.sections[1].raw_data_offset == 0x400
+}
+"#;
+
+    assert_eq!(scan_match_count(src, &data), 1);
+}
+
 #[test]
 fn yara_rule_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;41414141").unwrap();
@@ -324,6 +415,59 @@ fn yara_rule_with_pcre_section_end_offset_prefix_compiles_with_yara_x() {
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre SE offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_section_offset_prefix_valid_section_index_matches_pe_fixture() {
+    // ClamAV reference: matcher.c recalculates Sx+ against sections[n].raw.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S1+4:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert_eq!(scan_match_count(src.as_str(), &data), 1);
+}
+
+#[test]
+fn yara_rule_with_pcre_section_offset_prefix_out_of_range_section_rejects_pe_fixture() {
+    // ClamAV reference: matcher.c sets CLI_OFF_NONE when section index is out-of-range.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S2+4:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert_eq!(scan_match_count(src.as_str(), &data), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_section_end_offset_prefix_valid_section_index_matches_pe_fixture() {
+    // ClamAV reference: matcher.c/matcher-pcre.c uses section raw start + size (+maxshift) window for SE.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1,4:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert_eq!(scan_match_count(src.as_str(), &data), 1);
+}
+
+#[test]
+fn yara_rule_with_pcre_section_end_offset_prefix_out_of_range_section_rejects_pe_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE2,4:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert_eq!(scan_match_count(src.as_str(), &data), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_last_section_offset_prefix_matches_last_section_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SL+4:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert_eq!(scan_match_count(src.as_str(), &data), 1);
 }
 
 #[test]
