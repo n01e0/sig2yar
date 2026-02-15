@@ -1,8 +1,8 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature, ftm::FtmSignature,
     hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
-    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, ndb::NdbSignature,
-    pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    ign2::Ign2Signature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+    msu::MsuSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -1124,6 +1124,27 @@ fn hsu_rule_strict_false_compiles_and_rejects_scan() {
     let src = yara::render_hsu_signature(&sig.to_ir());
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile hsu strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
+}
+
+#[test]
+fn mdu_rule_strict_false_compiles_and_rejects_scan() {
+    let raw = "45056:3ea7d00dedd30bcdf46191358c36ffa4:Eicar-Test-Signature:73";
+    let sig = MduSignature::parse(raw).unwrap();
+    let src = yara::render_mdu_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile mdu strict-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
+}
+
+#[test]
+fn msu_rule_strict_false_compiles_and_rejects_scan() {
+    let raw =
+        "45056:f9b304ced34fcce3ab75c6dc58ad59e4d62177ffed35494f79f09bc4e8986c16:Eicar-Test-Signature:73";
+    let sig = MsuSignature::parse(raw).unwrap();
+    let src = yara::render_msu_signature(&sig.to_ir());
+
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile msu strict-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"Eicar-Test-Signature"), 0);
 }
 

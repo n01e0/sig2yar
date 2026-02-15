@@ -11,6 +11,8 @@ pub mod ign;
 pub mod ign2;
 pub mod ldu;
 pub mod logical;
+pub mod mdu;
+pub mod msu;
 pub mod ndb;
 pub mod pdb;
 pub mod sfp;
@@ -25,6 +27,8 @@ pub enum DbType {
     Hdu,
     Hsu,
     Ldu,
+    Mdu,
+    Msu,
     Ndb,
     Idb,
     Cbc,

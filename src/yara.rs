@@ -21,6 +21,8 @@ use crate::{
         ign2::Ign2Signature,
         ldu::LduSignature,
         logical::{parse_expression_to_ir, LogicalSignature},
+        mdu::MduSignature,
+        msu::MsuSignature,
         ndb::NdbSignature,
         pdb::PdbSignature,
         sfp::SfpSignature,
@@ -158,6 +160,14 @@ pub fn render_ign2_signature(value: &ir::Ign2Signature) -> String {
 
 pub fn render_ldu_signature(value: &ir::LduSignature) -> String {
     lower_ldu_signature(value).to_string()
+}
+
+pub fn render_mdu_signature(value: &ir::MduSignature) -> String {
+    lower_mdu_signature(value).to_string()
+}
+
+pub fn render_msu_signature(value: &ir::MsuSignature) -> String {
+    lower_msu_signature(value).to_string()
 }
 
 pub fn lower_idb_signature(value: &ir::IdbSignature) -> YaraRule {
@@ -991,6 +1001,119 @@ pub fn lower_ldu_signature(value: &ir::LduSignature) -> YaraRule {
                 value: note.to_string(),
             },
         ],
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_mdu_signature(value: &ir::MduSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`PESectionSize:Hash:MalwareName[:MinFL]`)
+    let note = "mdu signatures are PUA-gated section-hash signatures in ClamAV runtime flow; standalone YARA cannot model equivalent PUA/runtime gating semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_mdu_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_mdu_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_mdu_section_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "mdu_pua_section_hash_signature_semantics".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "MDU_{}_{}",
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
+        meta,
+        strings: Vec::new(),
+        condition: "false".to_string(),
+        imports: Vec::new(),
+    }
+}
+
+pub fn lower_msu_signature(value: &ir::MsuSignature) -> YaraRule {
+    // ClamAV reference:
+    // - docs: manual/Signatures (`*u` DB extensions are loaded in PUA mode)
+    // - docs: manual/Signatures/HashSignatures (`PESectionSize:Hash:MalwareName[:MinFL]`)
+    let note = "msu signatures are PUA-gated section-hash signatures in ClamAV runtime flow; standalone YARA cannot model equivalent PUA/runtime gating semantics safely; lowered to false for safety";
+
+    let mut meta = vec![
+        YaraMeta::Entry {
+            key: "original_ident".to_string(),
+            value: value.name.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_msu_hash".to_string(),
+            value: value.hash.to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_msu_hash_type".to_string(),
+            value: hash_fn(&value.hash_type).to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_msu_section_size".to_string(),
+            value: value
+                .size
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "*".to_string()),
+        },
+        YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "msu_pua_section_hash_signature_semantics".to_string(),
+        },
+        YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: note.to_string(),
+        },
+    ];
+
+    if let Some(min) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: min.to_string(),
+        });
+    }
+
+    YaraRule {
+        name: format!(
+            "MSU_{}_{}_{}",
+            hash_fn(&value.hash_type),
+            normalize_rule_name(&value.name),
+            hash_tag(&value.hash)
+        ),
+        meta,
         strings: Vec::new(),
         condition: "false".to_string(),
         imports: Vec::new(),
@@ -4940,6 +5063,72 @@ impl<'p> TryFrom<LduSignature<'p>> for YaraRule {
     }
 }
 
+impl TryFrom<&ir::MduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::MduSignature) -> Result<Self> {
+        Ok(lower_mdu_signature(value))
+    }
+}
+
+impl TryFrom<ir::MduSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::MduSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&MduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &MduSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<MduSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MduSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl TryFrom<&ir::MsuSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ir::MsuSignature) -> Result<Self> {
+        Ok(lower_msu_signature(value))
+    }
+}
+
+impl TryFrom<ir::MsuSignature> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ir::MsuSignature) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
+impl<'p> TryFrom<&MsuSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &MsuSignature<'p>) -> Result<Self> {
+        let ir = value.to_ir();
+        YaraRule::try_from(&ir)
+    }
+}
+
+impl<'p> TryFrom<MsuSignature<'p>> for YaraRule {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MsuSignature<'p>) -> Result<Self> {
+        YaraRule::try_from(&value)
+    }
+}
+
 impl TryFrom<&ir::NdbSignature> for YaraRule {
     type Error = anyhow::Error;
 
@@ -5065,6 +5254,18 @@ impl<'p> From<&Ign2Signature<'p>> for ir::Ign2Signature {
 
 impl<'p> From<&LduSignature<'p>> for ir::LduSignature {
     fn from(value: &LduSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&MduSignature<'p>> for ir::MduSignature {
+    fn from(value: &MduSignature<'p>) -> Self {
+        value.to_ir()
+    }
+}
+
+impl<'p> From<&MsuSignature<'p>> for ir::MsuSignature {
+    fn from(value: &MsuSignature<'p>) -> Self {
         value.to_ir()
     }
 }

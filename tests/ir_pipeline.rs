@@ -3,7 +3,8 @@ use sig2yar::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
         ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
         idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
-        logical::LogicalSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, pdb::PdbSignature,
+        sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -51,6 +52,25 @@ fn ldu_ir_render_matches_display() {
     let sig = LduSignature::parse(raw).expect("ldu parse failed");
 
     let rendered = yara::render_ldu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn mdu_ir_render_matches_display() {
+    let raw = "45056:3ea7d00dedd30bcdf46191358c36ffa4:Eicar-Test-Signature";
+    let sig = MduSignature::parse(raw).expect("mdu parse failed");
+
+    let rendered = yara::render_mdu_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn msu_ir_render_matches_display() {
+    let raw =
+        "45056:f9b304ced34fcce3ab75c6dc58ad59e4d62177ffed35494f79f09bc4e8986c16:Eicar-Test-Signature";
+    let sig = MsuSignature::parse(raw).expect("msu parse failed");
+
+    let rendered = yara::render_msu_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
 

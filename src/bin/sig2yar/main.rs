@@ -8,8 +8,8 @@ use sig2yar::{
         cbc::CbcSignature, cdb::CdbSignature, crb::CrbSignature, fp::FpSignature,
         ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
         idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, ldu::LduSignature,
-        logical::LogicalSignature, ndb::NdbSignature, pdb::PdbSignature, sfp::SfpSignature,
-        wdb::WdbSignature, DbType,
+        logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -43,6 +43,16 @@ fn main() -> Result<()> {
             let sig = LduSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             println!("{}", yara::render_ldu_signature(&ir));
+        }
+        DbType::Mdu => {
+            let sig = MduSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_mdu_signature(&ir));
+        }
+        DbType::Msu => {
+            let sig = MsuSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            println!("{}", yara::render_msu_signature(&ir));
         }
         DbType::Ndb => {
             let sig = NdbSignature::parse(&args.signature)?;
