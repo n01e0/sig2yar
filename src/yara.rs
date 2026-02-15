@@ -2248,9 +2248,10 @@ fn build_macro_group_index(
                 "((uint8(0) == 0x46 or uint8(0) == 0x43 or uint8(0) == 0x5A) and uint8(1) == 0x57 and uint8(2) == 0x53)"
                     .to_string(),
             ),
+            "12" => Some("uint32(0) == 0xBEBAFECA".to_string()),
             _ => {
                 notes.push(format!(
-                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 6, 9, 10, or 11); ignored for strict macro lowering",
+                    "ndb macro link '{}' for group ${group_id} has target_type={} (expected 0, 1, 6, 9, 10, 11, or 12); ignored for strict macro lowering",
                     sig.name, sig.target_type
                 ));
                 continue;
