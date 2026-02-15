@@ -58,7 +58,7 @@ Last update: 2026-02-15
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
   - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,2,3,4,5,6,7,9,10,11,12}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=2` は OLE2 guard、`target_type=3` は HTML guard、`target_type=4` は MAIL guard、`target_type=5` は graphics guard、`target_type=6` は `uint32(0)==0x464C457F`、`target_type=7` は ASCII guard、`target_type=9` は Mach-O/FAT guard、`target_type=10` は PDF guard、`target_type=11` は SWF guard、`target_type=12` は Java class guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,2,3,4,5,6,7,9,10,11,12} target / 非表現body）は **false + note** を維持。
-- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一）
+- [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一し、`clamav_unsupported=fuzzy_img_hash_runtime_match` を付与）
 
 ### 2.3 未対応/不足
 
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記58: `fuzzy_img` subsig を含む logical rule に `clamav_unsupported=fuzzy_img_hash_runtime_match` を付与するよう更新。
+  - 背景: `fuzzy_img` は false+note で安全化済みだが、他DB typeと同様に unsupported分類を機械可読に載せたい。
+  - 変更: `lower_subsignatures(...)` で `fuzzy_img#` subsig検出フラグを集約し、`lower_logical_signature_with_ndb_context(...)` で meta へ unsupported key を追加（valid/malformed の双方で付与）。
+  - テスト: `tests/yara_rule.rs` で valid/malformed fuzzy_img の `clamav_unsupported` メタ付与を検証。
 - 2026-02-15 追記57: `fuzzy_img` strict-safe の parser境界を ClamAV source 準拠で明確化。
   - 背景: 既存 `parse_fuzzy_img_subsignature(...)` は hash 長を制限せず、`fuzzy_img#abcdef#0` のような短い hash も「非表現要素」として扱っていた。
   - 変更: `src/yara.rs` で `fuzzy_img` parse を `Option<Result<...>>` 化し、`fuzzy_img#` prefix の入力を専用判定。hash は **16 hex chars（8-byte）必須**、distance は unsigned integer のみ許可（省略時0）。違反時は詳細理由つきで **format unsupported/invalid + false**。
