@@ -1149,6 +1149,24 @@ fn lowers_macro_subsignature_with_linked_ndb_target_type_2_when_representable() 
 }
 
 #[test]
+fn lowers_macro_subsignature_with_linked_ndb_target_type_3_when_representable() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![NdbSignature::parse("D1:3:$12:626262").unwrap().to_ir()];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+
+    assert!(rule
+        .condition
+        .contains("for any j in (0..filesize-1) : (uint8(j) == 0x3C)"));
+    assert!(rule
+        .condition
+        .contains("for any k in (0..filesize-1) : (uint8(k) == 0x3E)"));
+    assert!(rule.condition.contains("for any j in (1..#m1_0)"));
+    assert!(rule.condition.contains("@m1_0[j] >= @s0[i] + 6"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
 fn lowers_macro_subsignature_with_linked_ndb_target_type_5_when_representable() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
     let ndb_links = vec![NdbSignature::parse("D1:5:$12:626262").unwrap().to_ir()];
@@ -1259,7 +1277,7 @@ fn lowers_macro_subsignature_to_false_when_linked_ndb_is_not_strictly_representa
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("target_type=4 (expected 0, 1, 2, 5, 6, 7, 9, 10, 11, or 12)")
+                && value.contains("target_type=4 (expected 0, 1, 2, 3, 5, 6, 7, 9, 10, 11, or 12)")
                 && value.contains("lowered to false for safety")
     )));
 }
