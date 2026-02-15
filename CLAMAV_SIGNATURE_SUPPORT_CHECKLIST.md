@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記42: `byte_comparison` offset の base-0 挙動固定として、octal offset fixture（`>>010`）を追加。
+  - 背景: `strtol(..., 0)` 準拠では先頭0付き数値は octal になるため、`010` は decimal 10 ではなく 8。
+  - 変更: 既存base-0実装に対しテストを追加し、`>>010` が `+8` として評価されることを固定化。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（`>>010` match / decimal 10 fixture non-match）。
 - 2026-02-15 追記41: `byte_comparison` 残edge-caseの1スライスとして、offset 数値解釈を ClamAV source の `strtol(..., 0)` 相当に寄せた。
   - 背景: 既存実装は bare-hex（例: `>>0A`）を受理していたが、ClamAV source parser は base-0 のため bare-hex を受理しない。
   - 変更: `src/yara.rs` で offset parse を base-0 化（`0x..` / octal / decimal を受理、bare-hex は parse失敗→malformed strict-safe false）。
