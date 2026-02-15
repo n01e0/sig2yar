@@ -57,7 +57,7 @@ Last update: 2026-02-15
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
-  - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,6}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=6` は `uint32(0)==0x464C457F` guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,6} target / 非表現body）は **false + note** を維持。
+  - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,6,9}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=6` は `uint32(0)==0x464C457F`、`target_type=9` は Mach-O/FAT guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,6,9} target / 非表現body）は **false + note** を維持。
 - [ ] `fuzzy_img` は専用ハンドリング実装済み（現状は安全側 `false` + note。malformed入力も strict-safe で `false` に統一）
 
 ### 2.3 未対応/不足
@@ -109,6 +109,10 @@ Last update: 2026-02-15
 
 ## 4) メモ（現状観測）
 
+- 2026-02-15 追記48: `macro` linked NDB target 拡張として `target_type=9`（Mach-O/FAT）を strict subset に追加。
+  - 背景: linked member の strict subset を `target_type=6` まで拡張後も、Mach-O/FAT 向け NDB member は安全に表現可能でも false 側に倒れていた。
+  - 変更: `target_type=9` を許可し、macro member clause に Mach-O/FAT magic guard（`uint32(0)` の6種）を併置。`target_type=2+`（6/9除く）は引き続き strict-safe false（ignored）。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に fixture 追加（Mach-O/FATヘッダあり match、ELF fixture non-match、`target_type=2` は false）。
 - 2026-02-15 追記47: `macro` linked NDB target 拡張として `target_type=6`（ELF）を strict subset に追加。
   - 背景: linked member の strict subset を `target_type=1` まで拡張後も、ELF向け NDB member は安全に表現可能でも false 側に倒れていた。
   - 変更: `target_type=6` を許可し、macro member clause に `uint32(0) == 0x464C457F` guard を併置。`target_type=2+`（6除く）は引き続き strict-safe false（ignored）。
@@ -209,7 +213,7 @@ Last update: 2026-02-15
   - `tests/yara_rule.rs` / `tests/yara_compile.rs` に `VIjunk` と malformed `$foo$` の rule/compile fixture を追加。
   - 追加fixture名: `lowers_pcre_versioninfo_prefixed_payload_to_false_for_safety` / `lowers_pcre_invalid_macro_group_offset_prefix_to_false_for_safety` / `yara_rule_with_pcre_versioninfo_prefixed_payload_false_compiles_with_yara_x` / `yara_rule_with_pcre_invalid_macro_group_offset_prefix_false_compiles_with_yara_x`。
 - 2026-02-13 追記24: macro 残課題（macro group解決 / ndb連携）の最小スライスとして、`src/yara.rs` に `lower_logical_signature_with_ndb_context(...)` を追加し、macro subsig の strict subset 連携を実装。
-  - 連携条件（strict-safe）: `ndb.offset=$<group>` / `target_type in {0,1,6}`（1は MZ guard、6は ELF guard 併置） / group<32 / bodyが既存NDB strict lowerで表現可能 / macro直前subsigが direct string anchor。
+  - 連携条件（strict-safe）: `ndb.offset=$<group>` / `target_type in {0,1,6,9}`（1は MZ guard、6は ELF guard、9は Mach-O/FAT guard 併置） / group<32 / bodyが既存NDB strict lowerで表現可能 / macro直前subsigが direct string anchor。
   - 生成条件: `subsig[idx-1]` の start offset 基準で `{min-max}` window を `for any` 条件へ lowerし、linked ndb member body を rule string として展開（例: `$m1_0`, `$m1_1`）。
   - 非表現ケース（link無し・non-direct anchor・target!=0・non-representable body）は **false + note** を維持（近似禁止）。
   - `tests/yara_rule.rs` / `tests/yara_compile.rs` に macro↔ndb link の rule/scan fixture（match/non-match + strict-false fallback）を追加。
