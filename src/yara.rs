@@ -4652,12 +4652,18 @@ fn lower_pcre_offset_window_condition(
 ) -> String {
     match window {
         PcreOffsetWindow::Exact { start } => {
+            if rolling {
+                notes.push(format!(
+                    "subsig[{idx}] pcre flag 'r' with exact offset prefix depends on ClamAV rolling scan-state semantics; lowered to false for safety"
+                ));
+                return "false".to_string();
+            }
             if encompass {
                 notes.push(format!(
                     "subsig[{idx}] pcre flag 'e' ignored on exact offset"
                 ));
             }
-            pcre_occurrence_exact_expr(core, &start, rolling)
+            pcre_occurrence_exact_expr(core, &start, false)
         }
         PcreOffsetWindow::Range { start, end } => {
             if rolling {
