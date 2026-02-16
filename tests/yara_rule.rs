@@ -256,16 +256,19 @@ fn lowers_hex_subsignature_with_wide_fullword_modifier_to_boundary_condition() {
 }
 
 #[test]
-fn lowers_hex_subsignature_with_wide_ascii_fullword_modifier_to_false_for_safety() {
+fn lowers_hex_subsignature_with_wide_ascii_fullword_modifier_to_branch_dispatched_boundary_condition(
+) {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::waf").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
+    assert!(rule.condition.contains("for any i in (1..#s0)"));
+    assert!(rule.condition.contains("!s0[i] == 5"));
+    assert!(rule.condition.contains("!s0[i] == 10"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("hex modifier 'f' (fullword) with wide+ascii matching is unsupported for strict lowering")
+                && value.contains("hex modifier 'f' lowered with strict ascii|wide branch-dispatched boundary checks")
     )));
 }
 
