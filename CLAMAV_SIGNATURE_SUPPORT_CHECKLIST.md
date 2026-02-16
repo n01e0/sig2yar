@@ -54,7 +54,7 @@ Last update: 2026-02-16
 ### 2.2 近似/暫定対応（要改善）
 
 - [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..`/`+010` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..`/`+010` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08` / `=+08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
-- [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む。追記86で linked ndb 側 `offset=$32` など out-of-range group も ignore + false fallback を fixture 固定）。
+- [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む。追記86で linked ndb 側 `offset=$32` など out-of-range group も ignore + false fallback を fixture 固定、追記87で linked ndb body が strict non-representable な場合の ignore + false fallback を fixture 固定）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
   - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,2,3,4,5,6,7,9,10,11,12}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=2` は OLE2 guard、`target_type=3` は HTML guard、`target_type=4` は MAIL guard、`target_type=5` は graphics guard、`target_type=6` は `uint32(0)==0x464C457F`、`target_type=7` は ASCII guard、`target_type=9` は Mach-O/FAT guard、`target_type=10` は PDF guard、`target_type=11` は SWF guard、`target_type=12` は Java class guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,2,3,4,5,6,7,9,10,11,12} target / 非表現body）は **false + note** を維持。
@@ -109,6 +109,9 @@ Last update: 2026-02-16
 
 ## 4) メモ（現状観測）
 
+- 2026-02-16 追記87: macro linked ndb の body representability 境界として、strict non-representable body を ignore + false fallback で fixture 固定。
+  - 背景: linked ndb の group/target 境界は固定済みだったが、body 側が strict non-representable（例: signed jump）な場合の ignore 理由 note が未固定だった。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `D1:0:$12:AA{-15}BB` fixture を追加し、`not representable in strict YARA lowering` + reason (`ndb signed jump`) + macro fallback `false`（scan non-match）を固定。
 - 2026-02-16 追記86: macro linked ndb の group境界として、`offset=$32`（out-of-range）を ignore + false fallback で fixture 固定。
   - 背景: macro subsig 側の `group>=32` strict-false は固定済みだったが、linked ndb context 側の out-of-range group（`$32`）の ignore挙動が未固定だった。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `D1:0:$32:...` fixture を追加し、`offset group $32 outside 0..31` note と macro fallback `false`（scan non-match）を固定。
