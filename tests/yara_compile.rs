@@ -1191,6 +1191,26 @@ fn yara_rule_with_pcre_re_flags_without_offset_prefix_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_e_flag_without_offset_prefix_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag(s) 'e' require explicit offset/maxshift runtime semantics"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_exact_offset_with_re_flags_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag 'r' with exact offset prefix"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_target_description_constraints_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1,FileSize:10-20,EntryPoint:100-200,NumberOfSections:2-4;0;41414141",

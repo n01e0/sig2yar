@@ -927,6 +927,20 @@ fn lowers_pcre_re_flags_without_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_e_flag_without_offset_prefix_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag(s) 'e' require explicit offset/maxshift runtime semantics")
+    )));
+}
+
+#[test]
 fn lowers_pcre_exact_offset_with_encompass_flag_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -937,6 +951,21 @@ fn lowers_pcre_exact_offset_with_encompass_flag_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("flag 'e' with exact offset prefix")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_pcre_exact_offset_with_re_flags_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with exact offset prefix")
                 && value.contains("lowered to false for safety")
     )));
 }
