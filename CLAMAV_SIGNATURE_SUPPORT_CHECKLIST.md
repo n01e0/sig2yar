@@ -53,7 +53,7 @@ Last update: 2026-02-16
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octalを受理し bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
 - [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
@@ -109,6 +109,10 @@ Last update: 2026-02-16
 
 ## 4) メモ（現状観測）
 
+- 2026-02-16 追記83: `byte_comparison` の `strtol(...,0)` 準拠境界として、offset / threshold の明示 `+` 付き数値トークンを fixture で固定。
+  - 背景: 既存実装は `0x..` / octal を受理していたが、ClamAV source の `strtol/strtoll(..., 0)` が受理する `+0x..` などの先頭 `+` を未反映だった。
+  - 変更: `src/yara.rs` の `parse_clamav_base0_u64(...)` と `ByteCmpBase::Hex` threshold parse を更新し、先頭 `+` を許容。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `>>+0xA` offset と `=+0xA` threshold の fixture を追加し、match 挙動を固定。
 - 2026-02-16 追記82: hex modifier `f`（fullword）未実装トラックの strict-safe 固定として、`wf` / `waf` 併用時も strict-false fixture で固定。
   - 背景: `f` 単体は strict-false で固定済みだったが、wide系 modifier 併用（`wf` / `waf`）でも同一安全側挙動を維持することを回帰不能化する。
   - テスト: `tests/yara_rule.rs` に `68656c6c6f::wf` / `68656c6c6f::waf` の condition=false + note assertion を追加。`tests/yara_compile.rs` に wide/wide-ascii 入力の scan non-match fixture を追加。
