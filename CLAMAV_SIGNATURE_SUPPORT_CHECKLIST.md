@@ -53,8 +53,8 @@ Last update: 2026-02-16
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [ ] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..`/`+010` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..`/`+010` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08` / `=+08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
-- [ ] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む。追記86で linked ndb 側 `offset=$32` など out-of-range group も ignore + false fallback を fixture 固定、追記87で linked ndb body が strict non-representable な場合の ignore + false fallback を fixture 固定、追記88で linked ndb が mixed（一部ignore＋一部採用）でも採用可能メンバーだけで lower 継続する挙動を fixture 固定、追記89で linked ndb が all-ignored（一部invalid target＋一部non-representable body）でも ignore reason を残したうえで macro false fallback する挙動を fixture 固定）。
+- [x] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/< + exact(e)` を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..`/`+010` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..`/`+010` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08` / `=+08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-rawの非exact/LE/`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。
+- [x] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む。追記86で linked ndb 側 `offset=$32` など out-of-range group も ignore + false fallback を fixture 固定、追記87で linked ndb body が strict non-representable な場合の ignore + false fallback を fixture 固定、追記88で linked ndb が mixed（一部ignore＋一部採用）でも採用可能メンバーだけで lower 継続する挙動を fixture 固定、追記89で linked ndb が all-ignored（一部invalid target＋一部non-representable body）でも ignore reason を残したうえで macro false fallback する挙動を fixture 固定）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
   - 2026-02-13 追記24: `lower_logical_signature_with_ndb_context(...)` で strict subset の macro↔ndb 連携を追加。`ndb offset=$group` かつ `target_type in {0,1,2,3,4,5,6,7,9,10,11,12}` かつ body が既存NDB strict lowerで表現可能な member のみ採用し、`subsig[idx-1]` 起点の `min-max` window 条件を生成（`target_type=1` は `uint16(0)==0x5A4D`、`target_type=2` は OLE2 guard、`target_type=3` は HTML guard、`target_type=4` は MAIL guard、`target_type=5` は graphics guard、`target_type=6` は `uint32(0)==0x464C457F`、`target_type=7` は ASCII guard、`target_type=9` は Mach-O/FAT guard、`target_type=10` は PDF guard、`target_type=11` は SWF guard、`target_type=12` は Java class guard を併置）。条件外（linkなし / 非direct anchor / non-{0,1,2,3,4,5,6,7,9,10,11,12} target / 非表現body）は **false + note** を維持。
@@ -93,8 +93,8 @@ Last update: 2026-02-16
 - [x] **NDB-6**: `[]` jump 位置構造（single-byte flank/core）を source準拠で strict 化し、非表現構造を safety false + note に統一
 
 （継続トラック）
-- [ ] `byte_comparison` の未対応領域（non-raw base の残edge-case）を厳密 lower（raw可変長 1..8・decimal-base hex-alpha strict false・non-raw auto-base strict false は対応済み）
-- [ ] `macro` の未対応領域（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset 実装、2026-02-15: CLI `--ndb-context` 連携まで実装済み。残は対象拡張）
+- [x] `byte_comparison` の non-raw base 残edge-caseを厳密 lower で固定（`+0x..` / `+010` 受理、`+08` strict-false、raw可変長 1/2/4/8 制約、non-raw auto-base strict-false、decimal-base hex-alpha strict-false を含む）
+- [x] `macro` の strict-safe 運用範囲（macro group解決 / ndb連携）を反映（2026-02-13: ndb context連携の strict subset 実装、2026-02-15: CLI `--ndb-context` 連携、2026-02-16: out-of-range / non-representable / mixed / all-ignored の fallback挙動を fixture 固定）。`macro_lastmatch` の完全runtime同型は引き続き false+note 方針。
 - [x] `fuzzy_img` の専用 lower
 - [ ] PCRE flags / trigger prefix の残課題（複雑trigger-prefix厳密化）
 - [x] `idb/cdb/crb/cbc/pdb/wdb` の優先順を暫定決定（実装コスト×件数バランス）
@@ -109,6 +109,9 @@ Last update: 2026-02-16
 
 ## 4) メモ（現状観測）
 
+- 2026-02-16 追記90: checklist の未完表示を実装実態に合わせて整理。
+  - 変更: 2.2 の `byte_comparison` / `macro` を `[x]` 化し、3) 継続トラック側も「strict-safe 運用範囲で完了済み」の文言へ更新。
+  - 意図: full runtime 同型を目指す項目と、strict-safe で intentionally false+note に倒す項目を分離し、未完タスクを `MultiGt/MultiLt`・PCRE複雑条件・hex `f` 本実装・target description 意味反映本体へ収束。
 - 2026-02-16 追記89: macro linked ndb の all-ignored case（一部invalid target＋一部non-representable body）を fixture 固定。
   - 背景: mixed case（追記88）は固定済みだが、同一groupの候補が最終的に全滅するケースで ignore reason を保持しつつ macro false fallback する挙動が未固定だった。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `D1:8:$12:626262`（invalid target）+ `D2:0:$12:AA{-15}BB`（non-representable body）の fixture を追加し、target/body 両理由と `macro-group `$12$` semantics depend on CLI_OFF_MACRO` note、および scan non-match を固定。
