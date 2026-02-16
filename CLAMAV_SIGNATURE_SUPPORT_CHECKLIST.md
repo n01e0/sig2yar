@@ -109,6 +109,12 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記129: scan-diff の差分レポートに分類軸を追加し、`only_clamav` を strict-false 由来か非strict差分かで分離して可視化。
+  - 変更: `scripts/logical-scan-diff.sh` の集計処理で生成YARA（`sample.yar`）から `condition` / `clamav_unsupported` / `clamav_lowering_notes` を抽出し、差分カテゴリを付与。
+  - 追加出力: `summary.json` に `only_clamav_strict_false_total` / `only_clamav_non_strict_total` / `mismatch_category_files` / `top_strict_false_unsupported_tags` を追加。
+  - 追加出力: `mismatches.tsv` に `only_clamav_strict_false` / `only_clamav_non_strict` / `strict_false_unsupported_tags` 列を追加。
+  - 追加出力: `report.md` に mismatch categorization セクションを追加し、strict-false由来差分と要調査差分（non-strict）を分離して確認可能に。
+  - 方針: レポート成果物は `target/validation/scan-diff/run.*` 配下のみ（リポジトリへは非コミット）。
 - 2026-02-17 追記128: ClamAV実体スキャンとの差分可視化を始めるため、sampled logical signatures を対象に `ClamAV(clamscan)` と `sig2yar+yara-x` のヒット差分を集計する検証スクリプトを追加。
   - 変更: `scripts/logical-scan-diff.sh` を追加。`CLAMAV_DIFF_CORPUS_DIR` を入力に、(1) `.ldb` reservoir sampling、(2) `sig2yar` で ruleset 生成、(3) `yara_scan_corpus` でヒット収集、(4) Docker上 `clamscan --allmatch` 結果との比較、(5) `summary.json` / `mismatches.tsv` / `report.md` 出力までを自動化。
   - 変更: `src/bin/yara_scan_corpus/main.rs` を追加（YARA rules + corpus を受けて `<file>\t<rule_id>` ヒットをTSV出力）。
