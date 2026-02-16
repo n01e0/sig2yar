@@ -13,4 +13,4 @@ nom = "8.0.0"
 thiserror = "2.0.18"
 
 [dev-dependencies]
-yara-x = "1.11.0"
+yara-x = "1.13.0"
