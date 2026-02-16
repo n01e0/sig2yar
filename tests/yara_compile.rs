@@ -1203,6 +1203,16 @@ fn yara_rule_with_byte_comparison_offset_plus_0x_prefix_matches_fixture() {
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_offset_plus_octal_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>+010#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzA"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzA"), 0);
+}
+
+#[test]
 fn yara_rule_with_byte_comparison_offset_bare_hex_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0A#ib1#=65)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1270,6 +1280,16 @@ fn yara_rule_with_non_raw_decimal_plus_0x_prefixed_threshold_matches_fixture() {
 
     assert_eq!(scan_match_count(src.as_str(), b"10"), 1);
     assert_eq!(scan_match_count(src.as_str(), b"11"), 0);
+}
+
+#[test]
+fn yara_rule_with_non_raw_decimal_plus_octal_threshold_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=+010)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"08"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"10"), 0);
 }
 
 #[test]
