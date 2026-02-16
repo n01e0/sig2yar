@@ -674,6 +674,38 @@ fn lowers_pcre_trigger_prefix_with_missing_base_and_trailing_comma_offset_token_
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_with_missing_base_and_trailing_multi_empty_comma_offset_token_to_false_for_safety(
+) {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;,300,,:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset prefix ',300,,' unsupported")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_pcre_trigger_prefix_with_double_leading_and_trailing_comma_offset_token_to_false_for_safety(
+) {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;,,300,:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset prefix ',,300,' unsupported")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_trigger_prefix_with_mixed_missing_reference_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
