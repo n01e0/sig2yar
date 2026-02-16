@@ -1,104 +1,73 @@
-# sig2yar DB Support (Strict View) / DBサポート状況（厳密判定）
+# sig2yar
 
-Last updated: 2026-02-17
+Convert a single ClamAV signature into a YARA rule.
 
-## 日本語
+- Japanese README: [`README.ja.md`](./README.ja.md)
+- Detailed implementation tracker: [`CLAMAV_SIGNATURE_SUPPORT_CHECKLIST.md`](./CLAMAV_SIGNATURE_SUPPORT_CHECKLIST.md)
 
-このREADMEは、`sig2yar` が ClamAV DB をどれだけ **厳密に** 変換できるかを示す。
+## What this tool does
 
-### 判定ポリシー（重要）
+`sig2yar` takes one ClamAV signature record and emits one YARA rule.
 
-この表では次を「未サポート」に含める。
+Current design goal is **strict-safe** conversion:
 
-- `condition: false` / `(false)`（strict-safe）
-- `clamav_unsupported` が付く
-- `clamav_lowering_notes` が付く（fallback/近似/制限付きlowering）
-- 変換エラー
+- preserve semantics where possible
+- when semantics cannot be represented safely, avoid risky approximation
 
-つまり、**fallback と strict-safe は未サポート扱い**。
+For support reporting in this README, fallback/strict-safe paths are treated as **unsupported**.
 
-### 測定スナップショット
+## Build
 
-- 対象DB: `clamav-db/unpacked`（このリポジトリ内のローカル展開DB）
-- レコード数:
-  - 基本は「非コメント・非空行」数
-  - `cbc` はファイル単位（非空payloadファイル数）
-- 評価方法:
-  - `target/debug/sig2yar` で各シグネチャをlower
-  - 大規模DBは reservoir sampling（`hdb/hsb/mdb: 300`, `ldb/ndb: 800`）
-  - それ以外は全件評価
+```bash
+cargo build --bin sig2yar
+```
 
-### DB別サポート状況
+## Usage
 
-| DB | Records | Evaluated | Strictly supported | Unsupported (incl. fallback/strict-safe) | Notes |
-|---|---:|---:|---:|---:|---|
-| hdb | 20,444 | 300 (sample) | 300 (100.0%) | 0 | hash-file signatures |
-| hsb | 521,446 | 300 (sample) | 300 (100.0%) | 0 | hash-file signatures |
-| mdb | 2,670,547 | 300 (sample) | 0 (0.0%) | 300 | section-hash family currently strict-safe false |
-| msb | 3 | 3 | 0 (0.0%) | 3 | section-hash family currently strict-safe false |
-| imp | 0 | 0 | - | - | no records in this snapshot |
-| ldb | 311,662 | 800 (sample) | 0 (0.0%) | 800 | sampled rules all had fallback notes/unsupported meta |
-| ndb | 101,891 | 800 (sample) | 747 (93.4%) | 78 (53 notes + 25 strict-false) | partial strict support, unsupported edges still exist |
-| ndu | 4,159 | 4,159 | 0 (0.0%) | 4,159 | strict-safe false track |
-| idb | 222 | 222 | 0 (0.0%) | 222 | strict-safe false track |
-| cdb | 135 | 135 | 0 (0.0%) | 135 | strict-safe false track |
-| cfg | 21 | 21 | 0 (0.0%) | 21 | strict-safe false track |
-| crb | 30 | 30 | 0 (0.0%) | 30 | strict-safe false track |
-| pdb | 263 | 263 | 0 (0.0%) | 263 | strict-safe false track |
-| wdb | 185 | 185 | 0 (0.0%) | 185 | strict-safe false track |
-| cbc | 85 | policy-based | 0 (0.0%) | 85 | bytecode signatures are intentionally strict-safe false |
-| ftm | 268 | 268 | 0 (0.0%) | 268 | strict-safe false track |
-| fp | 996 | 996 | 0 (0.0%) | 996 | strict-safe false track |
-| sfp | 2 | 2 | 0 (0.0%) | 2 | strict-safe false track |
-| ign | 1 | 1 | 0 (0.0%) | 1 | strict-safe false track |
-| ign2 | 13 | 13 | 0 (0.0%) | 13 | strict-safe false track |
-| hdu | 39 | 39 | 0 (0.0%) | 39 | strict-safe false track |
-| hsu | 1 | 1 | 0 (0.0%) | 1 | strict-safe false track |
-| ldu | 10,166 | 10,166 | 0 (0.0%) | 10,166 | strict-safe false track |
-| mdu | 315 | 315 | 0 (0.0%) | 315 | strict-safe false track |
-| msu | 1 | 1 | 0 (0.0%) | 1 | strict-safe false track |
-| info | 124 | 124 | 0 (0.0%) | 124 | strict-safe false track |
+```bash
+sig2yar <db_type> <signature>
+```
 
-### いまの結論
+Show help:
 
-- 実運用上「厳密サポート」と言えるのは、現時点では **`hdb` / `hsb` と `ndb` の一部**。
-- それ以外は、ポリシー上「未サポート（fallback / strict-safe含む）」として扱うべき。
-- 詳細トラッキングは `CLAMAV_SIGNATURE_SUPPORT_CHECKLIST.md` を参照。
+```bash
+sig2yar --help
+```
 
----
+Example (`hash`):
 
-## English
+```bash
+sig2yar hash "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature"
+```
 
-This README summarizes how much of ClamAV DB `sig2yar` can convert in a **strict** sense.
+Example (`logical`):
 
-### Classification policy (important)
+```bash
+sig2yar logical "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
+```
 
-In this document, the following are all treated as **unsupported**:
+Example (`logical` with linked NDB context for macro-group subset):
 
-- `condition: false` / `(false)` (strict-safe)
-- `clamav_unsupported` is present
-- `clamav_lowering_notes` is present (fallback/approximation/constrained lowering)
-- conversion error
+```bash
+sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
+  --ndb-context "D1:0:$12:626262" \
+  --ndb-context "D2:0:$12:636363"
+```
 
-So, **fallback and strict-safe are counted as unsupported**.
+## ClamAV DB support overview (coarse)
 
-### Measurement snapshot
+> This is a planning-level summary, not a formal benchmark.
 
-- Target DB: `clamav-db/unpacked` (local unpacked DB in this repo)
-- Record counting:
-  - line-based (`non-empty`, `non-comment`) for most DBs
-  - file-based for `cbc` (non-empty payload files)
-- Evaluation:
-  - lower each signature with `target/debug/sig2yar`
-  - reservoir sampling for very large DBs (`hdb/hsb/mdb: 300`, `ldb/ndb: 800`)
-  - full evaluation for the rest
+| DB / family | Current status | Estimated support (rule-level) | Main missing features |
+|---|---|---:|---|
+| `hdb`, `hsb` | Fully supported | **~100%** | None in current scope |
+| `ndb` | Partially supported (strong subset) | **~90%** | Signed/open jump edges, non-canonical square-jump forms, some runtime-dependent offset semantics, reserved/unsupported target types |
+| `ldb` | Partial only | **~0–10% strict** (very low) | Full macro runtime semantics, `fuzzy_img` runtime hash behavior, PCRE runtime-dependent flags/offset combinations, non-observable target-description constraints |
+| `mdb`, `msb`, `imp` | Not strictly supported yet | **~0%** | Section-hash/import-hash strict mapping not implemented under current strict policy |
+| `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion not implemented | **~0%** | Currently handled as strict-safe / fallback path |
 
-### Support by DB type
+## Practical takeaway
 
-(Shared table above: same numbers/definitions for JP/EN.)
-
-### Current takeaway
-
-- Strictly-supported coverage is currently practical mainly for **`hdb` / `hsb` and part of `ndb`**.
-- Everything else should be treated as unsupported under this strict policy.
-- For implementation details and ongoing work, see `CLAMAV_SIGNATURE_SUPPORT_CHECKLIST.md`.
+- If you need high-confidence conversion today, use `hdb`/`hsb` first.
+- `ndb` is usable for many signatures but still has unsupported edge cases.
+- Most other DB types are intentionally conservative (strict-safe / fallback) until semantic parity is implemented.
