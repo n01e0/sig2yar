@@ -705,6 +705,21 @@ fn lowers_pcre_last_section_offset_prefix_to_constraint() {
 }
 
 #[test]
+fn lowers_pcre_last_section_offset_prefix_with_rolling_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SL+16,4:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_section_end_offset_with_e_to_section_window() {
     // ClamAV reference:
     // - libclamav/matcher.c:369-376 (`SEn` parsed as CLI_OFF_SE)
@@ -720,6 +735,21 @@ fn lowers_pcre_section_end_offset_with_e_to_section_window() {
     assert!(rule.condition.contains(
         "(@s1[j] + !s1[j]) <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"
     ));
+}
+
+#[test]
+fn lowers_pcre_section_end_offset_with_rolling_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1,4:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
 }
 
 #[test]

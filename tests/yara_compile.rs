@@ -451,6 +451,17 @@ fn yara_rule_with_pcre_section_end_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_section_end_offset_prefix_with_rolling_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1,4:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), &data), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_section_offset_prefix_valid_section_index_matches_pe_fixture() {
     // ClamAV reference: matcher.c recalculates Sx+ against sections[n].raw.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S1+4:0/abc/").unwrap();
@@ -510,6 +521,17 @@ fn yara_rule_with_pcre_last_section_offset_prefix_compiles_with_yara_x() {
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre SL+ offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_last_section_offset_prefix_with_rolling_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SL+4,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), &data), 0);
 }
 
 #[test]
