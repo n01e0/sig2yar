@@ -650,6 +650,21 @@ fn lowers_pcre_ep_minus_offset_prefix_to_entry_point_constraint() {
 }
 
 #[test]
+fn lowers_pcre_ep_minus_offset_prefix_with_rolling_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP-10,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_star_offset_prefix_with_re_flags_to_false_for_safety() {
     // ClamAV reference: libclamav/matcher.c:350-354 (`*` parsed as CLI_OFF_ANY)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
