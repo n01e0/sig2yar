@@ -515,6 +515,21 @@ fn lowers_pcre_ep_plus_offset_prefix_to_entry_point_constraint() {
 }
 
 #[test]
+fn lowers_pcre_ep_plus_offset_prefix_with_rolling_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_ep_offset_prefix_on_non_exec_target_to_false_for_safety() {
     // ClamAV reference:
     // - libclamav/matcher.c:455-459 rejects EP/Sx/SE/SL offsets unless target is PE/ELF/MachO.
@@ -605,6 +620,21 @@ fn lowers_pcre_eof_minus_offset_prefix_to_filesize_constraint() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] == filesize - 10"));
+}
+
+#[test]
+fn lowers_pcre_eof_minus_offset_prefix_with_rolling_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-10,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
 }
 
 #[test]

@@ -330,6 +330,16 @@ fn yara_rule_with_pcre_ep_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_ep_plus_offset_prefix_with_rolling_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_ep_offset_prefix_on_non_exec_target_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;1;41414141;EP+10:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -541,6 +551,16 @@ fn yara_rule_with_pcre_eof_minus_offset_prefix_compiles_with_yara_x() {
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre EOF- offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_eof_minus_offset_prefix_with_rolling_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-10,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
 }
 
 #[test]
