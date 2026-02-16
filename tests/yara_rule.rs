@@ -1004,6 +1004,20 @@ fn lowers_pcre_anchored_with_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_anchored_with_offset_prefix_and_encompass_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/Ae").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("anchored flag with explicit offset prefix cannot be represented safely")
+    )));
+}
+
+#[test]
 fn lowers_pcre_anchored_with_rolling_or_encompass_to_false_for_safety() {
     // ClamAV reference:
     // - `A` anchoring and `r/e` scan-behavior flags are evaluated in ClamAV matcher runtime state.
