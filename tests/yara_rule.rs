@@ -1101,6 +1101,22 @@ fn lowers_pcre_macro_group_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_macro_group_offset_prefix_with_trailing_bytes_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c uses sscanf("$%u$") for macro group offset;
+    // trailing bytes after closing '$' are tolerated by sscanf and still parse as CLI_OFF_MACRO.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$12$junk:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre offset `$12$` depends on CLI_OFF_MACRO runtime state")
+    )));
+}
+
+#[test]
 fn lowers_pcre_invalid_macro_group_offset_prefix_to_false_for_safety() {
     // ClamAV reference: libclamav/matcher.c:432-434 rejects malformed `$...$` offsets.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$foo$:0/abc/").unwrap();
