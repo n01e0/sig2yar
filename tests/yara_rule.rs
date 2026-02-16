@@ -417,6 +417,22 @@ fn lowers_pcre_trigger_prefix_with_multi_gt_expression_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)<2,1/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("count/distinct operators unsupported for strict lowering")
+    )));
+}
+
+#[test]
 fn lowers_pcre_trigger_prefix_resolved_false_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
