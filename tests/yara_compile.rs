@@ -247,13 +247,23 @@ fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_trigger_prefix_resolved_false_rejects_scan_for_safety() {
+fn yara_rule_with_pcre_trigger_prefix_missing_reference_false_rejects_scan_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
     let data = b"abc";
     assert_eq!(scan_match_count(src.as_str(), data), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_trigger_prefix_false_subsig_dependency_false_rejects_scan_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;fuzzy_img##0;0:0/xyz/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("trigger expression resolved to false"));
+    assert_eq!(scan_match_count(src.as_str(), b"xyz"), 0);
 }
 
 #[test]
