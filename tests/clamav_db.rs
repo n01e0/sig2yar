@@ -5,8 +5,8 @@ use sig2yar::parser::{
     ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature,
     ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
-use sig2yar::yara::{self, YaraRule};
-use std::collections::HashSet;
+use sig2yar::yara::{self, YaraMeta, YaraRule};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -107,6 +107,20 @@ fn parse_sample_size() -> usize {
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|n| *n > 0)
         .unwrap_or(DEFAULT_SAMPLE_SIZE)
+}
+
+fn meta_values<'a>(rule: &'a YaraRule, key: &str) -> Vec<&'a str> {
+    rule.meta
+        .iter()
+        .filter_map(|meta| match meta {
+            YaraMeta::Entry { key: k, value } if k == key => Some(value.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn condition_contains_strict_false(condition: &str) -> bool {
+    condition == "false" || condition.contains("(false)")
 }
 
 fn sample_logical_signatures(db_dir: &Path, sample_size: usize, seed: u64) -> Vec<Sample> {
@@ -2259,6 +2273,83 @@ fn yara_rules_from_db_samples_compile() {
 
         yara_x::compile(src.as_str())
             .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+    }
+}
+
+#[test]
+fn yara_logical_db_samples_strict_false_paths_are_explained() {
+    let Some(db_dir) = clamav_db_dir() else {
+        if clamav_db_required() {
+            panic!("ClamAV DB is required but not found.");
+        }
+        return;
+    };
+
+    let sample_size = parse_sample_size();
+    let seed = parse_seed();
+    let samples = sample_logical_signatures(&db_dir, sample_size, seed);
+
+    if samples.is_empty() {
+        if clamav_db_required() {
+            panic!("No logical signatures found under {:?}", db_dir);
+        }
+        return;
+    }
+
+    let mut strict_false_count = 0usize;
+    let mut explained_strict_false_count = 0usize;
+    let mut unexplained_samples = Vec::new();
+    let mut unsupported_counts: BTreeMap<String, usize> = BTreeMap::new();
+
+    for sample in samples {
+        let sig = LogicalSignature::parse(&sample.line)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {}", sample.origin, e));
+        let rule = YaraRule::try_from(&sig)
+            .unwrap_or_else(|e| panic!("{}: convert failed: {}", sample.origin, e));
+        let src = rule.to_string();
+
+        yara_x::compile(src.as_str())
+            .unwrap_or_else(|e| panic!("{}: compile failed: {}", sample.origin, e));
+
+        if !condition_contains_strict_false(&rule.condition) {
+            continue;
+        }
+
+        strict_false_count += 1;
+
+        let notes = meta_values(&rule, "clamav_lowering_notes");
+        let unsupported = meta_values(&rule, "clamav_unsupported");
+        for tag in &unsupported {
+            *unsupported_counts.entry((*tag).to_string()).or_default() += 1;
+        }
+
+        if notes.is_empty() && unsupported.is_empty() {
+            if unexplained_samples.len() < MAX_ERROR_SAMPLES {
+                unexplained_samples.push(format!(
+                    "{}: strict-false condition without note/unsupported meta ({})",
+                    sample.origin, rule.condition
+                ));
+            }
+        } else {
+            explained_strict_false_count += 1;
+        }
+    }
+
+    assert_eq!(
+        strict_false_count,
+        explained_strict_false_count,
+        "Found unexplained strict-false logical lowering paths in sampled ClamAV DB signatures. Samples:\n{}",
+        unexplained_samples.join("\n")
+    );
+
+    if std::env::var("CLAMAV_VALIDATION_VERBOSE").ok().as_deref() == Some("1") {
+        eprintln!(
+            "logical sample strict-false explained: {}/{}",
+            explained_strict_false_count, strict_false_count
+        );
+        for (tag, count) in unsupported_counts {
+            eprintln!("  unsupported[{tag}]={count}");
+        }
     }
 }
 
