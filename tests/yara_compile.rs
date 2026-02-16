@@ -307,6 +307,16 @@ fn yara_rule_with_pcre_trigger_prefix_missing_base_offset_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_trigger_prefix_spaced_range_without_e_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141; 200 , 300 :0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("maxshift present without 'e'; lowered to false for safety"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_mixed_missing_reference_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

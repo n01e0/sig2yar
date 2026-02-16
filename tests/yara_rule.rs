@@ -554,6 +554,20 @@ fn lowers_pcre_trigger_prefix_with_missing_base_offset_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_with_spaced_range_offset_without_e_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141; 200 , 300 :0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("maxshift present without 'e'; lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_trigger_prefix_with_mixed_missing_reference_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
