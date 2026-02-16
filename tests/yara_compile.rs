@@ -1142,6 +1142,26 @@ fn yara_rule_with_macro_group_linked_ndb_mixed_members_ignores_bad_and_matches_g
 }
 
 #[test]
+fn yara_rule_with_macro_group_linked_ndb_all_ignored_members_strict_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:8:$12:626262").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:AA{-15}BB").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("target_type=8 (expected 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, or 12)"));
+    assert!(src.contains(
+        "ndb macro link 'D2' for group $12 is not representable in strict YARA lowering"
+    ));
+    assert!(src.contains("ndb signed jump"));
+    assert!(src.contains("macro-group `$12$` semantics depend on CLI_OFF_MACRO"));
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxxbbb"), 0);
+}
+
+#[test]
 fn yara_rule_with_fuzzy_img_second_subsig_false_compiles_with_yara_x_from_clamav_fixture() {
     // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
     let sig =
