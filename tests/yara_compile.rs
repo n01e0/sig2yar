@@ -381,12 +381,13 @@ fn yara_rule_with_pcre_anchored_flag_false_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_star_offset_prefix_compiles_with_yara_x() {
+fn yara_rule_with_pcre_star_offset_prefix_with_re_flags_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre '*' offset-prefix rule");
+    assert!(src.contains("flag(s) 'r', 'e' on '*' offset prefix"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
 }
 
 #[test]
