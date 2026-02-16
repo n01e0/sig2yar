@@ -842,6 +842,38 @@ fn yara_rule_with_multithreshold_expression_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_multigt_single_subsig_distinct_ignored_matches_by_occurrence_count() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0>2,2;4142").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("multi-gt distinct threshold 2 ignored for single-subsig expression"));
+    assert_eq!(scan_match_count(src.as_str(), b"ABxxAByyAB"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"ABxxAB"), 0);
+}
+
+#[test]
+fn yara_rule_with_multilt_single_subsig_distinct_ignored_matches_by_occurrence_count() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0<3,2;4142").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("multi-lt distinct threshold 2 ignored for single-subsig expression"));
+    assert_eq!(scan_match_count(src.as_str(), b"ABxxAB"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"ABxxAByyAB"), 0);
+}
+
+#[test]
+fn yara_rule_with_multilt_group_incompatible_distinct_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,3;4142;4344").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("multi-lt distinct threshold 3 is incompatible with <3"));
+    assert_eq!(scan_match_count(src.as_str(), b"ABxxCD"), 0);
+}
+
+#[test]
 fn yara_rule_with_byte_macro_fuzzy_compiles_with_yara_x() {
     let sig = LogicalSignature::parse(
         "Foo.Bar-1;Target:1;0&1&2&3;41414141;0(>>26#ib2#>512);${6-7}0$;fuzzy_img#af2ad01ed42993c7#0",

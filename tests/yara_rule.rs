@@ -148,6 +148,20 @@ fn lowers_multigt_for_group_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_multigt_for_single_subsig_with_distinct_threshold_note() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0>2,2;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "#s0 > 2");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("multi-gt distinct threshold 2 ignored for single-subsig expression")
+    )));
+}
+
+#[test]
 fn lowers_raw_subsignature_with_modifiers() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;hello::iwf").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -257,6 +271,34 @@ fn lowers_multilt_for_group_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt grouped expression unsupported for strict lowering"))));
+}
+
+#[test]
+fn lowers_multilt_for_single_subsig_with_distinct_threshold_note() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0<3,2;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "#s0 < 3");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("multi-lt distinct threshold 2 ignored for single-subsig expression")
+    )));
+}
+
+#[test]
+fn lowers_multilt_for_group_with_incompatible_distinct_to_false() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,3;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("multi-lt distinct threshold 3 is incompatible with <3")
+    )));
 }
 
 #[test]
