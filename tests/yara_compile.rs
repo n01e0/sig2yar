@@ -759,6 +759,16 @@ fn yara_rule_with_pcre_star_offset_prefix_with_re_flags_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_star_offset_prefix_with_r_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/r").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag(s) 'r' on '*' offset prefix"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_star_with_maxshift_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*,10:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1187,6 +1197,16 @@ fn yara_rule_with_pcre_re_flags_without_offset_prefix_false_rejects_scan() {
     let src = rule.to_string();
 
     assert!(src.contains("flag(s) 'r', 'e' require explicit offset/maxshift runtime semantics"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_r_flag_without_offset_prefix_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/r").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag(s) 'r' require explicit offset/maxshift runtime semantics"));
     assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
 }
 
