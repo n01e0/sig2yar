@@ -1319,6 +1319,29 @@ fn yara_rule_with_target_description_intermediates_constraint_compiles_with_yara
 }
 
 #[test]
+fn yara_rule_with_target_description_engine_constraint_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Engine:51-255,Target:1;0;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("Engine=51-255"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA"), 0);
+}
+
+#[test]
+fn yara_rule_with_target_description_icon_group_constraints_false_rejects_scan() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1,IconGroup1:foo,IconGroup2:bar;0;41414141")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("IconGroup1=foo"));
+    assert!(src.contains("IconGroup2=bar"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA"), 0);
+}
+
+#[test]
 fn yara_rule_with_multithreshold_expression_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)>2,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

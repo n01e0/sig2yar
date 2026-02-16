@@ -249,12 +249,15 @@ pub struct InfoSignature {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetDescription {
     pub raw: String,
+    pub engine: Option<(u64, u64)>,
     pub target_type: Option<String>,
     pub file_size: Option<(u64, u64)>,
     pub entry_point: Option<(u64, u64)>,
     pub number_of_sections: Option<(u64, u64)>,
     pub container: Option<String>,
     pub intermediates: Option<String>,
+    pub icon_group1: Option<String>,
+    pub icon_group2: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

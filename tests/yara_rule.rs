@@ -112,6 +112,48 @@ fn lowers_target_description_intermediates_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_target_description_engine_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Engine:51-255,Target:1;0;41414141").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("Engine=51-255"))));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_unsupported" && value == "target_description_engine_constraint")));
+}
+
+#[test]
+fn lowers_target_description_icon_group_constraints_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1,IconGroup1:foo,IconGroup2:bar;0;41414141")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("IconGroup1=foo"))));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("IconGroup2=bar"))));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_unsupported" && value == "target_description_icon_group1_constraint")));
+    assert!(rule
+        .meta
+        .iter()
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_unsupported" && value == "target_description_icon_group2_constraint")));
+}
+
+#[test]
 fn lowers_match_count_expression() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)=1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
