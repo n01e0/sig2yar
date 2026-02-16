@@ -1021,6 +1021,20 @@ fn lowers_pcre_anchored_with_rolling_or_encompass_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_anchored_with_encompass_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/Ae").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("anchored flag combined with rolling/encompass flags is not representable safely")
+    )));
+}
+
+#[test]
 fn lowers_pcre_anchored_flag_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/A").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1296,6 +1310,21 @@ fn lowers_pcre_star_offset_prefix_with_r_flag_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("flag(s) 'r' on '*' offset prefix")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_pcre_star_offset_prefix_with_e_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag(s) 'e' on '*' offset prefix")
                 && value.contains("lowered to false for safety")
     )));
 }
