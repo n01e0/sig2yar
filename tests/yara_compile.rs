@@ -202,6 +202,16 @@ fn yara_rule_with_pcre_trigger_prefix_resolved_false_rejects_scan_for_safety() {
 }
 
 #[test]
+fn yara_rule_with_pcre_trigger_prefix_mixed_missing_reference_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("references unsupported/missing subsig index(es) 9"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_malformed_pcre_subsignature_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
