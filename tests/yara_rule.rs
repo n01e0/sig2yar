@@ -1111,6 +1111,17 @@ fn lowers_byte_comparison_offset_with_explicit_plus_sign() {
 }
 
 #[test]
+fn lowers_byte_comparison_offset_with_plus_prefixed_octal_token() {
+    // ClamAV `strtol(..., 0)` interprets +010 as octal (=8).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>+010#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s0[j] + 8"));
+    assert!(!rule.condition.contains("@s0[j] + 10"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
 fn lowers_byte_comparison_offset_with_bare_hex_token_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0A#ib1#=65)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1189,6 +1200,18 @@ fn lowers_byte_comparison_non_raw_decimal_with_plus_prefixed_0x_threshold() {
 
     assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x31"));
     assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x30"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_decimal_with_plus_prefixed_octal_threshold() {
+    // ClamAV `strtol(..., 0)` interprets +010 as octal (=8).
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=+010)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x30"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x38"));
+    assert!(!rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x30")); // avoid accidental "10"
     assert!(!rule.condition.contains("and false"));
 }
 
