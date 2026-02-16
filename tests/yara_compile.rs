@@ -1123,6 +1123,25 @@ fn yara_rule_with_macro_group_linked_ndb_non_representable_body_strict_false_rej
 }
 
 #[test]
+fn yara_rule_with_macro_group_linked_ndb_mixed_members_ignores_bad_and_matches_good() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:0:$12:AA{-15}BB").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:626262").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains(
+        "ndb macro link 'D1' for group $12 is not representable in strict YARA lowering"
+    ));
+    assert!(src.contains("macro-group `$12$` resolved via linked ndb members [D2]"));
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxxbbb"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"aaaxxbbb"), 0);
+}
+
+#[test]
 fn yara_rule_with_fuzzy_img_second_subsig_false_compiles_with_yara_x_from_clamav_fixture() {
     // ClamAV reference: unit_tests/clamscan/fuzzy_img_hash_test.py:40-42,54-61
     let sig =
