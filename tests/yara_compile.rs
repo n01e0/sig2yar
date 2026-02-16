@@ -819,6 +819,30 @@ fn yara_rule_with_pcre_count_trigger_prefix_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_match_range_trigger_prefix_false_rejects_scan() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1,2/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_multi_gt_trigger_prefix_false_rejects_scan() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1,1/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_re_flags_without_offset_prefix_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
