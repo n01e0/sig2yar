@@ -109,6 +109,10 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記127: 検証フェーズの初手として、ClamAV DB サンプル上の logical lowering で strict-false へ落ちたルールが explanation meta（`clamav_lowering_notes` または `clamav_unsupported`）を持つことを自動検証するテストを追加。
+  - 変更: `tests/clamav_db.rs` に `yara_logical_db_samples_strict_false_paths_are_explained` を追加し、sampled `.ldb` を parse/lower/compile したうえで strict-false 経路の無注釈化を検出。
+  - 目的: strict-safe 運用で「false になった理由」が追跡不能になる回帰を防止し、検証フェーズでの観測性を確保。
+  - 補助: `CLAMAV_VALIDATION_VERBOSE=1` 時に unsupported tag の集計を stderr へ出力できるよう追加。
 - 2026-02-17 追記126: PCRE flags/trigger-prefix 残課題を棚卸しし、trigger式が既存subsigの strict-false に依存して実質 `false` になる経路を明示固定して複雑条件トラックを完了。
   - 背景: 既存の `lower_pcre_trigger_condition(...)` は missing index / self-reference / count-distinct 不可表現を strict-false 化済みだったが、**参照先subsig自体が strict-false（例: malformed PCRE）** の場合に「resolved to false」経路の fixture が未整備だった。
   - 変更: `src/yara.rs` に `pcre_trigger_expression_definitely_false(...)` を追加し、representable trigger式でも参照先が確定falseなら `false + note` に早期収束するよう厳密化。
