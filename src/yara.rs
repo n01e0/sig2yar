@@ -2478,9 +2478,9 @@ fn lower_subsignatures(
                     }
                 }
 
-                if hex_fullword {
+                if hex_fullword && hex_wide {
                     notes.push(format!(
-                        "subsig[{idx}] hex modifier 'f' (fullword) is unsupported for strict lowering; lowered to false for safety"
+                        "subsig[{idx}] hex modifier 'f' (fullword) with wide matching is unsupported for strict lowering; lowered to false for safety"
                     ));
                     id_map.push(Some("false".to_string()));
                     continue;
@@ -2498,7 +2498,15 @@ fn lower_subsignatures(
                     format_hex_bytes_with_modifiers(hex, hex_nocase, hex_wide, hex_ascii)
                 );
                 strings.push(YaraString::Raw(line));
-                id_map.push(Some(id));
+
+                if hex_fullword {
+                    notes.push(format!(
+                        "subsig[{idx}] hex modifier 'f' lowered with strict non-alphanumeric boundary checks"
+                    ));
+                    id_map.push(Some(hex_fullword_condition_expr(&id)));
+                } else {
+                    id_map.push(Some(id));
+                }
             }
             ir::SubsignaturePattern::Hex(_) => {
                 notes.push(format!("subsig[{idx}] skipped: invalid hex pattern"));
@@ -2923,6 +2931,26 @@ fn format_hex_bytes_with_modifiers(input: &str, nocase: bool, wide: bool, ascii:
     } else {
         wide_variant
     }
+}
+
+fn ascii_alnum_predicate(var: &str) -> String {
+    format!(
+        "(({var} >= 0x30 and {var} <= 0x39) or ({var} >= 0x41 and {var} <= 0x5A) or ({var} >= 0x61 and {var} <= 0x7A))"
+    )
+}
+
+fn hex_fullword_condition_expr(id: &str) -> String {
+    let core = id.trim_start_matches('$');
+    let start = format!("@{core}[i]");
+    let end = format!("@{core}[i] + !{core}[i]");
+
+    let left_word = ascii_alnum_predicate(&format!("uint8(({start}) - 1)"));
+    let right_word = ascii_alnum_predicate(&format!("uint8({end})"));
+
+    let left_boundary = format!("(({start}) == 0 or (({start}) > 0 and not ({left_word})))");
+    let right_boundary = format!("(({end}) >= filesize or not ({right_word}))");
+
+    format!("for any i in (1..#{core}) : ({left_boundary} and {right_boundary})")
 }
 
 #[allow(dead_code)]
