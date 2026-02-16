@@ -739,6 +739,17 @@ fn yara_rule_with_pcre_anchored_with_rolling_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_anchored_with_encompass_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/Ae").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile anchored+encompass safety-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_anchored_flag_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/A").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -765,6 +776,16 @@ fn yara_rule_with_pcre_star_offset_prefix_with_r_flag_false_rejects_scan() {
     let src = rule.to_string();
 
     assert!(src.contains("flag(s) 'r' on '*' offset prefix"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_star_offset_prefix_with_e_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag(s) 'e' on '*' offset prefix"));
     assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
 }
 
