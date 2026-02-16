@@ -271,12 +271,15 @@ impl<'t> TargetDescription<'t> {
     pub fn to_ir(&self) -> crate::ir::TargetDescription {
         crate::ir::TargetDescription {
             raw: compact_whitespace(&self.to_string()),
+            engine: range_u32_to_inclusive_u64(self.engine.as_ref()),
             target_type: Some(self.target.to_string()),
             file_size: range_to_inclusive_u64(self.file_size.as_ref()),
             entry_point: range_to_inclusive_u64(self.entry_point.as_ref()),
             number_of_sections: range_to_inclusive_u64(self.number_of_sections.as_ref()),
             container: self.container_raw.map(|v| v.to_string()),
             intermediates: self.intermediates.map(|v| v.to_string()),
+            icon_group1: self.icon_group1.map(|v| v.to_string()),
+            icon_group2: self.icon_group2.map(|v| v.to_string()),
         }
     }
 }
@@ -402,6 +405,14 @@ fn compact_whitespace(input: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn range_u32_to_inclusive_u64(range: Option<&Range<u32>>) -> Option<(u64, u64)> {
+    let range = range?;
+    let start = u64::from(range.start);
+    let end_exclusive = u64::from(range.end);
+    let end_inclusive = end_exclusive.checked_sub(1)?;
+    Some((start, end_inclusive))
 }
 
 fn range_to_inclusive_u64(range: Option<&Range<usize>>) -> Option<(u64, u64)> {

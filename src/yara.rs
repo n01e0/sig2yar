@@ -2353,6 +2353,13 @@ pub fn lower_logical_signature_with_ndb_context(
         });
     }
 
+    if target_desc.saw_engine {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "target_description_engine_constraint".to_string(),
+        });
+    }
+
     if target_desc.saw_container {
         meta.push(YaraMeta::Entry {
             key: "clamav_unsupported".to_string(),
@@ -2364,6 +2371,20 @@ pub fn lower_logical_signature_with_ndb_context(
         meta.push(YaraMeta::Entry {
             key: "clamav_unsupported".to_string(),
             value: "target_description_intermediates_constraint".to_string(),
+        });
+    }
+
+    if target_desc.saw_icon_group1 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "target_description_icon_group1_constraint".to_string(),
+        });
+    }
+
+    if target_desc.saw_icon_group2 {
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "target_description_icon_group2_constraint".to_string(),
         });
     }
 
@@ -2385,8 +2406,11 @@ pub fn lower_logical_signature_with_ndb_context(
 
 struct TargetDescriptionLowering {
     conditions: Vec<String>,
+    saw_engine: bool,
     saw_container: bool,
     saw_intermediates: bool,
+    saw_icon_group1: bool,
+    saw_icon_group2: bool,
 }
 
 fn lower_target_description_conditions(
@@ -2395,8 +2419,11 @@ fn lower_target_description_conditions(
     notes: &mut Vec<String>,
 ) -> TargetDescriptionLowering {
     let mut out = Vec::new();
+    let mut saw_engine = false;
     let mut saw_container = false;
     let mut saw_intermediates = false;
+    let mut saw_icon_group1 = false;
+    let mut saw_icon_group2 = false;
 
     if let Some((min, max)) = target.file_size {
         out.push(range_condition("filesize", min, max));
@@ -2410,6 +2437,14 @@ fn lower_target_description_conditions(
     if let Some((min, max)) = target.number_of_sections {
         push_import(imports, "pe");
         out.push(range_condition("pe.number_of_sections", min, max));
+    }
+
+    if let Some((min, max)) = target.engine {
+        notes.push(format!(
+            "target description Engine={min}-{max} is not observable in standalone YARA scans; constrained to false for safety"
+        ));
+        out.push("false".to_string());
+        saw_engine = true;
     }
 
     if let Some(container) = target.container.as_deref() {
@@ -2428,10 +2463,29 @@ fn lower_target_description_conditions(
         saw_intermediates = true;
     }
 
+    if let Some(icon_group1) = target.icon_group1.as_deref() {
+        notes.push(format!(
+            "target description IconGroup1={icon_group1} is not observable in standalone YARA scans; constrained to false for safety"
+        ));
+        out.push("false".to_string());
+        saw_icon_group1 = true;
+    }
+
+    if let Some(icon_group2) = target.icon_group2.as_deref() {
+        notes.push(format!(
+            "target description IconGroup2={icon_group2} is not observable in standalone YARA scans; constrained to false for safety"
+        ));
+        out.push("false".to_string());
+        saw_icon_group2 = true;
+    }
+
     TargetDescriptionLowering {
         conditions: out,
+        saw_engine,
         saw_container,
         saw_intermediates,
+        saw_icon_group1,
+        saw_icon_group2,
     }
 }
 
