@@ -4729,15 +4729,19 @@ fn lower_pcre_offset_condition(
 
     match offset {
         PcreOffsetSpec::Any => {
-            if rolling {
+            if rolling || encompass {
+                let mut flags = Vec::new();
+                if rolling {
+                    flags.push("'r'");
+                }
+                if encompass {
+                    flags.push("'e'");
+                }
                 notes.push(format!(
-                    "subsig[{idx}] pcre flag 'r' ignored on '*' offset prefix"
+                    "subsig[{idx}] pcre flag(s) {} on '*' offset prefix depend on ClamAV runtime scan-state semantics; lowered to false for safety",
+                    flags.join(", ")
                 ));
-            }
-            if encompass {
-                notes.push(format!(
-                    "subsig[{idx}] pcre flag 'e' ignored: '*' offset has no maxshift"
-                ));
+                return Some("false".to_string());
             }
             None
         }

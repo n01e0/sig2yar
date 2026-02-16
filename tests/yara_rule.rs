@@ -593,20 +593,18 @@ fn lowers_pcre_ep_minus_offset_prefix_to_entry_point_constraint() {
 }
 
 #[test]
-fn lowers_pcre_star_offset_prefix_to_unbounded_condition_and_ignores_re_flags() {
+fn lowers_pcre_star_offset_prefix_with_re_flags_to_false_for_safety() {
     // ClamAV reference: libclamav/matcher.c:350-354 (`*` parsed as CLI_OFF_ANY)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;*:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("$s1"));
-    assert!(rule.condition.contains("$s0"));
-    assert!(!rule.condition.contains("@s1[j]"));
+    assert!(rule.condition.contains("false"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("flag 'r' ignored on '*' offset prefix")
-                && value.contains("flag 'e' ignored: '*' offset has no maxshift")
+                && value.contains("flag(s) 'r', 'e' on '*' offset prefix")
+                && value.contains("lowered to false for safety")
     )));
 }
 
