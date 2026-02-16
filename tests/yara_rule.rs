@@ -220,16 +220,18 @@ fn lowers_hex_subsignature_with_wide_ascii_nocase_modifier() {
 }
 
 #[test]
-fn lowers_hex_subsignature_with_fullword_modifier_to_false_for_safety() {
+fn lowers_hex_subsignature_with_fullword_modifier_to_boundary_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::f").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
+    assert!(rule.condition.contains("for any i in (1..#s0)"));
+    assert!(rule.condition.contains("uint8((@s0[i]) - 1)"));
+    assert!(rule.condition.contains("uint8(@s0[i] + !s0[i])"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("hex modifier 'f' (fullword) is unsupported for strict lowering")
+                && value.contains("hex modifier 'f' lowered with strict non-alphanumeric boundary checks")
     )));
 }
 
@@ -243,7 +245,7 @@ fn lowers_hex_subsignature_with_wide_fullword_modifier_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("hex modifier 'f' (fullword) is unsupported for strict lowering")
+                && value.contains("hex modifier 'f' (fullword) with wide matching is unsupported for strict lowering")
     )));
 }
 
@@ -257,7 +259,7 @@ fn lowers_hex_subsignature_with_wide_ascii_fullword_modifier_to_false_for_safety
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("hex modifier 'f' (fullword) is unsupported for strict lowering")
+                && value.contains("hex modifier 'f' (fullword) with wide matching is unsupported for strict lowering")
     )));
 }
 

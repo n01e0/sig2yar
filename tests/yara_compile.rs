@@ -173,12 +173,16 @@ fn yara_rule_with_hex_wide_ascii_modifier_matches_ascii_and_wide_fixture() {
 }
 
 #[test]
-fn yara_rule_with_hex_fullword_modifier_strict_false_rejects_scan() {
+fn yara_rule_with_hex_fullword_modifier_matches_with_non_alnum_boundaries() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::f").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert_eq!(scan_match_count(src.as_str(), b"hello"), 0);
+    assert!(src.contains("hex modifier 'f' lowered with strict non-alphanumeric boundary checks"));
+    assert_eq!(scan_match_count(src.as_str(), b"hello"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"xhello"), 0);
+    assert_eq!(scan_match_count(src.as_str(), b"hello1"), 0);
+    assert_eq!(scan_match_count(src.as_str(), b"_hello_"), 1);
 }
 
 #[test]
