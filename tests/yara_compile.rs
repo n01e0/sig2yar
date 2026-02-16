@@ -410,6 +410,28 @@ fn yara_rule_with_pcre_trigger_prefix_double_leading_and_trailing_comma_offset_t
 }
 
 #[test]
+fn yara_rule_with_pcre_trigger_prefix_missing_base_and_double_trailing_empty_comma_offset_token_false_rejects_scan(
+) {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;,300,,,:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre offset prefix ',300,,,' unsupported"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_trigger_prefix_double_leading_and_trailing_multi_empty_comma_offset_token_false_rejects_scan(
+) {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;,,300,,:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre offset prefix ',,300,,' unsupported"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_mixed_missing_reference_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
