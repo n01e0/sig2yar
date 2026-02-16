@@ -65,7 +65,7 @@ Last update: 2026-02-16
 - [x] `MultiGt` / `MultiLt` は単一subsigの occurrence count を反映済み。複合式は厳密表現不能のため **safety false + note** に統一（distinct-count近似は廃止、追記91で単一subsig distinct閾値無視と grouped/incompatible 境界を fixture 固定）
 - [ ] PCRE flags は `i/s/m/x/U` と ClamAV側 `r/e` を部分反映。`A`・maxshift without `e`・`E`・`g`・legacy `a`・未知/legacy未対応flag は safety false へ厳密化済み。複雑条件は未対応
 - [ ] PCRE trigger prefix は trigger条件＋`cli_caloff`主要offset（numeric exact/range, `*`, `EP+/-`, `Sx+`, `SL+`, `SE`, `EOF-`）を条件式に反映済み。`maxshift without e` は safety false、`VI` / macro offset（`$n$`）/不正payloadは source根拠付きで **safety false + note** を維持。さらに trigger式が loweringで `false` に解決された場合（未解決subsig参照など）は、条件を無視せず **rule条件を false + note** に厳密化済み。2026-02-13 追記25で `VI*`（`strncmp("VI",2)`）/ malformed `$...$` 解析方針を source準拠化（いずれも false+note）、2026-02-15 追記34で `A/a` の **offset付きanchor** と **anchor+r/e 複合** を strict-safe false 化、追記59/69で **self-referential trigger**（単独参照だけでなく `0|self` のような混在参照を含む）を false+note 化、追記70で **count/distinct演算子を含む trigger式** を strict-safe false 化、追記71で **offset prefixなしの `r/e` フラグ** を strict-safe false 化、追記72で **`*` offset上の `r/e` フラグ** を strict-safe false 化、追記73で **exact offset上の `r` フラグ** を strict-safe false 化、追記74で **exact offset上の `e` フラグ** を strict-safe false 化、追記75で **maxshift（range）上の `r` フラグ** を strict-safe false 化、追記76で **section-relative maxshift（`Sx+`）上の `r` フラグ挙動** を strict-false fixture で固定、追記77で **`SL+` / `SE` の maxshift 上 `r` フラグ挙動** を strict-false fixture で固定、追記78で **`EP+/-` / `EOF-` の maxshift 上 `r` フラグ挙動** を strict-false fixture で固定、追記79で **`EP-` + maxshift 上 `r` フラグ挙動** を strict-false fixture で補完固定、追記80で **trigger式の mixed missing subsig参照（例: `0|9`）** を strict-false 化、追記81で **trigger-prefix parse failure（missing trigger / malformed trigger式）** を strict-false fixture で固定、追記60で **slash含有だがPCRE構文不正な subsig** の raw fallback 経路を閉じて false+note 化、追記61で **`*,maxshift` malformed offset** を false+note 化、追記62で **Target非exec時の `EP/Sx/SL/SE` offset** を false+note 化、追記63で **`e`（encompass）時の maxshift 上限を match-start だけでなく match-end (`@ + !`) でも拘束** するよう厳密化、追記64で **非exec target の `SL+` / `SE` fixture を追加して `EP/Sx/SL/SE` 全系統を strict-false で固定**、追記65で **`EOF-...,maxshift,e` でも `@ + ! <= end` を scan fixture で固定**、追記66で **exec target 側 `Sx/SE/SL` の valid/out-of-range section index を PE fixture scan で固定** 済み。残は runtime semantics 自体の厳密再現可否。
-- [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は 2026-02-16 追記92で **non-wide (`::f`) のみ** non-alnum 境界条件として strict subset 実装を追加。wide系（`wf` / `waf`）は ClamAV runtime の wide fullword 境界（`isalnum + NUL`）同型再現が未実装のため、引き続き **safety false + note**（追記82の strict-false fixture を維持）。
+- [ ] hex modifier は `i/w/a` を反映済み（`w` は wide化、`wa` は ascii|wide の両許容、`iw/ia/iwa` 組合せ含む）。`f` は 2026-02-16 追記92/93で non-wide（`::f`）と wide-only（`::wf`）の strict subset 実装を追加（それぞれ non-alnum 境界 / wide alnum+NUL 境界）。`waf` は ClamAV runtime の ascii/wide 統合 fullword 評価同型が未実装のため、引き続き **safety false + note**（追記82の strict-false fixture を維持）。
 - [ ] target description は `FileSize`/`EntryPoint`/`NumberOfSections` を条件反映済み。`Container`/`Intermediates` は YARA単体で観測不能のため現状は **safety false + note** で厳密化し、`clamav_unsupported`（`target_description_container_constraint` / `target_description_intermediates_constraint`）を付与（意味反映自体は未対応）
 
 ### 2.4 ndb（extended/body）の現状
@@ -109,10 +109,14 @@ Last update: 2026-02-16
 
 ## 4) メモ（現状観測）
 
+- 2026-02-16 追記93: hex modifier `f` の strict subset を wide-only（`::wf`）へ拡張。
+  - 背景: 追記92で non-wide（`::f`）は固定済みだったため、次段として wide-only の alnum+NUL 境界を strict-safe で表現可能な範囲に限定して実装。
+  - 実装: `src/yara.rs` で `::wf` に `for any i in (1..#sN)` + 前後2byte境界（`[A-Za-z0-9]\x00`）の否定条件を導入。`::waf` は引き続き strict-false。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `68656c6c6f::wf` の boundary match/non-match（wide `hello`, `_\0hello\0_\0`, `x\0hello\0`, `hello\0y\0`）を追加。
 - 2026-02-16 追記92: hex modifier `f` の strict subset 実装として、non-wide（`::f`）を non-alnum 境界条件で fixture 固定。
   - 背景: 追記82で `wf` / `waf` を strict-false 固定済みだが、`::f` 単体は strict-safeで表現可能な範囲が未実装だった。
   - 実装: `src/yara.rs` で `::f`（non-wide）時に `for any i in (1..#sN)` + 前後境界（`uint8(@-1)` / `uint8(@+!)`）の non-alnum 判定を条件式化。
-  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `68656c6c6f::f` の境界 match/non-match（`hello` / `xhello` / `hello1` / `_hello_`）を追加し、wide系は引き続き strict-false を維持。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `68656c6c6f::f` の境界 match/non-match（`hello` / `xhello` / `hello1` / `_hello_`）を追加（その後、追記93で `::wf` も strict subset 実装へ拡張）。
 - 2026-02-16 追記91: `MultiGt` / `MultiLt` の境界条件を fixture で固定。
   - 背景: grouped strict-false は既存固定済みだったが、single-subsig + distinct 閾値（ignore）と grouped + incompatible distinct（false）の分岐が compile/scan で未固定だった。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `0>2,2`（single multi-gt distinct ignore）、`0<3,2`（single multi-lt distinct ignore）、`(0|1)<3,3`（grouped incompatible distinct false）を追加し、note と match/non-match を固定。
