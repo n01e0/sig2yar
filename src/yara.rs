@@ -4669,8 +4669,9 @@ fn lower_pcre_offset_window_condition(
         PcreOffsetWindow::Range { start, end } => {
             if rolling {
                 notes.push(format!(
-                    "subsig[{idx}] pcre flag 'r' ignored when maxshift is present"
+                    "subsig[{idx}] pcre flag 'r' with maxshift depends on ClamAV rolling scan-state semantics; lowered to false for safety"
                 ));
+                return "false".to_string();
             }
 
             if encompass {
