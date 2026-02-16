@@ -1116,6 +1116,22 @@ fn lowers_pcre_invalid_macro_group_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_out_of_range_macro_group_offset_prefix_to_false_for_safety() {
+    // ClamAV reference: libclamav/matcher.c:431-442 accepts only macro groups 0..31.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$32$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("(false)"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("pcre macro-group offset `$32$` out of range")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_encompass_with_range_offset() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
