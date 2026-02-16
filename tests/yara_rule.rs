@@ -1799,6 +1799,32 @@ fn lowers_macro_subsignature_to_false_when_linked_ndb_body_is_not_representable(
 }
 
 #[test]
+fn lowers_macro_subsignature_with_mixed_linked_ndb_members_ignores_bad_and_keeps_good() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$").unwrap();
+    let ndb_links = vec![
+        NdbSignature::parse("D1:0:$12:AA{-15}BB").unwrap().to_ir(),
+        NdbSignature::parse("D2:0:$12:626262").unwrap().to_ir(),
+    ];
+
+    let rule = yara::lower_logical_signature_with_ndb_context(&sig.to_ir(), &ndb_links).unwrap();
+
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw == "$m1_0 = { 62 62 62 }")));
+    assert!(rule.condition.contains("for any j in (1..#m1_0)"));
+    assert!(!rule.condition.contains("and false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("ndb macro link 'D1' for group $12 is not representable in strict YARA lowering")
+                && value.contains("ndb signed jump")
+                && value.contains("macro-group `$12$` resolved via linked ndb members [D2]")
+    )));
+}
+
+#[test]
 fn lowers_fuzzy_img_as_safe_false() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;fuzzy_img#af2ad01ed42993c7#0").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
