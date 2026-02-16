@@ -739,6 +739,26 @@ fn yara_rule_with_pcre_macro_group_offset_prefix_with_trailing_bytes_false_rejec
 }
 
 #[test]
+fn yara_rule_with_pcre_macro_group_offset_prefix_without_closing_dollar_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$12:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre macro offset '$12' has invalid format"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_macro_group_offset_prefix_without_digits_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$$:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre macro offset '$$' has invalid format"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_invalid_macro_group_offset_prefix_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;$foo$:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
