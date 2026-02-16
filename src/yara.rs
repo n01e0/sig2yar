@@ -3297,6 +3297,13 @@ fn parse_clamav_base0_u64(input: &str) -> Option<u64> {
         return None;
     }
 
+    // ClamAV uses `strtol/strtoll(..., 0)` for byte-comparison numeric fields,
+    // which accepts an optional leading '+' sign.
+    let input = input.strip_prefix('+').unwrap_or(input);
+    if input.is_empty() {
+        return None;
+    }
+
     if let Some(rest) = input
         .strip_prefix("0x")
         .or_else(|| input.strip_prefix("0X"))
@@ -3421,8 +3428,10 @@ fn parse_byte_comparison_clauses(
         };
 
         let value = parse_byte_comparison_threshold(unsigned_token, base)?;
-        let has_hex_prefix = unsigned_token.starts_with("0x") || unsigned_token.starts_with("0X");
-        let contains_hex_alpha = unsigned_token
+        let normalized_unsigned = unsigned_token.strip_prefix('+').unwrap_or(unsigned_token);
+        let has_hex_prefix =
+            normalized_unsigned.starts_with("0x") || normalized_unsigned.starts_with("0X");
+        let contains_hex_alpha = normalized_unsigned
             .bytes()
             .any(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'));
         out.push(ByteCmpClause {
@@ -3440,6 +3449,7 @@ fn parse_byte_comparison_clauses(
 fn parse_byte_comparison_threshold(input: &str, base: Option<ByteCmpBase>) -> Option<u64> {
     match base.unwrap_or(ByteCmpBase::Auto) {
         ByteCmpBase::Hex => {
+            let input = input.strip_prefix('+').unwrap_or(input);
             if input.is_empty() || !input.chars().all(|c| c.is_ascii_hexdigit()) {
                 return None;
             }
@@ -3454,21 +3464,26 @@ fn parse_clamav_numeric(input: &str) -> Option<u64> {
         return None;
     }
 
+    let normalized = input.strip_prefix('+').unwrap_or(input);
+    if normalized.is_empty() {
+        return None;
+    }
+
     // ClamAV uses `strtol/strtoll(..., 0)` for numeric fields, so digit-only
     // tokens with a leading zero are octal (`010` => 8). We still keep
     // bare hex-alpha token parsing for strict-safe boundary reporting
     // (e.g. decimal base `A0` => parsed then rejected to false with note).
-    if input
+    if normalized
         .strip_prefix("0x")
-        .or_else(|| input.strip_prefix("0X"))
+        .or_else(|| normalized.strip_prefix("0X"))
         .is_some()
-        || input.chars().all(|c| c.is_ascii_digit())
+        || normalized.chars().all(|c| c.is_ascii_digit())
     {
-        return parse_clamav_base0_u64(input);
+        return parse_clamav_base0_u64(normalized);
     }
 
-    if input.chars().all(|c| c.is_ascii_hexdigit()) {
-        return u64::from_str_radix(input, 16).ok();
+    if normalized.chars().all(|c| c.is_ascii_hexdigit()) {
+        return u64::from_str_radix(normalized, 16).ok();
     }
 
     None
