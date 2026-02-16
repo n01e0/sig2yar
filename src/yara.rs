@@ -4598,6 +4598,13 @@ fn lower_pcre_trigger_condition(
         return Some("false".to_string());
     }
 
+    if pcre_trigger_expression_definitely_false(&trigger_ir, known_ids) {
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     let trigger_expr = lower_condition(&trigger_ir, known_ids, notes);
     if trigger_expr == "false" {
         notes.push(format!(
@@ -4711,6 +4718,33 @@ fn pcre_trigger_expression_is_strictly_representable(expr: &ir::LogicalExpressio
                 && nodes
                     .iter()
                     .all(pcre_trigger_expression_is_strictly_representable)
+        }
+        ir::LogicalExpression::MatchCount(_, _)
+        | ir::LogicalExpression::Gt(_, _)
+        | ir::LogicalExpression::Lt(_, _)
+        | ir::LogicalExpression::MultiMatchCount(_, _, _)
+        | ir::LogicalExpression::MultiGt(_, _, _)
+        | ir::LogicalExpression::MultiLt(_, _, _) => false,
+    }
+}
+
+fn pcre_trigger_expression_definitely_false(
+    expr: &ir::LogicalExpression,
+    known_ids: &[Option<String>],
+) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(idx) => known_ids
+            .get(*idx)
+            .and_then(|entry| entry.as_ref())
+            .is_some_and(|entry| entry == "false"),
+        ir::LogicalExpression::And(nodes) => nodes
+            .iter()
+            .any(|node| pcre_trigger_expression_definitely_false(node, known_ids)),
+        ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(|node| pcre_trigger_expression_definitely_false(node, known_ids))
         }
         ir::LogicalExpression::MatchCount(_, _)
         | ir::LogicalExpression::Gt(_, _)

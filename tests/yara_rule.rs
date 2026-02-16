@@ -507,7 +507,7 @@ fn lowers_pcre_trigger_prefix_with_lt_expression_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_resolved_false_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_missing_reference_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -517,6 +517,21 @@ fn lowers_pcre_trigger_prefix_resolved_false_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("references unsupported/missing subsig index(es) 9")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
+fn lowers_pcre_trigger_prefix_with_false_subsig_dependency_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;fuzzy_img##0;0:0/xyz/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("trigger expression resolved to false")
                 && value.contains("lowered to false for safety")
     )));
 }
