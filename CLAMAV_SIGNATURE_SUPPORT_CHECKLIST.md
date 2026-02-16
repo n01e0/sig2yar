@@ -109,6 +109,12 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記130: 実データとして ClamAV upstream `unit_tests/input`（300 files）を corpus に使い、scan-diff を実行して差分観測を更新。
+  - 実行: `CLAMAV_DIFF_CORPUS_DIR=target/validation/clamav-upstream/unit_tests/input CLAMAV_DIFF_SAMPLE_SIZE=500 CLAMAV_DIFF_SEED=7331 scripts/logical-scan-diff.sh`
+  - 結果: `target/validation/scan-diff/run.PIxriQ/summary.json` で `clamav_hit_total(filtered)=0` / `yara_hit_total(filtered)=0` / `mismatch_files=0`。
+  - 観測: 実コーパス上で sampled logical signatures（500件）との交差がなく、分類軸（strict-false/non-strict）は今回0件。
+  - 追加観測: sample size を 3000 へ増やした実行では、生成YARA内の一部PCRE（named backreference `(?P=...)`）を `yara-x` が compile できず run 失敗（`error[E014]: invalid regular expression`）。
+  - 次アクション: 実データ差分を継続取得するため、(a) corpus と logical signature の交差を先に見積もる prefilter、または (b) un-compilable rule を集計しつつ skip して run 継続する運用/実装が必要。
 - 2026-02-17 追記129: scan-diff の差分レポートに分類軸を追加し、`only_clamav` を strict-false 由来か非strict差分かで分離して可視化。
   - 変更: `scripts/logical-scan-diff.sh` の集計処理で生成YARA（`sample.yar`）から `condition` / `clamav_unsupported` / `clamav_lowering_notes` を抽出し、差分カテゴリを付与。
   - 追加出力: `summary.json` に `only_clamav_strict_false_total` / `only_clamav_non_strict_total` / `mismatch_category_files` / `top_strict_false_unsupported_tags` を追加。
