@@ -65,9 +65,3 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
 | `ldb` | 部分対応のみ | **strict基準で~0–10%**（かなり低い） | macro完全runtime意味、`fuzzy_img` runtime意味、PCREのruntime依存flags/offset組み合わせ、観測不能なtarget description制約 |
 | `mdb`, `msb`, `imp` | strictサポート未実装 | **~0%** | section-hash/import-hash系のstrict同型変換が未実装 |
 | `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | parseはあるがstrict変換未実装 | **~0%** | 現状は strict-safe / fallback 経路で処理 |
-
-## いま使うときの目安
-
-- 高信頼で使うなら、まず `hdb`/`hsb`。
-- `ndb` は多くを変換できるが、未対応edge-caseが残っている。
-- それ以外のDBは、意味同型が実装されるまで保守的（strict-safe/fallback）運用。 

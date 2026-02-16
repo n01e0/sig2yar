@@ -65,9 +65,3 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
 | `ldb` | Partial only | **~0–10% strict** (very low) | Full macro runtime semantics, `fuzzy_img` runtime hash behavior, PCRE runtime-dependent flags/offset combinations, non-observable target-description constraints |
 | `mdb`, `msb`, `imp` | Not strictly supported yet | **~0%** | Section-hash/import-hash strict mapping not implemented under current strict policy |
 | `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion not implemented | **~0%** | Currently handled as strict-safe / fallback path |
-
-## Practical takeaway
-
-- If you need high-confidence conversion today, use `hdb`/`hsb` first.
-- `ndb` is usable for many signatures but still has unsupported edge cases.
-- Most other DB types are intentionally conservative (strict-safe / fallback) until semantic parity is implemented.
