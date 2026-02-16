@@ -672,6 +672,24 @@ fn lowers_pcre_section_offset_prefix_with_encompass_window() {
 }
 
 #[test]
+fn lowers_pcre_section_offset_prefix_with_rolling_flag_to_false_for_safety() {
+    // ClamAV reference:
+    // - libclamav/matcher.c:383-391 (`Sx+` parsed as CLI_OFF_SX_PLUS)
+    // - libclamav/matcher-pcre.c rolling mode is runtime scan-state dependent.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;S2+4,8:0/abc/re").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_last_section_offset_prefix_to_constraint() {
     // ClamAV reference:
     // - libclamav/matcher.c:377-382 (`SL+` parsed as CLI_OFF_SL_PLUS)
