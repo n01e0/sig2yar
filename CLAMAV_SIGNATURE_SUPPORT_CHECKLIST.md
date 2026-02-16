@@ -109,6 +109,10 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記128: ClamAV実体スキャンとの差分可視化を始めるため、sampled logical signatures を対象に `ClamAV(clamscan)` と `sig2yar+yara-x` のヒット差分を集計する検証スクリプトを追加。
+  - 変更: `scripts/logical-scan-diff.sh` を追加。`CLAMAV_DIFF_CORPUS_DIR` を入力に、(1) `.ldb` reservoir sampling、(2) `sig2yar` で ruleset 生成、(3) `yara_scan_corpus` でヒット収集、(4) Docker上 `clamscan --allmatch` 結果との比較、(5) `summary.json` / `mismatches.tsv` / `report.md` 出力までを自動化。
+  - 変更: `src/bin/yara_scan_corpus/main.rs` を追加（YARA rules + corpus を受けて `<file>\t<rule_id>` ヒットをTSV出力）。
+  - 補助: `Makefile.toml` に `validation-scan-diff` task を追加。
 - 2026-02-17 追記127: 検証フェーズの初手として、ClamAV DB サンプル上の logical lowering で strict-false へ落ちたルールが explanation meta（`clamav_lowering_notes` または `clamav_unsupported`）を持つことを自動検証するテストを追加。
   - 変更: `tests/clamav_db.rs` に `yara_logical_db_samples_strict_false_paths_are_explained` を追加し、sampled `.ldb` を parse/lower/compile したうえで strict-false 経路の無注釈化を検出。
   - 目的: strict-safe 運用で「false になった理由」が追跡不能になる回帰を防止し、検証フェーズでの観測性を確保。

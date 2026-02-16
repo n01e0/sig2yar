@@ -11,3 +11,7 @@ dependencies = ["clamav-update", "clamav-unpack"]
 command = "cargo"
 args = ["test", "--test", "clamav_db"]
 env = { CLAMAV_DB_DIR = "clamav-db/unpacked", CLAMAV_DB_REQUIRED = "1", CARGO_HOME = "target/cargo-home" }
+
+[tasks.validation-scan-diff]
+command = "bash"
+args = ["scripts/logical-scan-diff.sh"]
