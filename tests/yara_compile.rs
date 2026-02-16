@@ -1213,6 +1213,16 @@ fn yara_rule_with_byte_comparison_offset_plus_octal_matches_fixture() {
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_offset_plus_invalid_octal_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>+08#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("byte_comparison format unsupported/invalid"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzA"), 0);
+}
+
+#[test]
 fn yara_rule_with_byte_comparison_offset_bare_hex_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0A#ib1#=65)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1305,6 +1315,16 @@ fn yara_rule_with_non_raw_decimal_leading_zero_threshold_matches_octal_fixture()
 #[test]
 fn yara_rule_with_non_raw_decimal_invalid_octal_threshold_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=08)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("byte_comparison format unsupported/invalid"));
+    assert_eq!(scan_match_count(src.as_str(), b"08"), 0);
+}
+
+#[test]
+fn yara_rule_with_non_raw_decimal_plus_invalid_octal_threshold_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=+08)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 

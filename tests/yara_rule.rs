@@ -1122,6 +1122,22 @@ fn lowers_byte_comparison_offset_with_plus_prefixed_octal_token() {
 }
 
 #[test]
+fn lowers_byte_comparison_offset_with_plus_invalid_octal_token_to_false_for_safety() {
+    // ClamAV base-0 parse treats +08 as invalid octal.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>+08#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison format unsupported/invalid")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_byte_comparison_offset_with_bare_hex_token_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0A#ib1#=65)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1229,6 +1245,20 @@ fn lowers_byte_comparison_non_raw_decimal_with_leading_zero_octal_threshold() {
 #[test]
 fn lowers_byte_comparison_non_raw_decimal_invalid_octal_threshold_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=08)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "($s0 and false)");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("byte_comparison format unsupported/invalid")
+    )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_decimal_plus_invalid_octal_threshold_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3038;0(>>0#de2#=+08)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "($s0 and false)");
