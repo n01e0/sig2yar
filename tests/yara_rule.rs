@@ -454,34 +454,39 @@ fn lowers_pcre_exact_offset_match_fixture_with_same_equality_constraint() {
 }
 
 #[test]
-fn lowers_pcre_re_range_ignores_r_and_keeps_encompass_window_from_clamav_matcher_fixture() {
+fn lowers_pcre_re_range_to_false_for_safety() {
     // ClamAV reference:
     // - unit_tests/check_matchers.c:146-149 (Test10 uses `/atre/re` with offset `2,6`)
     // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("@s1[j] >= 2"));
-    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 8"));
+    assert!(rule.condition.contains("false"));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("pcre flag 'r' ignored when maxshift is present")
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
     )));
 }
 
 #[test]
-fn lowers_pcre_re_range_nonmatch_fixture_to_narrow_encompass_window() {
+fn lowers_pcre_re_range_nonmatch_fixture_to_false_for_safety() {
     // ClamAV reference:
     // - unit_tests/check_matchers.c:146-149 (Test8: `/apie/re` with offset `2,2`, expected CL_SUCCESS)
     // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("@s1[j] >= 2"));
-    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 4"));
-    assert!(!rule.condition.contains("(@s1[j] + !s1[j]) <= 8"));
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'r' with maxshift")
+                && value.contains("lowered to false for safety")
+    )));
 }
 
 #[test]

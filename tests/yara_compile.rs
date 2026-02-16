@@ -254,24 +254,25 @@ fn yara_rule_with_pcre_exact_offset_with_encompass_flag_false_rejects_scan() {
 }
 
 #[test]
-fn yara_rule_with_re_range_offset_compiles_with_yara_x_from_clamav_matcher_fixture() {
+fn yara_rule_with_re_range_offset_false_rejects_scan() {
     // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (pcre_testdata expected_result)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre range+re generated rule");
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxatre"), 0);
 }
 
 #[test]
-fn yara_rule_with_re_range_offset_nonmatch_fixture_compiles_with_yara_x() {
+fn yara_rule_with_re_range_offset_nonmatch_fixture_false_rejects_scan() {
     // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (Test8 `/apie/re` expected CL_SUCCESS)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    yara_x::compile(src.as_str())
-        .expect("yara-x failed to compile pcre range+re nonmatch-fixture generated rule");
+    assert!(src.contains("flag 'r' with maxshift"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxapie"), 0);
 }
 
 #[test]
