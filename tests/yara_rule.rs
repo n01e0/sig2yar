@@ -365,6 +365,21 @@ fn lowers_pcre_re_flags_without_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_exact_offset_with_encompass_flag_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/e").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("false"));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("flag 'e' with exact offset prefix")
+                && value.contains("lowered to false for safety")
+    )));
+}
+
+#[test]
 fn lowers_pcre_anchored_with_offset_prefix_to_false_for_safety() {
     // ClamAV reference:
     // - libclamav/matcher-pcre.c uses offset-adjusted scan start, and anchored matching is relative

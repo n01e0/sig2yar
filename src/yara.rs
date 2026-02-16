@@ -4660,8 +4660,9 @@ fn lower_pcre_offset_window_condition(
             }
             if encompass {
                 notes.push(format!(
-                    "subsig[{idx}] pcre flag 'e' ignored on exact offset"
+                    "subsig[{idx}] pcre flag 'e' with exact offset prefix depends on ClamAV encompass runtime semantics; lowered to false for safety"
                 ));
+                return "false".to_string();
             }
             pcre_occurrence_exact_expr(core, &start, false)
         }
