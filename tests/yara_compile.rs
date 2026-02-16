@@ -182,6 +182,31 @@ fn yara_rule_with_hex_fullword_modifier_strict_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_hex_wide_fullword_modifier_strict_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::wf").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(
+        scan_match_count(src.as_str(), b"h\x00e\x00l\x00l\x00o\x00"),
+        0
+    );
+}
+
+#[test]
+fn yara_rule_with_hex_wide_ascii_fullword_modifier_strict_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::waf").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"hello"), 0);
+    assert_eq!(
+        scan_match_count(src.as_str(), b"h\x00e\x00l\x00l\x00o\x00"),
+        0
+    );
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/sme").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
