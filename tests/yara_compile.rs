@@ -234,6 +234,16 @@ fn yara_rule_with_exact_pcre_offset_match_fixture_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_exact_offset_with_rolling_flag_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/r").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("flag 'r' with exact offset prefix"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 0);
+}
+
+#[test]
 fn yara_rule_with_re_range_offset_compiles_with_yara_x_from_clamav_matcher_fixture() {
     // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (pcre_testdata expected_result)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
