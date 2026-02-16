@@ -202,6 +202,26 @@ fn yara_rule_with_pcre_trigger_prefix_resolved_false_rejects_scan_for_safety() {
 }
 
 #[test]
+fn yara_rule_with_pcre_trigger_prefix_missing_trigger_expression_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;200,300:/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("pcre trigger prefix parse failed"));
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_trigger_prefix_malformed_expression_false_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;200,300:foo/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("lowered to false for safety"));
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_trigger_prefix_mixed_missing_reference_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;0|9/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
