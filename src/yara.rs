@@ -2478,14 +2478,6 @@ fn lower_subsignatures(
                     }
                 }
 
-                if hex_fullword && hex_wide && hex_ascii {
-                    notes.push(format!(
-                        "subsig[{idx}] hex modifier 'f' (fullword) with wide+ascii matching is unsupported for strict lowering; lowered to false for safety"
-                    ));
-                    id_map.push(Some("false".to_string()));
-                    continue;
-                }
-
                 if !ignored_unknown.is_empty() {
                     notes.push(format!(
                         "subsig[{idx}] ignored unknown hex modifier(s): {}",
@@ -2500,7 +2492,15 @@ fn lower_subsignatures(
                 strings.push(YaraString::Raw(line));
 
                 if hex_fullword {
-                    if hex_wide {
+                    if hex_wide && hex_ascii {
+                        notes.push(format!(
+                            "subsig[{idx}] hex modifier 'f' lowered with strict ascii|wide branch-dispatched boundary checks"
+                        ));
+                        id_map.push(Some(hex_fullword_wide_ascii_condition_expr(
+                            &id,
+                            hex.len() / 2,
+                        )));
+                    } else if hex_wide {
                         notes.push(format!(
                             "subsig[{idx}] hex modifier 'f' lowered with strict wide alnum+NUL boundary checks"
                         ));
@@ -2980,6 +2980,41 @@ fn hex_fullword_wide_condition_expr(id: &str) -> String {
     );
 
     format!("for any i in (1..#{core}) : ({left_boundary} and {right_boundary})")
+}
+
+fn hex_fullword_wide_ascii_condition_expr(id: &str, ascii_len: usize) -> String {
+    let core = id.trim_start_matches('$');
+    let start = format!("@{core}[i]");
+    let end = format!("@{core}[i] + !{core}[i]");
+
+    let left_ascii_word = ascii_alnum_predicate(&format!("uint8(({start}) - 1)"));
+    let right_ascii_word = ascii_alnum_predicate(&format!("uint8({end})"));
+    let left_ascii_boundary =
+        format!("(({start}) == 0 or (({start}) > 0 and not ({left_ascii_word})))");
+    let right_ascii_boundary = format!("(({end}) >= filesize or not ({right_ascii_word}))");
+
+    let left_wide_word = format!(
+        "({} and uint8(({start}) - 1) == 0x00)",
+        ascii_alnum_predicate(&format!("uint8(({start}) - 2)"))
+    );
+    let right_wide_word = format!(
+        "({} and uint8(({end}) + 1) == 0x00)",
+        ascii_alnum_predicate(&format!("uint8({end})"))
+    );
+    let left_wide_boundary =
+        format!("(({start}) < 2 or (({start}) >= 2 and not ({left_wide_word})))");
+    let right_wide_boundary = format!(
+        "(({end}) + 1 >= filesize or (({end}) + 1 < filesize and not ({right_wide_word})))"
+    );
+
+    let wide_len = ascii_len.saturating_mul(2);
+    let ascii_branch = format!(
+        "(!{core}[i] == {ascii_len}) and ({left_ascii_boundary} and {right_ascii_boundary})"
+    );
+    let wide_branch =
+        format!("(!{core}[i] == {wide_len}) and ({left_wide_boundary} and {right_wide_boundary})");
+
+    format!("for any i in (1..#{core}) : (({ascii_branch}) or ({wide_branch}))")
 }
 
 #[allow(dead_code)]

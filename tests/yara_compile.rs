@@ -211,14 +211,27 @@ fn yara_rule_with_hex_wide_fullword_modifier_matches_with_wide_boundaries() {
 }
 
 #[test]
-fn yara_rule_with_hex_wide_ascii_fullword_modifier_strict_false_rejects_scan() {
+fn yara_rule_with_hex_wide_ascii_fullword_modifier_matches_ascii_and_wide_boundaries() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;68656c6c6f::waf").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert_eq!(scan_match_count(src.as_str(), b"hello"), 0);
+    assert!(src.contains(
+        "hex modifier 'f' lowered with strict ascii|wide branch-dispatched boundary checks"
+    ));
+    assert_eq!(scan_match_count(src.as_str(), b"hello"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"xhello"), 0);
+    assert_eq!(scan_match_count(src.as_str(), b"hello1"), 0);
     assert_eq!(
         scan_match_count(src.as_str(), b"h\x00e\x00l\x00l\x00o\x00"),
+        1
+    );
+    assert_eq!(
+        scan_match_count(src.as_str(), b"x\x00h\x00e\x00l\x00l\x00o\x00"),
+        0
+    );
+    assert_eq!(
+        scan_match_count(src.as_str(), b"h\x00e\x00l\x00l\x00o\x00y\x00"),
         0
     );
 }
