@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::{self, Display},
 };
 
@@ -4417,6 +4417,19 @@ fn lower_pcre_trigger_condition(
         return Some("false".to_string());
     }
 
+    let missing_refs = pcre_trigger_missing_refs(&trigger_ir, known_ids);
+    if !missing_refs.is_empty() {
+        let rendered = missing_refs
+            .iter()
+            .map(|idx| idx.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression references unsupported/missing subsig index(es) {rendered}; lowered to false for safety"
+        ));
+        return Some("false".to_string());
+    }
+
     if !pcre_trigger_expression_is_strictly_representable(&trigger_ir) {
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression uses count/distinct operators unsupported for strict lowering; lowered to false for safety"
@@ -4486,6 +4499,46 @@ fn pcre_trigger_refs_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool
         | ir::LogicalExpression::MultiMatchCount(inner, _, _)
         | ir::LogicalExpression::MultiGt(inner, _, _)
         | ir::LogicalExpression::MultiLt(inner, _, _) => pcre_trigger_refs_self(inner, self_idx),
+    }
+}
+
+fn pcre_trigger_missing_refs(
+    expr: &ir::LogicalExpression,
+    known_ids: &[Option<String>],
+) -> Vec<usize> {
+    let mut out = BTreeSet::new();
+    collect_pcre_trigger_missing_refs(expr, known_ids, &mut out);
+    out.into_iter().collect()
+}
+
+fn collect_pcre_trigger_missing_refs(
+    expr: &ir::LogicalExpression,
+    known_ids: &[Option<String>],
+    out: &mut BTreeSet<usize>,
+) {
+    match expr {
+        ir::LogicalExpression::SubExpression(idx) => {
+            if known_ids
+                .get(*idx)
+                .and_then(|entry| entry.as_ref())
+                .is_none()
+            {
+                out.insert(*idx);
+            }
+        }
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
+            for node in nodes {
+                collect_pcre_trigger_missing_refs(node, known_ids, out);
+            }
+        }
+        ir::LogicalExpression::MatchCount(inner, _)
+        | ir::LogicalExpression::Gt(inner, _)
+        | ir::LogicalExpression::Lt(inner, _)
+        | ir::LogicalExpression::MultiMatchCount(inner, _, _)
+        | ir::LogicalExpression::MultiGt(inner, _, _)
+        | ir::LogicalExpression::MultiLt(inner, _, _) => {
+            collect_pcre_trigger_missing_refs(inner, known_ids, out)
+        }
     }
 }
 
