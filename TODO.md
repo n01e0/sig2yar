@@ -85,9 +85,9 @@ Last update: 2026-02-17
 ## C. DBタイプ単位で strict-safe のままになっている領域
 
 ### C1. strict support 化を検討する候補（優先度: 高）
-- [ ] `mdb` / `msb` / `imp` の strict mapping 設計と最小回帰テスト導入
+- [x] `mdb` / `msb` / `imp` の strict mapping 設計と最小回帰テスト導入
       - 2026-02-17: `mdb/msb` section-hash は strict support 化（`pe.sections[*]` + `hash.{md5,sha1,sha256}`）
-      - 継続: `imp`（import-hash）は DB種別ヒントなしの同型判定設計が未完
+      - 2026-02-18: `imp` は DBタイプ分離（`sig2yar imp`）で strict support 化（`pe.is_pe` + `pe.imphash()` + optional filesize guard）
 
 ### C2. runtime依存が強いため要方針決定（優先度: 中）
 - [ ] `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`,
@@ -106,6 +106,7 @@ Last update: 2026-02-17
       - 2026-02-17: `scripts/logical-scan-diff.sh` に track分類（A1/A2/B/C1/C2等）と actionability ranking 出力を追加
 - [x] D2: P0として PCRE の同型拡張（`(?P...)` の過剰strict-false解消可能分）を段階実施
       - 2026-02-17: `(?P<name>...)` 許可 + `(?P'name'...)` rewrite許可を main へ反映
-- [ ] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）
-      - 2026-02-17: 第1弾として `mdb/msb` を実装（`imp` は継続）
+- [x] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）
+      - 2026-02-17: 第1弾として `mdb/msb` を実装
+      - 2026-02-18: 第2弾として `imp` を実装（専用parser + `pe.imphash()` lower + compile/scan回帰）
 - [ ] D4: 対象外と判断した strict-safe 領域は README/checklist に非対象理由を明記

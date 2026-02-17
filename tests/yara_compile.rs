@@ -1,9 +1,10 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature, fp::FpSignature,
     ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
-    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, info::InfoSignature,
-    ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature,
-    ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, imp::ImpSignature,
+    info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -34,6 +35,44 @@ fn hash_rules_source(signatures: &[&str]) -> String {
 
     for raw in signatures {
         let sig = HashSignature::parse(raw).expect("failed to parse hash signature fixture");
+        let rendered = sig.to_string();
+
+        let mut body_lines = Vec::new();
+        for line in rendered.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("import ") {
+                if !imports.iter().any(|existing| existing == trimmed) {
+                    imports.push(trimmed.to_string());
+                }
+            } else {
+                body_lines.push(line);
+            }
+        }
+
+        bodies.push(body_lines.join("\n"));
+    }
+
+    let mut out = String::new();
+    for import in imports {
+        out.push_str(&import);
+        out.push('\n');
+    }
+
+    for body in bodies {
+        out.push_str(&body);
+        out.push('\n');
+        out.push('\n');
+    }
+
+    out
+}
+
+fn imp_rules_source(signatures: &[&str]) -> String {
+    let mut imports: Vec<String> = Vec::new();
+    let mut bodies: Vec<String> = Vec::new();
+
+    for raw in signatures {
+        let sig = ImpSignature::parse(raw).expect("failed to parse imp signature fixture");
         let rendered = sig.to_string();
 
         let mut body_lines = Vec::new();
@@ -195,6 +234,20 @@ fn hash_mdb_msb_rules_match_pe_section_hash_variants() {
     assert_eq!(scan_match_count(src.as_str(), &pe_data), 2);
 
     // Non-PE input should not satisfy section-hash rules.
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+}
+
+#[test]
+fn imp_rules_match_pe_imphash_size_fixed_and_wildcard_variants() {
+    let src = imp_rules_source(&[
+        "d41d8cd98f00b204e9800998ecf8427e:2048:Test.IMP.SizeFixed",
+        "d41d8cd98f00b204e9800998ecf8427e:*:Test.IMP.Wildcard:73",
+    ]);
+
+    let pe_data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+    assert_eq!(scan_match_count(src.as_str(), &pe_data), 2);
+
+    // Non-PE input should not satisfy import-hash rules.
     assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
 }
 

@@ -3,9 +3,9 @@ use sig2yar::{
         cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
         fp::FpSignature, ftm::FtmSignature, hash::HashSignature, hdu::HduSignature,
         hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
-        info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-        msu::MsuSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
-        wdb::WdbSignature,
+        imp::ImpSignature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
+        mdu::MduSignature, msu::MsuSignature, ndu::NduSignature, pdb::PdbSignature,
+        sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -16,6 +16,15 @@ fn hash_ir_render_matches_display() {
         .expect("hash parse failed");
 
     let rendered = yara::render_hash_signature(&sig.to_ir());
+    assert_eq!(rendered, sig.to_string());
+}
+
+#[test]
+fn imp_ir_render_matches_display() {
+    let sig = ImpSignature::parse("d41d8cd98f00b204e9800998ecf8427e:2048:Test.Imp.Signature")
+        .expect("imp parse failed");
+
+    let rendered = yara::render_imp_signature(&sig.to_ir());
     assert_eq!(rendered, sig.to_string());
 }
 
