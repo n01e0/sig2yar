@@ -1814,6 +1814,20 @@ fn lowers_pcre_unsupported_flag_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_python_named_syntax_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P=funcname)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("Python-style named capture/backreference syntax")
+    )));
+}
+
+#[test]
 fn lowers_pcre_inline_flags_for_dotall_multiline() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/abc/sm").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
