@@ -111,6 +111,11 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記137: LDB/PCRE の exact offset + `r`（rolling）を strict-false から除外し、strict support 化。
+  - 根拠: ClamAV unit test `unit_tests/check_matchers.c` の pcre_testdata Test_3（`/basic/r` + offset `0`）で rolling exact は「offset以降での一致」を許容。
+  - 変更: `src/yara.rs` の exact offset lowering で `r` 単独時は `for any j ... : (@sX[j] >= offset)` を生成。
+  - 維持: exact offset + `re` は runtime semantics 未同型のため strict-false を維持。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` の `10:0/abc/r` を positive（match）へ更新。
 - 2026-02-17 追記136: LDB/PCRE の `g` flag を strict-false から除外し、同型で strict support 化。
   - 背景: 既存実装は `g` を unsupported flag として一律 strict-false に倒していた。
   - 変更: `src/yara.rs` で `g` を unsupported 判定から除外（PCRE bool-match 文脈では `g` の有無で判定意味が変わらない前提）。

@@ -955,18 +955,13 @@ fn lowers_malformed_pcre_subsignature_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_offset_with_rolling_flag_to_false_for_safety() {
+fn lowers_pcre_offset_with_rolling_flag_to_exact_or_later_match_window() {
+    // ClamAV reference: unit_tests/check_matchers.c (pcre_testdata Test_3)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/r").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("false"));
-    assert!(rule.meta.iter().any(|m| matches!(
-        m,
-        YaraMeta::Entry { key, value }
-            if key == "clamav_lowering_notes"
-                && value.contains("flag 'r' with exact offset prefix")
-                && value.contains("lowered to false for safety")
-    )));
+    assert!(!rule.condition.contains("false"));
+    assert!(rule.condition.contains("@s1[j] >= 10"));
 }
 
 #[test]

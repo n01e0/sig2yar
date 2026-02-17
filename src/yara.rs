@@ -4911,10 +4911,17 @@ fn lower_pcre_offset_window_condition(
     match window {
         PcreOffsetWindow::Exact { start } => {
             if rolling {
-                notes.push(format!(
-                    "subsig[{idx}] pcre flag 'r' with exact offset prefix depends on ClamAV rolling scan-state semantics; lowered to false for safety"
-                ));
-                return "false".to_string();
+                if encompass {
+                    notes.push(format!(
+                        "subsig[{idx}] pcre flag 'r' with exact offset prefix depends on ClamAV rolling scan-state semantics; lowered to false for safety"
+                    ));
+                    return "false".to_string();
+                }
+
+                // ClamAV reference: unit_tests/check_matchers.c (pcre_testdata Test_3)
+                // `/basic/r` with exact offset `0` matches when regex appears at later
+                // positions, i.e. rolling exact-offset semantics are start >= offset.
+                return pcre_occurrence_exact_expr(core, &start, true);
             }
             if encompass {
                 notes.push(format!(
