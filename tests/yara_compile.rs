@@ -3,7 +3,7 @@ use sig2yar::parser::{
     ftm::FtmSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
     ign2::Ign2Signature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
     mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
-    sfp::SfpSignature, wdb::WdbSignature,
+    sfp::SfpSignature, wdb::WdbSignature, hash::HashSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -14,6 +14,22 @@ fn scan_match_count(src: &str, data: &[u8]) -> usize {
         .scan(data)
         .expect("yara-x failed to scan data for rule");
     results.matching_rules().len()
+}
+
+fn hash_rules_source(signatures: &[&str]) -> String {
+    let mut out = String::from("import \"hash\"\n");
+
+    for raw in signatures {
+        let sig = HashSignature::parse(raw).expect("failed to parse hash signature fixture");
+        let rendered = sig.to_string();
+        let body = rendered
+            .strip_prefix("import \"hash\"\n")
+            .unwrap_or(rendered.as_str());
+        out.push_str(body);
+        out.push('\n');
+    }
+
+    out
 }
 
 fn pe_two_sections_fixture_with_aaaa_and_abc_in_section1() -> Vec<u8> {
@@ -114,6 +130,24 @@ fn yara_rule_compiles_with_yara_x() {
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile generated rule");
+}
+
+#[test]
+fn hash_hdb_hsb_rules_match_size_fixed_and_wildcard_variants() {
+    let src = hash_rules_source(&[
+        "900150983cd24fb0d6963f7d28e17f72:3:Test.MD5.Hash:73",
+        "900150983cd24fb0d6963f7d28e17f72:*:Test.MD5.Hash.NoSize:73",
+        "a9993e364706816aba3e25717850c26c9cd0d89d:3:Test.Sha1.Hash:73",
+        "a9993e364706816aba3e25717850c26c9cd0d89d:*:Test.Sha1.NoSize:73",
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad:3:Test.Sha256.Hash:73",
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad:*:Test.Sha256.Hash.NoSize:73",
+    ]);
+
+    // "abc" should satisfy every size-fixed + wildcard variant.
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 6);
+
+    // Nearby payload should satisfy none.
+    assert_eq!(scan_match_count(src.as_str(), b"abd"), 0);
 }
 
 #[test]
