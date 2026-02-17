@@ -119,6 +119,9 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記153: A2残課題（raw size/幅制約）を再評価し、strict-false固定方針を確認。
+  - 根拠: ClamAV `matcher-byte-comp.c` では binary(raw) byte_len は 1/2/4/8 のみ許容し、それ以外は `CL_EARG/CL_EMALFDB` 扱い。
+  - 結論: raw 3/5/6/7/9+ を strict support 化できる同型subsetは無し。既存の `byte_comparison_raw_size_unsupported` / `..._threshold_out_of_range` 経路を仕様として維持。
 - 2026-02-18 追記152: A2拡張として non-raw little-endian hex の strict subset を追加。
   - 変更: `src/yara.rs` `lower_textual_byte_comparison_condition(...)` で `h+le+e+偶数width` を strict support。
   - 方針: ClamAV `matcher-byte-comp.c` の LE normalization（hex byte-pair reverse）に同型化し、比較桁位置を YARA条件へ写像。
