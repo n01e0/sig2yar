@@ -411,34 +411,38 @@ fn lowers_pcre_trigger_prefix_to_condition() {
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_count_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_count_expression_to_count_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("1 of ($s0, $s1)"));
+    assert!(rule.condition.contains("@s2[j] >= 200"));
+    assert!(rule.condition.contains("@s2[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_match_range_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_match_range_expression_to_count_window_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1,2/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("(1 of ($s0, $s1)) and not (3 of ($s0, $s1))"));
+    assert!(rule.condition.contains("@s2[j] >= 200"));
+    assert!(rule.condition.contains("@s2[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
@@ -454,7 +458,7 @@ fn lowers_pcre_trigger_prefix_with_multi_gt_expression_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
@@ -470,39 +474,43 @@ fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_gt_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_gt_expression_to_count_threshold_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("2 of ($s0, $s1)"));
+    assert!(rule.condition.contains("@s2[j] >= 200"));
+    assert!(rule.condition.contains("@s2[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_lt_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_lt_expression_to_count_threshold_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)<2/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert_eq!(rule.condition, "false");
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("not (2 of ($s0, $s1))"));
+    assert!(rule.condition.contains("@s2[j] >= 200"));
+    assert!(rule.condition.contains("@s2[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("count/distinct operators unsupported for strict lowering")
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
 }
 
