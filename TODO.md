@@ -39,6 +39,9 @@ Last update: 2026-02-17
 ### A2. byte_comparison（優先度: 中）
 - [ ] non-raw little-endian / non-exact / auto-base など strict-false 系のうち、
       同型実装できるケースを切り出して support 化
+      - 2026-02-17: strict subset として `width=1` を support 化
+        - non-raw non-exact（`!e`）は `width=1` のとき strict support
+        - non-raw little-endian は `h` base かつ `width=1` のとき strict support
 - [ ] raw size 制約（1/2/4/8以外）と幅制約のうち、
       安全に同型へ寄せられる範囲があるかを検証
 - [x] strict-false 維持経路の機械可読化（taxonomy）
