@@ -351,12 +351,13 @@ fn yara_rule_with_pcre_trigger_prefix_missing_base_offset_false_rejects_scan() {
 }
 
 #[test]
-fn yara_rule_with_pcre_trigger_prefix_spaced_range_without_e_false_rejects_scan() {
+fn yara_rule_with_pcre_trigger_prefix_spaced_range_without_e_uses_start_window() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141; 200 , 300 :0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("maxshift present without 'e'; lowered to false for safety"));
+    assert!(src.contains(">= 200"));
+    assert!(src.contains("<= 500"));
     assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
 }
 
@@ -677,13 +678,25 @@ fn yara_rule_with_pcre_encompass_match_end_boundary_match_fixture_matches_scan()
 }
 
 #[test]
-fn yara_rule_with_pcre_range_without_e_compiles_with_yara_x() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
+fn yara_rule_with_pcre_range_without_e_matches_scan_when_start_within_window() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;2,6:0/atre/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    yara_x::compile(src.as_str())
-        .expect("yara-x failed to compile pcre-maxshift-without-e safety-false rule");
+    assert!(src.contains("@s1[j] >= 2"));
+    assert!(src.contains("@s1[j] <= 8"));
+    assert_eq!(scan_match_count(src.as_str(), b"notatretruly"), 1);
+}
+
+#[test]
+fn yara_rule_with_pcre_range_without_e_rejects_scan_when_start_outside_window() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;2,2:0/truly/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("@s1[j] >= 2"));
+    assert!(src.contains("@s1[j] <= 4"));
+    assert_eq!(scan_match_count(src.as_str(), b"notatretruly"), 0);
 }
 
 #[test]

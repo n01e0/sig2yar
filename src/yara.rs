@@ -4894,6 +4894,10 @@ fn pcre_occurrence_exact_expr(core: &str, start: &str, rolling: bool) -> String 
     }
 }
 
+fn pcre_occurrence_start_window_expr(core: &str, start: &str, end: &str) -> String {
+    format!("for any j in (1..#{core}) : (@{core}[j] >= {start} and @{core}[j] <= {end})")
+}
+
 fn pcre_occurrence_window_expr(core: &str, start: &str, end: &str) -> String {
     format!(
         "for any j in (1..#{core}) : (@{core}[j] >= {start} and (@{core}[j] + !{core}[j]) <= {end})"
@@ -5018,12 +5022,22 @@ fn lower_pcre_offset_condition(
             let window_end = maxshift.map(|maxshift| start.saturating_add(maxshift).to_string());
 
             if rolling && encompass {
-                if let Some(end) = window_end {
+                if let Some(end) = window_end.as_ref() {
                     // ClamAV reference: unit_tests/check_matchers.c pcre_testdata
                     // Test8/Test10 (`/apie/re` with `2,2`, `/atre/re` with `2,6`).
                     // For absolute offset ranges, `re` behaves like bounded window
                     // matching: start >= offset and end <= offset+maxshift.
-                    return Some(pcre_occurrence_window_expr(core, &window_start, &end));
+                    return Some(pcre_occurrence_window_expr(core, &window_start, end));
+                }
+            }
+
+            if !rolling && !encompass {
+                if let Some(end) = window_end.as_ref() {
+                    // ClamAV reference: matcher-pcre.c
+                    // - non-encompass + maxshift keeps full buffer scan
+                    // - match is accepted only when first match start <= maxshift.
+                    // This maps to start-window semantics for absolute offsets.
+                    return Some(pcre_occurrence_start_window_expr(core, &window_start, end));
                 }
             }
 
