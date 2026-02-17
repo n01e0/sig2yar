@@ -479,6 +479,50 @@ fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_pcre_trigger_prefix_with_single_subsig_multi_gt_expression_to_count_threshold_condition() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0>0,2/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("#s0 > 0"));
+    assert!(rule.condition.contains("@s1[j] >= 200"));
+    assert!(rule.condition.contains("@s1[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("multi-gt distinct threshold 2 ignored for single-subsig expression")
+    )));
+}
+
+#[test]
+fn lowers_pcre_trigger_prefix_with_single_subsig_multi_lt_expression_to_count_threshold_condition() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0<1,2/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("#s0 < 1"));
+    assert!(rule.condition.contains("@s1[j] >= 200"));
+    assert!(rule.condition.contains("@s1[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("multi-lt distinct threshold 2 ignored for single-subsig expression")
+    )));
+}
+
+#[test]
 fn lowers_pcre_trigger_prefix_with_gt_expression_to_count_threshold_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1/abc/")
