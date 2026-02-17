@@ -24,6 +24,7 @@ Last update: 2026-02-17
       YARA側で同型表現可能なものを個別に support 化
       - 2026-02-17: `g` flag は strict-false から除外（同型で表現可能として許可）
       - 2026-02-17: exact offset + `r` (`10:.../r`) は `@ >= offset` 条件で strict support 化
+      - 2026-02-17: absolute range + `re` (`n,m:.../re`) は bounded window（`@ >= n` かつ `@+! <= n+m`）で strict support 化
 - [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
       「同型可/不可」で再分類し、同型可だけ support 化
 

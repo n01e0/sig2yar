@@ -1167,38 +1167,36 @@ fn lowers_pcre_exact_offset_match_fixture_with_same_equality_constraint() {
 }
 
 #[test]
-fn lowers_pcre_re_range_to_false_for_safety() {
+fn lowers_pcre_re_range_to_bounded_window_condition() {
     // ClamAV reference:
-    // - unit_tests/check_matchers.c:146-149 (Test10 uses `/atre/re` with offset `2,6`)
+    // - unit_tests/check_matchers.c:146-149 (Test10 uses `/atre/re` with offset `2,6`, expected CL_VIRUS)
     // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("false"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("@s1[j] >= 2"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 8"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
-            if key == "clamav_lowering_notes"
-                && value.contains("flag 'r' with maxshift")
-                && value.contains("lowered to false for safety")
+            if key == "clamav_lowering_notes" && value.contains("flag 'r' with maxshift")
     )));
 }
 
 #[test]
-fn lowers_pcre_re_range_nonmatch_fixture_to_false_for_safety() {
+fn lowers_pcre_re_range_nonmatch_fixture_to_bounded_window_condition() {
     // ClamAV reference:
     // - unit_tests/check_matchers.c:146-149 (Test8: `/apie/re` with offset `2,2`, expected CL_SUCCESS)
     // - unit_tests/check_matchers.c:497-503 (expected_result is enforced for pcre_testdata)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("false"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("@s1[j] >= 2"));
+    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= 4"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
-            if key == "clamav_lowering_notes"
-                && value.contains("flag 'r' with maxshift")
-                && value.contains("lowered to false for safety")
+            if key == "clamav_lowering_notes" && value.contains("flag 'r' with maxshift")
     )));
 }
 
