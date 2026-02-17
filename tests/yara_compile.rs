@@ -718,6 +718,23 @@ fn yara_rule_with_pcre_ep_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_ep_plus_range_without_e_matches_and_rejects_pe_fixture() {
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    let sig_match =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+0,600:0/abc/").unwrap();
+    let src_match = YaraRule::try_from(&sig_match).unwrap().to_string();
+    assert!(src_match.contains("@s1[j] <= pe.entry_point + 0 + 600"));
+    assert_eq!(scan_match_count(src_match.as_str(), &data), 1);
+
+    let sig_nonmatch =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+0,100:0/abc/").unwrap();
+    let src_nonmatch = YaraRule::try_from(&sig_nonmatch).unwrap().to_string();
+    assert!(src_nonmatch.contains("@s1[j] <= pe.entry_point + 0 + 100"));
+    assert_eq!(scan_match_count(src_nonmatch.as_str(), &data), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_ep_plus_offset_prefix_with_rolling_flag_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10,8:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -920,6 +937,17 @@ fn yara_rule_with_pcre_section_end_offset_prefix_compiles_with_yara_x() {
     let src = rule.to_string();
 
     yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre SE offset-prefix rule");
+}
+
+#[test]
+fn yara_rule_with_pcre_section_end_offset_without_e_matches_pe_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+    let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+
+    assert!(src.contains("@s1[j] >= pe.sections[1].raw_data_offset"));
+    assert_eq!(scan_match_count(src.as_str(), &data), 1);
 }
 
 #[test]

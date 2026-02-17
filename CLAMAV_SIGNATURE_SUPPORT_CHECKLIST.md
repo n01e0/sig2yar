@@ -111,6 +111,13 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記141: LDB/PCRE の relative offset（`EP/Sx/SL/SE/EOF-`）上 non-`e` + maxshift を strict-false から除外し、strict support 化。
+  - 根拠: ClamAV `libclamav/matcher-pcre.c` の non-encompass path。
+    - maxshift あり (`adjshift != 0`) では buffer 全体走査後、`match_start <= adjshift` 条件で採否を決める。
+    - この判定は offset prefix 共通で、`@ in [offset_start, offset_start+maxshift]` の start-window へ同型化可能。
+  - 変更: `src/yara.rs` の range-window non-`e` lowering を `false` ではなく start-window 条件へ変更。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `EP+0,600:.../` と `SE1:.../` の positive coverage を追加。
+  - 維持: `r` + maxshift（`/r` または `/re`）の relative path は runtime rolling semantics 未同型のため strict-false 維持。
 - 2026-02-17 追記140: LDB/PCRE の absolute range + non-`e`（`n,m:.../`）を strict-false から除外し、strict support 化。
   - 根拠: ClamAV `libclamav/matcher-pcre.c`
     - non-encompass + maxshift では buffer 全体を走査しつつ、`match_start <= maxshift` のときのみ採用

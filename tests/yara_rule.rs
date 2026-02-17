@@ -1230,6 +1230,21 @@ fn lowers_pcre_ep_plus_offset_prefix_to_entry_point_constraint() {
 }
 
 #[test]
+fn lowers_pcre_ep_plus_range_without_e_to_start_window_condition() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+0,600:0/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s1[j] >= pe.entry_point + 0"));
+    assert!(rule.condition.contains("@s1[j] <= pe.entry_point + 0 + 600"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("maxshift present without 'e'")
+    )));
+}
+
+#[test]
 fn lowers_pcre_ep_plus_offset_prefix_with_rolling_flag_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP+10,8:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -1543,19 +1558,24 @@ fn lowers_pcre_section_end_offset_with_rolling_flag_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_section_end_offset_without_e_to_false_for_safety() {
+fn lowers_pcre_section_end_offset_without_e_to_start_window_condition() {
     // ClamAV reference:
     // - libclamav/matcher.c:369-376 (`SEn` parsed as CLI_OFF_SE)
-    // - libclamav/matcher.c:487-495 (effective maxshift includes section raw size)
+    // - libclamav/matcher-pcre.c non-encompass path checks match-start <= adjshift
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;SE1:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("(false)"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule
+        .condition
+        .contains("@s1[j] >= pe.sections[1].raw_data_offset"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 0"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("maxshift present without 'e'; lowered to false for safety")
+                && value.contains("maxshift present without 'e'")
     )));
 }
 
