@@ -71,4 +71,14 @@ sig2yar imp "d41d8cd98f00b204e9800998ecf8427e:2048:Test.Imp.EmptyImports"
 | `ldb` | Partial only | **~0–10% strict** (very low) | Full macro runtime semantics, `fuzzy_img` runtime hash behavior, PCRE runtime-dependent flags/offset combinations, non-observable target-description constraints |
 | `mdb`, `msb` | Partially supported | **~70–90%** | Section-hash edge semantics validation (broader corpus) |
 | `imp` | Partially supported | **~70–90%** | Broad corpus validation and edge-case semantics (`pe.imphash()` parity across toolchain/fixtures) are still pending |
-| `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion not implemented | **~0%** | Currently handled as strict-safe / fallback path |
+| `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion intentionally non-target in v1 | **~0%** | Non-target due to runtime-mode dependency, allow/ignore override semantics, or external ClamAV engine coupling |
+
+## Strict-safe non-target scope (v1 policy)
+
+The following families are intentionally kept as **strict-false + note** in v1:
+
+- Runtime mode / DB lifecycle dependent: `hdu`, `hsu`, `mdu`, `msu`, `ndu`, `ldu`, `cfg`, `info`
+- Allow/ignore override semantics (not standalone detection semantics): `fp`, `sfp`, `ign`, `ign2`
+- External ClamAV subsystems required: `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`
+
+This keeps strict-safe guarantees explicit: no approximation is introduced where standalone YARA cannot be made semantically equivalent.
