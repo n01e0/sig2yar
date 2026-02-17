@@ -4735,9 +4735,13 @@ fn pcre_trigger_expression_is_strictly_representable(expr: &ir::LogicalExpressio
         | ir::LogicalExpression::MultiMatchCount(inner, _, _) => {
             pcre_trigger_count_operand_is_strictly_representable(inner)
         }
-        // `>x,y` / `<x,y` carry distinct-count semantics. We keep them strict-false
-        // until we can prove ClamAV parity end-to-end for trigger-prefix evaluation.
-        ir::LogicalExpression::MultiGt(_, _, _) | ir::LogicalExpression::MultiLt(_, _, _) => false,
+        // Distinct-count comparators are accepted only for the single-subsig subset,
+        // where lowering already has an exact path (`#sN > x` / `#sN < x`) and merely
+        // drops the redundant distinct threshold note.
+        ir::LogicalExpression::MultiGt(inner, _, _)
+        | ir::LogicalExpression::MultiLt(inner, _, _) => {
+            pcre_trigger_distinct_operand_is_single_subsig(inner)
+        }
     }
 }
 
@@ -4757,6 +4761,10 @@ fn pcre_trigger_count_operand_is_strictly_representable(expr: &ir::LogicalExpres
         | ir::LogicalExpression::MultiGt(_, _, _)
         | ir::LogicalExpression::MultiLt(_, _, _) => false,
     }
+}
+
+fn pcre_trigger_distinct_operand_is_single_subsig(expr: &ir::LogicalExpression) -> bool {
+    matches!(expr, ir::LogicalExpression::SubExpression(_))
 }
 
 fn pcre_trigger_expression_definitely_false(

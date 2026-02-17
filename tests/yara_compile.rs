@@ -1378,6 +1378,36 @@ fn yara_rule_with_pcre_multi_lt_trigger_prefix_false_rejects_scan() {
 }
 
 #[test]
+fn yara_rule_with_pcre_single_subsig_multi_gt_trigger_prefix_matches_and_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0>0,2/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let no_trigger = trigger_prefix_fixture(&[b"CCCC"], 220);
+
+    assert!(src.contains("#s0 > 0"));
+    assert!(src.contains("multi-gt distinct threshold 2 ignored for single-subsig expression"));
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 1);
+    assert_eq!(scan_match_count(src.as_str(), &no_trigger), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_single_subsig_multi_lt_trigger_prefix_matches_and_rejects_scan() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0<1,2/abc/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let no_trigger = trigger_prefix_fixture(&[b"CCCC"], 220);
+
+    assert!(src.contains("#s0 < 1"));
+    assert!(src.contains("multi-lt distinct threshold 2 ignored for single-subsig expression"));
+    assert_eq!(scan_match_count(src.as_str(), &no_trigger), 1);
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_gt_trigger_prefix_matches_and_rejects_scan() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1/abc/")
