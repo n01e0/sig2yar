@@ -3202,7 +3202,7 @@ fn lower_raw_or_pcre_subsignature(
                 'A' => anchored = true,
                 'r' => rolling = true,
                 'e' => encompass = true,
-                'g' => unsupported_flags.push('g'),
+                'g' => {}
                 'x' => {
                     if !inline_flags.contains('x') {
                         inline_flags.push('x');

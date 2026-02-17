@@ -1149,13 +1149,14 @@ fn yara_rule_with_pcre_flag_e_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_global_flag_false_compiles_with_yara_x() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/abc/g").unwrap();
+fn yara_rule_with_pcre_global_flag_matches_when_supported() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/abc/g").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre-g safety-false rule");
-    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
+    yara_x::compile(src.as_str()).expect("yara-x failed to compile pcre-g generated rule");
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabd"), 0);
 }
 
 #[test]

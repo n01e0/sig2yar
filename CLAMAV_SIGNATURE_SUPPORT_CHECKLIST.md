@@ -111,6 +111,10 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記136: LDB/PCRE の `g` flag を strict-false から除外し、同型で strict support 化。
+  - 背景: 既存実装は `g` を unsupported flag として一律 strict-false に倒していた。
+  - 変更: `src/yara.rs` で `g` を unsupported 判定から除外（PCRE bool-match 文脈では `g` の有無で判定意味が変わらない前提）。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` で `0/abc/g` が false にならず compile+match することを固定。
 - 2026-02-17 追記135: LDB/PCRE の quote-style named capture（`(?P'name'...)`）を同型rewrite（`(?P<name>...)`）で strict support 化。
   - 変更: `src/yara.rs` に Python-style named syntax 正規化を追加し、`(?P'name'...)` は group名検証後に angle-style へ変換。
   - 維持: `(?P=...)`（named backreference）は yara-x 非対応のため strict-false を維持。
