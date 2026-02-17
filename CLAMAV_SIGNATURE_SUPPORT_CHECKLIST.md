@@ -109,6 +109,10 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記131: `hdb/hsb` の最小回帰を sig2yar 本体へ逆輸入し、size固定＋`*`（NoSize）の同時担保を `yara_compile` fixture で固定。
+  - 変更: `tests/yara_compile.rs` に `hash_hdb_hsb_rules_match_size_fixed_and_wildcard_variants` を追加。
+  - 内容: `abc` の既知 hash（MD5/SHA1/SHA256）を使い、`size=3` と `size=*` の6ルールが target で 6/6 hit、近傍 payload（`abd`）で 0 hit を検証。
+  - 目的: validation repo で先に固めた hdb/hsb parity のうち、sig2yar 本体CIで維持すべき最小条件を lightweight に固定（strict-safe方針は不変）。
 - 2026-02-17 追記130: 実データとして ClamAV upstream `unit_tests/input`（300 files）を corpus に使い、scan-diff を実行して差分観測を更新。
   - 実行: `CLAMAV_DIFF_CORPUS_DIR=target/validation/clamav-upstream/unit_tests/input CLAMAV_DIFF_SAMPLE_SIZE=500 CLAMAV_DIFF_SEED=7331 scripts/logical-scan-diff.sh`
   - 結果: `target/validation/scan-diff/run.PIxriQ/summary.json` で `clamav_hit_total(filtered)=0` / `yara_hit_total(filtered)=0` / `mismatch_files=0`。
