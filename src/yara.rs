@@ -3174,9 +3174,9 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(pcre) = parse_pcre_like(raw) {
-        if pcre_pattern_uses_python_named_syntax(pcre.pattern) {
+        if let Some(kind) = pcre_pattern_unsupported_python_named_kind(pcre.pattern) {
             notes.push(format!(
-                "subsig[{idx}] pcre pattern uses Python-style named capture/backreference syntax '(?P...)' unsupported by yara-x; lowered to false for safety"
+                "subsig[{idx}] pcre pattern uses unsupported Python-style named construct {kind} (yara-x incompatible); lowered to false for safety"
             ));
             return RawSubsigLowering::Expr("false".to_string());
         }
@@ -5198,8 +5198,26 @@ fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
     })
 }
 
-fn pcre_pattern_uses_python_named_syntax(pattern: &str) -> bool {
-    pattern.contains("(?P")
+fn pcre_pattern_unsupported_python_named_kind(pattern: &str) -> Option<&'static str> {
+    let bytes = pattern.as_bytes();
+    let mut i = 0;
+    while i + 2 < bytes.len() {
+        if bytes[i] == b'(' && bytes[i + 1] == b'?' && bytes[i + 2] == b'P' {
+            let kind = match bytes.get(i + 3).copied() {
+                Some(b'<') => {
+                    i += 1;
+                    continue;
+                }
+                Some(b'=') => "'(?P=...)'",
+                Some(b'\'') => "\"(?P'...')\"",
+                Some(_) | None => "'(?P...)'",
+            };
+            return Some(kind);
+        }
+        i += 1;
+    }
+
+    None
 }
 
 impl Display for YaraRule {

@@ -1814,7 +1814,7 @@ fn lowers_pcre_unsupported_flag_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_python_named_syntax_to_false_for_safety() {
+fn lowers_pcre_python_named_backreference_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P=funcname)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -1823,8 +1823,34 @@ fn lowers_pcre_python_named_syntax_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("Python-style named capture/backreference syntax")
+                && value.contains("unsupported Python-style named construct '(?P=...)'")
     )));
+}
+
+#[test]
+fn lowers_pcre_python_named_quote_capture_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P'funcname'abc)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "false");
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("unsupported Python-style named construct")
+    )));
+}
+
+#[test]
+fn allows_pcre_python_named_angle_capture_when_yara_x_compatible() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_ne!(rule.condition, "false");
+    assert!(rule
+        .strings
+        .iter()
+        .any(|s| matches!(s, YaraString::Raw(raw) if raw.contains("(?P<funcname>abc)"))));
 }
 
 #[test]

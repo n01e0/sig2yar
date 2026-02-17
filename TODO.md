@@ -15,8 +15,9 @@ Last update: 2026-02-17
 ## A. LDB/logical の strict-safe ギャップ
 
 ### A1. PCRE 変換（優先度: 高）
-- [ ] `(?P...)` の blanket strict-false を分解し、
+- [x] `(?P...)` の blanket strict-false を分解し、
       **同型で落とせる subset**（例: 名前付きcaptureのみで backrefなし）を抽出して strict support 化
+      - 2026-02-17: `(?P<name>...)` は許可、`(?P=...)` / `(?P'...')` のみ strict-false に限定
 - [ ] PCRE flags/offset の strict-false 経路を分類し、
       YARA側で同型表現可能なものを個別に support 化
 - [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
