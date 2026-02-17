@@ -3174,12 +3174,15 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(pcre) = parse_pcre_like(raw) {
-        if let Some(kind) = pcre_pattern_unsupported_python_named_kind(pcre.pattern) {
-            notes.push(format!(
-                "subsig[{idx}] pcre pattern uses unsupported Python-style named construct {kind} (yara-x incompatible); lowered to false for safety"
-            ));
-            return RawSubsigLowering::Expr("false".to_string());
-        }
+        let normalized_pattern = match normalize_pcre_python_named_syntax(pcre.pattern) {
+            Ok(pattern) => pattern,
+            Err(kind) => {
+                notes.push(format!(
+                    "subsig[{idx}] pcre pattern uses unsupported Python-style named construct {kind} (yara-x incompatible); lowered to false for safety"
+                ));
+                return RawSubsigLowering::Expr("false".to_string());
+            }
+        };
 
         let mut inline_flags = String::new();
         let mut anchored = false;
@@ -3265,7 +3268,7 @@ fn lower_raw_or_pcre_subsignature(
             return RawSubsigLowering::Expr("false".to_string());
         }
 
-        let mut rendered_pattern = pcre.pattern.to_string();
+        let mut rendered_pattern = normalized_pattern;
         if anchored {
             rendered_pattern = format!("\\A(?:{})", rendered_pattern);
         }
@@ -5198,26 +5201,93 @@ fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
     })
 }
 
-fn pcre_pattern_unsupported_python_named_kind(pattern: &str) -> Option<&'static str> {
+fn normalize_pcre_python_named_syntax(
+    pattern: &str,
+) -> std::result::Result<String, &'static str> {
     let bytes = pattern.as_bytes();
     let mut i = 0;
+    let mut cursor = 0;
+    let mut out: Option<String> = None;
+
     while i + 2 < bytes.len() {
         if bytes[i] == b'(' && bytes[i + 1] == b'?' && bytes[i + 2] == b'P' {
-            let kind = match bytes.get(i + 3).copied() {
+            if is_escaped_at(bytes, i) {
+                i += 1;
+                continue;
+            }
+
+            match bytes.get(i + 3).copied() {
                 Some(b'<') => {
                     i += 1;
                     continue;
                 }
-                Some(b'=') => "'(?P=...)'",
-                Some(b'\'') => "\"(?P'...')\"",
-                Some(_) | None => "'(?P...)'",
-            };
-            return Some(kind);
+                Some(b'=') => return Err("'(?P=...)'"),
+                Some(b'\'') => {
+                    let name_start = i + 4;
+                    let mut name_end = name_start;
+                    while name_end < bytes.len() && bytes[name_end] != b'\'' {
+                        name_end += 1;
+                    }
+
+                    if name_end >= bytes.len() {
+                        return Err("\"(?P'...')\"");
+                    }
+
+                    let name = &pattern[name_start..name_end];
+                    if !is_valid_pcre_group_name(name) {
+                        return Err("\"(?P'...')\"");
+                    }
+
+                    let rendered = out.get_or_insert_with(|| String::with_capacity(pattern.len() + 8));
+                    rendered.push_str(&pattern[cursor..i]);
+                    rendered.push_str("(?P<");
+                    rendered.push_str(name);
+                    rendered.push('>');
+
+                    cursor = name_end + 1;
+                    i = cursor;
+                    continue;
+                }
+                Some(_) | None => return Err("'(?P...)'"),
+            }
         }
+
         i += 1;
     }
 
-    None
+    if let Some(mut rendered) = out {
+        rendered.push_str(&pattern[cursor..]);
+        Ok(rendered)
+    } else {
+        Ok(pattern.to_string())
+    }
+}
+
+fn is_escaped_at(bytes: &[u8], idx: usize) -> bool {
+    let mut backslashes = 0usize;
+    let mut i = idx;
+    while i > 0 {
+        i -= 1;
+        if bytes[i] == b'\\' {
+            backslashes += 1;
+        } else {
+            break;
+        }
+    }
+    backslashes % 2 == 1
+}
+
+fn is_valid_pcre_group_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return false;
+    }
+
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
 impl Display for YaraRule {

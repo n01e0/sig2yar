@@ -1191,15 +1191,16 @@ fn yara_rule_with_pcre_python_named_backreference_false_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_python_named_quote_capture_false_compiles_with_yara_x() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P'funcname'abc)/").unwrap();
+fn yara_rule_with_pcre_python_named_quote_capture_matches_after_rewrite() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P'funcname'abc)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("unsupported Python-style named construct"));
+    assert!(src.contains("(?P<funcname>abc)"));
     yara_x::compile(src.as_str())
-        .expect("yara-x failed to compile pcre-python-named-quote-capture safety-false rule");
-    assert_eq!(scan_match_count(src.as_str(), b"funcnameabc"), 0);
+        .expect("yara-x failed to compile rewritten pcre-python-named-quote-capture rule");
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabd"), 0);
 }
 
 #[test]
