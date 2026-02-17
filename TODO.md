@@ -41,6 +41,11 @@ Last update: 2026-02-17
       同型実装できるケースを切り出して support 化
 - [ ] raw size 制約（1/2/4/8以外）と幅制約のうち、
       安全に同型へ寄せられる範囲があるかを検証
+- [x] strict-false 維持経路の機械可読化（taxonomy）
+      - 2026-02-17: `byte_comparison` strict-false 主要経路に `clamav_unsupported` tag を付与
+      - 例: clause-count/negative/contradictory/trigger-unresolved/non-string-reference/
+             non-raw(little-endian|non-exact|auto-base|decimal-hex-alpha|hex-width-over-limit|unrepresentable)/
+             raw(size-unsupported|threshold-out-of-range)/format-invalid
 
 ### A3. logical expression 周辺（優先度: 中）
 - [ ] `MultiGt` / `MultiLt` grouped strict-false のうち、

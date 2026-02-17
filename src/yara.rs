@@ -3135,7 +3135,9 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(byte_cmp) = parse_byte_comparison(raw) {
-        if let Some(lowered) = lower_byte_comparison_condition(idx, &byte_cmp, known_ids, notes) {
+        if let Some(lowered) =
+            lower_byte_comparison_condition(idx, &byte_cmp, known_ids, notes, unsupported_tags)
+        {
             return RawSubsigLowering::Expr(lowered);
         }
 
@@ -3151,6 +3153,7 @@ fn lower_raw_or_pcre_subsignature(
             "subsig[{idx}] byte_comparison trigger {} unresolved; lowered to false",
             byte_cmp.trigger_idx
         ));
+        unsupported_tags.push("byte_comparison_trigger_unresolved".to_string());
         return RawSubsigLowering::Skip;
     }
 
@@ -3158,6 +3161,7 @@ fn lower_raw_or_pcre_subsignature(
         notes.push(format!(
             "subsig[{idx}] byte_comparison format unsupported/invalid; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_format_invalid".to_string());
         return RawSubsigLowering::Expr("false".to_string());
     }
 
@@ -3731,12 +3735,14 @@ fn lower_byte_comparison_condition(
     byte_cmp: &ParsedByteComparison,
     known_ids: &[Option<String>],
     notes: &mut Vec<String>,
+    unsupported_tags: &mut Vec<String>,
 ) -> Option<String> {
     if byte_cmp.comparisons.len() > 2 {
         notes.push(format!(
             "subsig[{idx}] byte_comparison with {} clauses unsupported (ClamAV supports at most 2); lowered to false for safety",
             byte_cmp.comparisons.len()
         ));
+        unsupported_tags.push("byte_comparison_clause_count_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3744,6 +3750,7 @@ fn lower_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison negative comparison value unsupported for strict lowering; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_negative_value_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3751,6 +3758,7 @@ fn lower_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison clauses are contradictory; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_contradictory_clauses".to_string());
         return Some("false".to_string());
     }
 
@@ -3763,6 +3771,7 @@ fn lower_byte_comparison_condition(
             "subsig[{idx}] byte_comparison trigger {} unresolved; lowered to false for safety",
             byte_cmp.trigger_idx
         ));
+        unsupported_tags.push("byte_comparison_trigger_unresolved".to_string());
         return Some("false".to_string());
     };
 
@@ -3771,6 +3780,7 @@ fn lower_byte_comparison_condition(
             "subsig[{idx}] byte_comparison trigger {} is not a direct string id; lowered to false for safety",
             byte_cmp.trigger_idx
         ));
+        unsupported_tags.push("byte_comparison_trigger_non_string_reference".to_string());
         return Some("false".to_string());
     }
 
@@ -3799,6 +3809,7 @@ fn lower_byte_comparison_condition(
             byte_cmp,
             &base_guards,
             notes,
+            unsupported_tags,
         );
     }
 
@@ -3810,6 +3821,7 @@ fn lower_byte_comparison_condition(
                 "subsig[{idx}] byte_comparison raw size {} unsupported (ClamAV binary mode supports only 1/2/4/8 bytes); lowered to false for safety",
                 byte_cmp.options.num_bytes
             ));
+            unsupported_tags.push("byte_comparison_raw_size_unsupported".to_string());
             return Some("false".to_string());
         }
     };
@@ -3826,6 +3838,7 @@ fn lower_byte_comparison_condition(
                 "subsig[{idx}] byte_comparison raw threshold {} exceeds {}-byte range; lowered to false for safety",
                 cmp.value, num_bytes
             ));
+            unsupported_tags.push("byte_comparison_raw_threshold_out_of_range".to_string());
             return Some("false".to_string());
         }
     }
@@ -3873,11 +3886,13 @@ fn lower_textual_byte_comparison_condition(
     byte_cmp: &ParsedByteComparison,
     base_guards: &[String],
     notes: &mut Vec<String>,
+    unsupported_tags: &mut Vec<String>,
 ) -> Option<String> {
     if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little)) {
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw little-endian unsupported; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_nonraw_little_endian_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3885,6 +3900,7 @@ fn lower_textual_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw non-exact unsupported; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_nonraw_non_exact_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3892,6 +3908,7 @@ fn lower_textual_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw auto base unsupported for strict lowering; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_nonraw_auto_base_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3904,6 +3921,7 @@ fn lower_textual_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison decimal base cannot use bare hex-alpha threshold token; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_decimal_bare_hex_alpha_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -3914,6 +3932,7 @@ fn lower_textual_byte_comparison_condition(
                 "subsig[{idx}] byte_comparison non-raw width {} unsupported; lowered to false for safety",
                 byte_cmp.options.num_bytes
             ));
+            unsupported_tags.push("byte_comparison_nonraw_width_unsupported".to_string());
             return Some("false".to_string());
         }
     };
@@ -3922,6 +3941,7 @@ fn lower_textual_byte_comparison_condition(
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw hex width {width} exceeds ClamAV limit {CLAMAV_BCOMP_MAX_HEX_BLEN}; lowered to false for safety"
         ));
+        unsupported_tags.push("byte_comparison_nonraw_hex_width_over_limit".to_string());
         return Some("false".to_string());
     }
 
@@ -3936,6 +3956,7 @@ fn lower_textual_byte_comparison_condition(
                 "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}; lowered to false for safety",
                 cmp.value, width
             ));
+            unsupported_tags.push("byte_comparison_nonraw_unrepresentable_value".to_string());
             return Some("false".to_string());
         }
 

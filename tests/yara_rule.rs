@@ -2215,6 +2215,12 @@ fn lowers_byte_comparison_non_raw_decimal_with_hex_alpha_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("decimal base cannot use bare hex-alpha threshold token")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_decimal_bare_hex_alpha_unsupported"
+    )));
 }
 
 #[test]
@@ -2229,6 +2235,12 @@ fn lowers_byte_comparison_non_raw_auto_base_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("non-raw auto base unsupported for strict lowering")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_auto_base_unsupported"
     )));
 }
 
@@ -2245,6 +2257,12 @@ fn lowers_byte_comparison_non_raw_hex_width_over_clamav_limit_to_false_for_safet
             if key == "clamav_lowering_notes"
                 && value.contains("non-raw hex width 19 exceeds ClamAV limit 18")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_hex_width_over_limit"
     )));
 }
 
@@ -2269,6 +2287,12 @@ fn lowers_byte_comparison_non_raw_non_exact_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("non-exact unsupported; lowered to false for safety"))));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_non_exact_unsupported"
+    )));
 }
 
 #[test]
@@ -2281,6 +2305,12 @@ fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("little-endian unsupported; lowered to false for safety"))));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_little_endian_unsupported"
+    )));
 }
 
 #[test]
@@ -2297,6 +2327,11 @@ fn lowers_byte_comparison_raw_size_3_to_false_for_safety() {
                 && value.contains("raw size 3 unsupported")
                 && value.contains("supports only 1/2/4/8 bytes")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "byte_comparison_raw_size_unsupported"
     )));
 }
 
@@ -2322,6 +2357,12 @@ fn lowers_byte_comparison_raw_out_of_range_threshold_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("raw threshold 300 exceeds 1-byte range") && value.contains("lowered to false for safety"))));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_raw_threshold_out_of_range"
+    )));
 }
 
 #[test]
@@ -2335,6 +2376,11 @@ fn lowers_byte_comparison_raw_contradictory_clauses_to_false_for_safety() {
         .meta
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("clauses are contradictory") && value.contains("lowered to false for safety"))));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "byte_comparison_contradictory_clauses"
+    )));
 }
 
 #[test]
@@ -2366,6 +2412,11 @@ fn lowers_byte_comparison_with_more_than_two_clauses_to_false_for_safety() {
                 && value.contains("byte_comparison with 3 clauses unsupported")
                 && value.contains("lowered to false for safety")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "byte_comparison_clause_count_unsupported"
+    )));
 }
 
 #[test]
@@ -2383,6 +2434,12 @@ fn lowers_byte_comparison_negative_threshold_to_false_for_safety() {
                 && value.contains("negative comparison value unsupported for strict lowering")
                 && value.contains("lowered to false for safety")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_negative_value_unsupported"
+    )));
 }
 
 #[test]
@@ -2398,6 +2455,11 @@ fn lowers_invalid_byte_comparison_format_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("byte_comparison format unsupported/invalid")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "byte_comparison_format_invalid"
     )));
 }
 
