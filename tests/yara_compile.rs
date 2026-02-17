@@ -1179,15 +1179,39 @@ fn yara_rule_with_pcre_unsupported_flag_false_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_python_named_syntax_false_compiles_with_yara_x() {
+fn yara_rule_with_pcre_python_named_backreference_false_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P=funcname)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("Python-style named capture/backreference syntax"));
+    assert!(src.contains("unsupported Python-style named construct '(?P=...)'"));
     yara_x::compile(src.as_str())
-        .expect("yara-x failed to compile pcre-python-named-syntax safety-false rule");
+        .expect("yara-x failed to compile pcre-python-named-backreference safety-false rule");
     assert_eq!(scan_match_count(src.as_str(), b"funcname"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_python_named_quote_capture_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P'funcname'abc)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("unsupported Python-style named construct"));
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre-python-named-quote-capture safety-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"funcnameabc"), 0);
+}
+
+#[test]
+fn yara_rule_with_pcre_python_named_angle_capture_matches_when_supported() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre-python-named-angle-capture rule");
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabd"), 0);
 }
 
 #[test]
