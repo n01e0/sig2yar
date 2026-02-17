@@ -42,6 +42,14 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 - [x] `ndu` (parse + strict-safe lower)
 - [x] `cfg` / `info` （parse + strict-safe lower, 非シグネチャメタデータとして明示）
 
+### 1.4 strict-safe 非対象（v1方針を固定）
+
+- [x] runtimeモード / DBライフサイクル依存: `hdu`, `hsu`, `mdu`, `msu`, `ndu`, `ldu`, `cfg`, `info`
+- [x] allow/ignore override意味: `fp`, `sfp`, `ign`, `ign2`
+- [x] ClamAV外部サブシステム依存: `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`
+
+（上記は v1 では strict-false + note を仕様として維持。README と TODO D4/C2 へ同期済み。）
+
 ---
 
 ## 2) ldb（logical）内部要素のサポート状況
@@ -111,6 +119,10 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記151: D4（non-target明文化）を実施。
+  - 変更: README/README.ja に「strict-safe 非対象スコープ（v1方針）」を追記。
+  - 変更: 本checklist 1.4 に non-target 固定リスト（runtime依存 / override意味 / 外部サブシステム依存）を追加。
+  - 目的: strict-false を「未実装」ではなく「v1方針上の非対象」と区別し、次の実装投資対象を明確化。
 - 2026-02-18 追記150: `imp` import-hash を strict support 化（D3 第2弾）。
   - 変更: `src/parser/imp.rs` を追加し、`.imp` を `HashSignature` 汎用parseから分離（MD5 + file-hash形のみ許可）。
   - 変更: `DbType::Imp` を追加し、`sig2yar imp <sig>` 経路で `render_imp_signature(...)` を使用。

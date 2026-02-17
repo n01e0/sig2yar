@@ -1,6 +1,6 @@
 # TODO (strict-safe gap backlog)
 
-Last update: 2026-02-17
+Last update: 2026-02-18
 
 このTODOは「今は strict-safe (`false + note`) に倒している不足機能」を、
 **本当に strict support に引き上げられるものから順に潰す**ための棚卸し。
@@ -90,12 +90,15 @@ Last update: 2026-02-17
       - 2026-02-18: `imp` は DBタイプ分離（`sig2yar imp`）で strict support 化（`pe.is_pe` + `pe.imphash()` + optional filesize guard）
 
 ### C2. runtime依存が強いため要方針決定（優先度: 中）
-- [ ] `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`,
+- [x] `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`,
       `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `ndu`, `cfg`, `info`
       について、
       - standalone YARA strict support 対象にするか
       - 対象外（strict-false固定）にするか
       を明文化
+      - 2026-02-18: v1方針として「non-target（strict-false固定）」に分類。
+        理由は README / checklist に明示（runtimeモード依存、allow/ignore override、
+        外部エンジン連携、メタ更新系DBのため standalone YARA同型不可）。
 
 ---
 
@@ -109,4 +112,5 @@ Last update: 2026-02-17
 - [x] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）
       - 2026-02-17: 第1弾として `mdb/msb` を実装
       - 2026-02-18: 第2弾として `imp` を実装（専用parser + `pe.imphash()` lower + compile/scan回帰）
-- [ ] D4: 対象外と判断した strict-safe 領域は README/checklist に非対象理由を明記
+- [x] D4: 対象外と判断した strict-safe 領域は README/checklist に非対象理由を明記
+      - 2026-02-18: non-target一覧と理由（runtime依存/override/外部エンジン/更新メタDB）を追記

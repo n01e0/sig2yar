@@ -71,4 +71,14 @@ sig2yar imp "d41d8cd98f00b204e9800998ecf8427e:2048:Test.Imp.EmptyImports"
 | `ldb` | 部分対応のみ | **strict基準で~0–10%**（かなり低い） | macro完全runtime意味、`fuzzy_img` runtime意味、PCREのruntime依存flags/offset組み合わせ、観測不能なtarget description制約 |
 | `mdb`, `msb` | 部分サポート | **~70–90%** | section-hash境界の広域検証（corpus拡張）が未完 |
 | `imp` | 部分サポート | **~70–90%** | toolchain/fixture差分を含む `pe.imphash()` 境界の広域検証は未完 |
-| `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | parseはあるがstrict変換未実装 | **~0%** | 現状は strict-safe / fallback 経路で処理 |
+| `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | parseはあるが v1 では strict変換の非対象 | **~0%** | runtimeモード依存・allow/ignore override意味・ClamAV外部エンジン依存のため |
+
+## strict-safe 非対象スコープ（v1方針）
+
+次のファミリは、v1では **strict-false + note 固定** とする。
+
+- runtimeモード/DBライフサイクル依存: `hdu`, `hsu`, `mdu`, `msu`, `ndu`, `ldu`, `cfg`, `info`
+- allow/ignore override系（検知条件そのものではない）: `fp`, `sfp`, `ign`, `ign2`
+- ClamAV外部サブシステム依存: `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`
+
+standalone YARAで同型化できない領域に近似を入れない、という strict-safe の原則を明文化している。
