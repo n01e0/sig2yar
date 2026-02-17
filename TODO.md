@@ -99,8 +99,9 @@ Last update: 2026-02-17
 
 ## D. 実行計画（短期）
 
-- [ ] D1: strict-false 経路を `clamav_unsupported` / lowering note 単位で再集計し、
+- [x] D1: strict-false 経路を `clamav_unsupported` / lowering note 単位で再集計し、
       「実装で潰せる順」にランキング化
+      - 2026-02-17: `scripts/logical-scan-diff.sh` に track分類（A1/A2/B/C1/C2等）と actionability ranking 出力を追加
 - [x] D2: P0として PCRE の同型拡張（`(?P...)` の過剰strict-false解消可能分）を段階実施
       - 2026-02-17: `(?P<name>...)` 許可 + `(?P'name'...)` rewrite許可を main へ反映
 - [ ] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）

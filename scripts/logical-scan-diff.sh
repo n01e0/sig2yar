@@ -244,6 +244,47 @@ def parse_rules_metadata(path: pathlib.Path):
     return info
 
 
+def classify_track_from_tag(tag: str) -> str:
+    if tag == "<none>":
+        return "unknown.no_tag"
+    if tag.startswith("pcre_trigger_"):
+        return "A1.pcre_trigger"
+    if tag.startswith("byte_comparison_"):
+        return "A2.byte_comparison"
+    if tag.startswith("macro_"):
+        return "A3.macro_or_expression"
+    if tag.startswith("target_description_"):
+        return "A4.target_description"
+    if tag.startswith("fuzzy_img_"):
+        return "A5.fuzzy_img"
+    if tag.startswith("ndb_"):
+        return "B.ndb"
+    if tag in {
+        "section_hash",
+        "mdu_pua_section_hash_signature_semantics",
+        "msu_pua_section_hash_signature_semantics",
+    }:
+        return "C1.mdb_msb_imp"
+    if tag.endswith("_signature_semantics") or tag.endswith("_constraint"):
+        return "C2.runtime_or_policy"
+    return "unknown.other"
+
+
+def track_priority(track: str) -> int:
+    order = {
+        "A1.pcre_trigger": 10,
+        "A2.byte_comparison": 20,
+        "C1.mdb_msb_imp": 30,
+        "A3.macro_or_expression": 40,
+        "B.ndb": 50,
+        "A4.target_description": 60,
+        "A5.fuzzy_img": 70,
+        "C2.runtime_or_policy": 80,
+        "unknown.no_tag": 90,
+        "unknown.other": 99,
+    }
+    return order.get(track, 99)
+
 files = sorted([p for p in corpus_dir.rglob("*") if p.is_file()])
 all_files = [relpath(p) for p in files]
 
@@ -317,6 +358,7 @@ only_clamav_strict_false_counter = collections.Counter()
 only_clamav_non_strict_counter = collections.Counter()
 strict_false_unsupported_counter = collections.Counter()
 strict_false_notes_counter = collections.Counter()
+strict_false_track_counter = collections.Counter()
 
 strict_false_only_files = 0
 detection_gap_files = 0
@@ -343,8 +385,11 @@ for rel in all_keys:
             if tags:
                 strict_false_unsupported_counter.update(tags)
                 file_strict_false_tags.update(tags)
+                for tag in tags:
+                    strict_false_track_counter.update([classify_track_from_tag(tag)])
             else:
                 strict_false_unsupported_counter.update(["<none>"])
+                strict_false_track_counter.update([classify_track_from_tag("<none>")])
                 file_strict_false_tags.add("<none>")
             if notes:
                 strict_false_notes_counter.update(notes)
@@ -374,6 +419,21 @@ for rel in all_keys:
     only_clamav_strict_false_counter.update(only_clamav_strict_false)
     only_clamav_non_strict_counter.update(only_clamav_non_strict)
 
+strict_false_actionability_ranking = []
+for tag, count in strict_false_unsupported_counter.items():
+    track = classify_track_from_tag(tag)
+    strict_false_actionability_ranking.append(
+        {
+            "tag": tag,
+            "count": count,
+            "track": track,
+            "priority": track_priority(track),
+        }
+    )
+strict_false_actionability_ranking.sort(
+    key=lambda item: (item["priority"], -item["count"], item["tag"])
+)
+
 summary = {
     "files_scanned": len(all_files),
     "sampled_rules": len(rule_to_orig),
@@ -401,6 +461,8 @@ summary = {
     "top_only_clamav_non_strict": only_clamav_non_strict_counter.most_common(20),
     "top_only_yara": only_yara_counter.most_common(20),
     "top_strict_false_unsupported_tags": strict_false_unsupported_counter.most_common(20),
+    "top_strict_false_tracks": strict_false_track_counter.most_common(20),
+    "strict_false_actionability_ranking": strict_false_actionability_ranking[:50],
     "top_strict_false_notes": strict_false_notes_counter.most_common(20),
 }
 
@@ -490,6 +552,22 @@ report_lines.extend(["", "## top strict_false unsupported tags"])
 if summary["top_strict_false_unsupported_tags"]:
     for name, count in summary["top_strict_false_unsupported_tags"]:
         report_lines.append(f"- {name}: {count}")
+else:
+    report_lines.append("- none")
+
+report_lines.extend(["", "## top strict_false tracks"])
+if summary["top_strict_false_tracks"]:
+    for name, count in summary["top_strict_false_tracks"]:
+        report_lines.append(f"- {name}: {count}")
+else:
+    report_lines.append("- none")
+
+report_lines.extend(["", "## strict_false actionability ranking (tag -> track)"])
+if summary["strict_false_actionability_ranking"]:
+    for item in summary["strict_false_actionability_ranking"][:20]:
+        report_lines.append(
+            f"- p{item['priority']:02d} {item['track']} :: {item['tag']} ({item['count']})"
+        )
 else:
     report_lines.append("- none")
 
