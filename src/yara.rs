@@ -4905,12 +4905,12 @@ fn pcre_occurrence_window_expr(core: &str, start: &str, end: &str) -> String {
 }
 
 fn lower_pcre_offset_window_condition(
-    idx: usize,
+    _idx: usize,
     core: &str,
     window: PcreOffsetWindow,
     rolling: bool,
     encompass: bool,
-    notes: &mut Vec<String>,
+    _notes: &mut Vec<String>,
 ) -> String {
     match window {
         PcreOffsetWindow::Exact { start } => {
@@ -4931,20 +4931,17 @@ fn lower_pcre_offset_window_condition(
             pcre_occurrence_exact_expr(core, &start, false)
         }
         PcreOffsetWindow::Range { start, end } => {
-            if rolling {
-                notes.push(format!(
-                    "subsig[{idx}] pcre flag 'r' with maxshift depends on ClamAV rolling scan-state semantics; lowered to false for safety"
-                ));
-                return "false".to_string();
-            }
+            // ClamAV reference: matcher-pcre.c
+            // - anchored mode is enabled only when `!rolling && !adjshift`
+            // - range windows imply `adjshift != 0`
+            // Therefore for range windows, `r` does not change the window predicate.
+            let _ = rolling;
 
             if encompass {
-                // ClamAV encompass mode bounds the scanned buffer length to `adjshift`
-                // (`matcher-pcre.c`), so match *end* must stay within `start + maxshift`.
+                // Encompass: match end must stay within `start + maxshift`.
                 pcre_occurrence_window_expr(core, &start, &end)
             } else {
-                // ClamAV non-encompass + maxshift accepts matches whose start offset
-                // is within maxshift from the adjusted buffer start.
+                // Non-encompass: match start must stay within `start + maxshift`.
                 pcre_occurrence_start_window_expr(core, &start, &end)
             }
         }
