@@ -4911,24 +4911,19 @@ fn lower_pcre_offset_window_condition(
     match window {
         PcreOffsetWindow::Exact { start } => {
             if rolling {
-                if encompass {
-                    notes.push(format!(
-                        "subsig[{idx}] pcre flag 'r' with exact offset prefix depends on ClamAV rolling scan-state semantics; lowered to false for safety"
-                    ));
-                    return "false".to_string();
-                }
-
-                // ClamAV reference: unit_tests/check_matchers.c (pcre_testdata Test_3)
-                // `/basic/r` with exact offset `0` matches when regex appears at later
-                // positions, i.e. rolling exact-offset semantics are start >= offset.
+                // ClamAV reference: matcher-pcre.c
+                // - exact offset => `adjshift == 0`
+                // - `encompass` branch runs only when `adjshift != 0`
+                // - rolling disables `PCRE2_ANCHORED`
+                // Therefore exact `r`/`re` both behave as "match start >= offset".
                 return pcre_occurrence_exact_expr(core, &start, true);
             }
-            if encompass {
-                notes.push(format!(
-                    "subsig[{idx}] pcre flag 'e' with exact offset prefix depends on ClamAV encompass runtime semantics; lowered to false for safety"
-                ));
-                return "false".to_string();
-            }
+
+            // ClamAV reference: matcher-pcre.c
+            // - when `!rolling && !adjshift && adjbuffer != CLI_OFF_ANY`, matcher sets
+            //   `PCRE2_ANCHORED`
+            // - for exact offset (`adjshift == 0`), `e` does not change the scanned window
+            // So exact with/without `e` both require match start == offset.
             pcre_occurrence_exact_expr(core, &start, false)
         }
         PcreOffsetWindow::Range { start, end } => {

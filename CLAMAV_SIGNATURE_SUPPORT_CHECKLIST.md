@@ -111,6 +111,16 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記139: LDB/PCRE の exact offset + `e/re`（`n:.../e`, `n:.../re`）を strict-false から除外し、strict support 化。
+  - 根拠: ClamAV `libclamav/matcher-pcre.c`
+    - exact offset では `adjshift == 0`
+    - encompass 制限は `encompass && adjshift != 0` のときのみ適用（= exact + `e` では window 非縮小）
+    - `rolling` 有効時は anchored を使わない（= exact + `re` は `start >= offset`）
+  - 変更: `src/yara.rs` の exact offset lowering を更新し、
+    - exact + `e` は equality（`@ == offset`）
+    - exact + `re` は rolling exact と同様（`@ >= offset`）
+    で strict support。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` の exact + `e/re` fixture を strict support 判定へ更新。
 - 2026-02-17 追記138: LDB/PCRE の absolute range + `re`（`n,m:.../re`）を strict-false から除外し、strict support 化。
   - 根拠: ClamAV unit test `unit_tests/check_matchers.c` の pcre_testdata Test8/Test10（`/apie/re` with `2,2` = non-match, `/atre/re` with `2,6` = match）。
   - 変更: `src/yara.rs` の absolute range lowering で `re` は bounded window（`@ >= start` かつ `@ + ! <= end`）へ lower。
