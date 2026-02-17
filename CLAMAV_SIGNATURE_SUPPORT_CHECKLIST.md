@@ -111,6 +111,11 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記149: `mdb/msb` section-hash を strict support 化（D3 第1弾）。
+  - 変更: `src/yara.rs` `render_hash_signature(...)` の `HashSource::Section` を false固定から解除し、`pe.sections[*]` 上で section size/hash を同型評価。
+  - 条件: `pe.is_pe` + `for any i in (0..pe.number_of_sections-1)` + `hash.{md5,sha1,sha256}(raw_offset, raw_size)` 比較（size指定ありは `raw_data_size == sig_size` 併置）。
+  - テスト: `tests/yara_rule.rs` に section-hash lower検証、`tests/yara_compile.rs` に mdb/msb scan回帰（PE fixture section hash一致）を追加。
+  - 継続課題: `imp` strict mapping は DB種別ヒント無しの識別設計（hdb/hsbとの衝突回避）が必要。
 - 2026-02-17 追記148: scan-diff の strict-false 集計に track分類と actionability ranking を追加（D1）。
   - 変更: `scripts/logical-scan-diff.sh` の `summary.json` に `top_strict_false_tracks` / `strict_false_actionability_ranking` を追加。
   - 変更: `report.md` に `top strict_false tracks` / `strict_false actionability ranking (tag -> track)` セクションを追加。

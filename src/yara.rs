@@ -96,11 +96,19 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
                 "        clamav_hash_type = \"{}\"\n",
                 hash_fn(&value.hash_type)
             ));
-            meta.push_str("        clamav_unsupported = \"section_hash\"\n");
+
+            let size_clause = match size {
+                Some(size) => format!("pe.sections[i].raw_data_size == {size} and\n            "),
+                None => String::new(),
+            };
 
             format!(
-                "rule {}\n{{\n    meta:\n{}\n    condition:\n        false\n}}",
-                rule_name, meta
+                "import \"hash\"\nimport \"pe\"\nrule {}\n{{\n    meta:\n{}\n    condition:\n        pe.is_pe and pe.number_of_sections > 0 and\n        for any i in (0..pe.number_of_sections - 1) : (\n            {}pe.sections[i].raw_data_offset + pe.sections[i].raw_data_size <= filesize and\n            hash.{}(pe.sections[i].raw_data_offset, pe.sections[i].raw_data_size) == \"{}\"\n        )\n}}",
+                rule_name,
+                meta,
+                size_clause,
+                hash_fn(&value.hash_type),
+                value.hash
             )
         }
     }

@@ -63,5 +63,6 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
 | `hdb`, `hsb` | Fully supported | **~100%** | None in current scope |
 | `ndb` | Partially supported (strong subset) | **~90%** | Signed/open jump edges, non-canonical square-jump forms, some runtime-dependent offset semantics, reserved/unsupported target types |
 | `ldb` | Partial only | **~0–10% strict** (very low) | Full macro runtime semantics, `fuzzy_img` runtime hash behavior, PCRE runtime-dependent flags/offset combinations, non-observable target-description constraints |
-| `mdb`, `msb`, `imp` | Not strictly supported yet | **~0%** | Section-hash/import-hash strict mapping not implemented under current strict policy |
+| `mdb`, `msb` | Partially supported | **~70–90%** | Section-hash edge semantics validation (broader corpus) |
+| `imp` | Not strictly supported yet | **~0%** | Import-hash strict mapping needs DB-type-aware disambiguation from whole-file hash format |
 | `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion not implemented | **~0%** | Currently handled as strict-safe / fallback path |

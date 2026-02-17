@@ -29,15 +29,37 @@ fn trigger_prefix_fixture(prefix_bytes: &[&[u8]], pcre_start_offset: usize) -> V
 }
 
 fn hash_rules_source(signatures: &[&str]) -> String {
-    let mut out = String::from("import \"hash\"\n");
+    let mut imports: Vec<String> = Vec::new();
+    let mut bodies: Vec<String> = Vec::new();
 
     for raw in signatures {
         let sig = HashSignature::parse(raw).expect("failed to parse hash signature fixture");
         let rendered = sig.to_string();
-        let body = rendered
-            .strip_prefix("import \"hash\"\n")
-            .unwrap_or(rendered.as_str());
-        out.push_str(body);
+
+        let mut body_lines = Vec::new();
+        for line in rendered.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("import ") {
+                if !imports.iter().any(|existing| existing == trimmed) {
+                    imports.push(trimmed.to_string());
+                }
+            } else {
+                body_lines.push(line);
+            }
+        }
+
+        bodies.push(body_lines.join("\n"));
+    }
+
+    let mut out = String::new();
+    for import in imports {
+        out.push_str(&import);
+        out.push('\n');
+    }
+
+    for body in bodies {
+        out.push_str(&body);
+        out.push('\n');
         out.push('\n');
     }
 
@@ -160,6 +182,20 @@ fn hash_hdb_hsb_rules_match_size_fixed_and_wildcard_variants() {
 
     // Nearby payload should satisfy none.
     assert_eq!(scan_match_count(src.as_str(), b"abd"), 0);
+}
+
+#[test]
+fn hash_mdb_msb_rules_match_pe_section_hash_variants() {
+    let src = hash_rules_source(&[
+        "512:615dec8b4678c0106c5ee2df433e457c:Test.MDB.Section0",
+        "512:c1a4708cb17d93e42812b346ff3aeb5c2a41df7b20eb49df89c568528889cb6e:Test.MSB.Section1",
+    ]);
+
+    let pe_data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
+    assert_eq!(scan_match_count(src.as_str(), &pe_data), 2);
+
+    // Non-PE input should not satisfy section-hash rules.
+    assert_eq!(scan_match_count(src.as_str(), b"abc"), 0);
 }
 
 #[test]
