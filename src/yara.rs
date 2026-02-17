@@ -2631,7 +2631,13 @@ fn lower_subsignatures(
         }
     }
 
-    (strings, id_map, notes, unsupported_tags, saw_fuzzy_img_subsig)
+    (
+        strings,
+        id_map,
+        notes,
+        unsupported_tags,
+        saw_fuzzy_img_subsig,
+    )
 }
 
 fn lower_condition(
@@ -3888,7 +3894,23 @@ fn lower_textual_byte_comparison_condition(
     notes: &mut Vec<String>,
     unsupported_tags: &mut Vec<String>,
 ) -> Option<String> {
-    if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little)) {
+    let width = match usize::try_from(byte_cmp.options.num_bytes) {
+        Ok(v) if v > 0 && v <= 64 => v,
+        _ => {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison non-raw width {} unsupported; lowered to false for safety",
+                byte_cmp.options.num_bytes
+            ));
+            unsupported_tags.push("byte_comparison_nonraw_width_unsupported".to_string());
+            return Some("false".to_string());
+        }
+    };
+
+    // ClamAV matcher-byte-comp.c: non-raw LE normalization is effectively a no-op for 1-byte hex,
+    // so that subset is representable with the same textual comparator lowering.
+    if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little))
+        && !(matches!(base, ByteCmpBase::Hex) && width == 1)
+    {
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw little-endian unsupported; lowered to false for safety"
         ));
@@ -3896,7 +3918,7 @@ fn lower_textual_byte_comparison_condition(
         return Some("false".to_string());
     }
 
-    if !byte_cmp.options.exact {
+    if !byte_cmp.options.exact && width != 1 {
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw non-exact unsupported; lowered to false for safety"
         ));
@@ -3924,18 +3946,6 @@ fn lower_textual_byte_comparison_condition(
         unsupported_tags.push("byte_comparison_decimal_bare_hex_alpha_unsupported".to_string());
         return Some("false".to_string());
     }
-
-    let width = match usize::try_from(byte_cmp.options.num_bytes) {
-        Ok(v) if v > 0 && v <= 64 => v,
-        _ => {
-            notes.push(format!(
-                "subsig[{idx}] byte_comparison non-raw width {} unsupported; lowered to false for safety",
-                byte_cmp.options.num_bytes
-            ));
-            unsupported_tags.push("byte_comparison_nonraw_width_unsupported".to_string());
-            return Some("false".to_string());
-        }
-    };
 
     if matches!(base, ByteCmpBase::Hex) && width > CLAMAV_BCOMP_MAX_HEX_BLEN {
         notes.push(format!(
@@ -5335,9 +5345,7 @@ fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
     })
 }
 
-fn normalize_pcre_python_named_syntax(
-    pattern: &str,
-) -> std::result::Result<String, &'static str> {
+fn normalize_pcre_python_named_syntax(pattern: &str) -> std::result::Result<String, &'static str> {
     let bytes = pattern.as_bytes();
     let mut i = 0;
     let mut cursor = 0;
@@ -5372,7 +5380,8 @@ fn normalize_pcre_python_named_syntax(
                         return Err("\"(?P'...')\"");
                     }
 
-                    let rendered = out.get_or_insert_with(|| String::with_capacity(pattern.len() + 8));
+                    let rendered =
+                        out.get_or_insert_with(|| String::with_capacity(pattern.len() + 8));
                     rendered.push_str(&pattern[cursor..i]);
                     rendered.push_str("(?P<");
                     rendered.push_str(name);

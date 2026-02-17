@@ -445,7 +445,9 @@ fn lowers_pcre_trigger_prefix_with_match_range_expression_to_count_window_condit
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("(1 of ($s0, $s1)) and not (3 of ($s0, $s1))"));
+    assert!(rule
+        .condition
+        .contains("(1 of ($s0, $s1)) and not (3 of ($s0, $s1))"));
     assert!(rule.condition.contains("@s2[j] >= 200"));
     assert!(rule.condition.contains("@s2[j] <= 500"));
     assert!(!rule.meta.iter().any(|m| matches!(
@@ -501,7 +503,8 @@ fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_single_subsig_multi_gt_expression_to_count_threshold_condition() {
+fn lowers_pcre_trigger_prefix_with_single_subsig_multi_gt_expression_to_count_threshold_condition()
+{
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0>0,2/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -523,7 +526,8 @@ fn lowers_pcre_trigger_prefix_with_single_subsig_multi_gt_expression_to_count_th
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_single_subsig_multi_lt_expression_to_count_threshold_condition() {
+fn lowers_pcre_trigger_prefix_with_single_subsig_multi_lt_expression_to_count_threshold_condition()
+{
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0<1,2/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -1329,7 +1333,9 @@ fn lowers_pcre_ep_plus_range_without_e_to_start_window_condition() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= pe.entry_point + 0"));
-    assert!(rule.condition.contains("@s1[j] <= pe.entry_point + 0 + 600"));
+    assert!(rule
+        .condition
+        .contains("@s1[j] <= pe.entry_point + 0 + 600"));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -1344,7 +1350,9 @@ fn lowers_pcre_ep_plus_offset_prefix_with_rolling_flag_to_encompass_window() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= pe.entry_point + 10"));
-    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= pe.entry_point + 10 + 8"));
+    assert!(rule
+        .condition
+        .contains("(@s1[j] + !s1[j]) <= pe.entry_point + 10 + 8"));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -1451,7 +1459,9 @@ fn lowers_pcre_eof_minus_offset_prefix_with_rolling_flag_to_encompass_window() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= filesize - 10"));
-    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= filesize - 10 + 8"));
+    assert!(rule
+        .condition
+        .contains("(@s1[j] + !s1[j]) <= filesize - 10 + 8"));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -1477,7 +1487,9 @@ fn lowers_pcre_ep_minus_offset_prefix_with_rolling_flag_to_encompass_window() {
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert!(rule.condition.contains("@s1[j] >= pe.entry_point - 10"));
-    assert!(rule.condition.contains("(@s1[j] + !s1[j]) <= pe.entry_point - 10 + 8"));
+    assert!(rule
+        .condition
+        .contains("(@s1[j] + !s1[j]) <= pe.entry_point - 10 + 8"));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -1612,9 +1624,9 @@ fn lowers_pcre_last_section_offset_prefix_with_rolling_flag_to_encompass_window(
     assert!(rule
         .condition
         .contains("@s1[j] >= pe.sections[pe.number_of_sections - 1].raw_data_offset + 16"));
-    assert!(rule
-        .condition
-        .contains("(@s1[j] + !s1[j]) <= pe.sections[pe.number_of_sections - 1].raw_data_offset + 16 + 4"));
+    assert!(rule.condition.contains(
+        "(@s1[j] + !s1[j]) <= pe.sections[pe.number_of_sections - 1].raw_data_offset + 16 + 4"
+    ));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -1947,7 +1959,8 @@ fn lowers_pcre_python_named_backreference_to_false_for_safety() {
 
 #[test]
 fn allows_pcre_python_named_quote_capture_by_rewriting_to_angle_form() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P'funcname'abc)/").unwrap();
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P'funcname'abc)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_ne!(rule.condition, "false");
@@ -1959,7 +1972,8 @@ fn allows_pcre_python_named_quote_capture_by_rewriting_to_angle_form() {
 
 #[test]
 fn allows_pcre_python_named_angle_capture_when_yara_x_compatible() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_ne!(rule.condition, "false");
@@ -2296,6 +2310,21 @@ fn lowers_byte_comparison_non_raw_non_exact_to_false_for_safety() {
 }
 
 #[test]
+fn lowers_byte_comparison_non_raw_non_exact_width1() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#db1#>4)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 4) + 1 <= filesize"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_non_exact_unsupported"
+    )));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle2#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
@@ -2306,6 +2335,21 @@ fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
         .iter()
         .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("little-endian unsupported; lowered to false for safety"))));
     assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_little_endian_unsupported"
+    )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_little_endian_hex_width1() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle1#=A)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 4) + 1 <= filesize"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_unsupported"

@@ -1,9 +1,9 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature, fp::FpSignature,
-    ftm::FtmSignature, hdu::HduSignature, hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature,
-    ign2::Ign2Signature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
-    mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
-    sfp::SfpSignature, wdb::WdbSignature, hash::HashSignature,
+    ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, info::InfoSignature,
+    ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature,
+    ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraRule};
 
@@ -764,7 +764,8 @@ fn yara_rule_with_pcre_ep_plus_offset_prefix_with_rolling_flag_matches_and_rejec
 }
 
 #[test]
-fn yara_rule_with_pcre_ep_minus_offset_prefix_with_rolling_flag_rejects_pe_fixture_when_outside_window() {
+fn yara_rule_with_pcre_ep_minus_offset_prefix_with_rolling_flag_rejects_pe_fixture_when_outside_window(
+) {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EP-10,8:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
@@ -977,7 +978,9 @@ fn yara_rule_with_pcre_section_end_offset_prefix_with_rolling_flag_matches_pe_fi
     let src = rule.to_string();
     let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
 
-    assert!(src.contains("(@s1[j] + !s1[j]) <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"));
+    assert!(src.contains(
+        "(@s1[j] + !s1[j]) <= pe.sections[1].raw_data_offset + pe.sections[1].raw_data_size + 4"
+    ));
     assert_eq!(scan_match_count(src.as_str(), &data), 1);
 }
 
@@ -1050,7 +1053,9 @@ fn yara_rule_with_pcre_last_section_offset_prefix_with_rolling_flag_matches_pe_f
     let src = rule.to_string();
     let data = pe_two_sections_fixture_with_aaaa_and_abc_in_section1();
 
-    assert!(src.contains("(@s1[j] + !s1[j]) <= pe.sections[pe.number_of_sections - 1].raw_data_offset + 4 + 8"));
+    assert!(src.contains(
+        "(@s1[j] + !s1[j]) <= pe.sections[pe.number_of_sections - 1].raw_data_offset + 4 + 8"
+    ));
     assert_eq!(scan_match_count(src.as_str(), &data), 1);
 }
 
@@ -1064,7 +1069,8 @@ fn yara_rule_with_pcre_eof_minus_offset_prefix_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_eof_minus_offset_prefix_with_rolling_flag_rejects_scan_when_outside_window() {
+fn yara_rule_with_pcre_eof_minus_offset_prefix_with_rolling_flag_rejects_scan_when_outside_window()
+{
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;EOF-10,8:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
@@ -1258,7 +1264,8 @@ fn yara_rule_with_pcre_python_named_backreference_false_compiles_with_yara_x() {
 
 #[test]
 fn yara_rule_with_pcre_python_named_quote_capture_matches_after_rewrite() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P'funcname'abc)/").unwrap();
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P'funcname'abc)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
@@ -1271,7 +1278,8 @@ fn yara_rule_with_pcre_python_named_quote_capture_matches_after_rewrite() {
 
 #[test]
 fn yara_rule_with_pcre_python_named_angle_capture_matches_when_supported() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:0;0&1;41414141;0/(?P<funcname>abc)/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
@@ -2194,6 +2202,26 @@ fn yara_rule_with_non_raw_byte_comparison_non_exact_false_compiles_with_yara_x()
 
     yara_x::compile(src.as_str())
         .expect("yara-x failed to compile non-raw byte-compare non-exact fallback(false) rule");
+}
+
+#[test]
+fn yara_rule_with_non_raw_byte_comparison_non_exact_width1_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#db1#>4)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA5"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA4"), 0);
+}
+
+#[test]
+fn yara_rule_with_non_raw_byte_comparison_little_endian_hex_width1_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle1#=A)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAa"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA9"), 0);
 }
 
 #[test]
