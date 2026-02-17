@@ -611,16 +611,17 @@ fn lowers_pcre_trigger_prefix_with_missing_base_offset_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_spaced_range_offset_without_e_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_spaced_range_offset_without_e_to_start_window_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141; 200 , 300 :0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("(false)"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains(">= 200"));
+    assert!(rule.condition.contains("<= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("maxshift present without 'e'; lowered to false for safety")
+                && value.contains("maxshift present without 'e'")
     )));
 }
 
@@ -1740,16 +1741,17 @@ fn lowers_pcre_encompass_with_range_offset() {
 }
 
 #[test]
-fn lowers_pcre_range_offset_without_e_to_false_for_safety() {
+fn lowers_pcre_range_offset_without_e_to_start_window_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;200,300:0/abc/").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("(false)"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("@s1[j] >= 200"));
+    assert!(rule.condition.contains("@s1[j] <= 500"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("maxshift present without 'e'; lowered to false for safety")
+                && value.contains("maxshift present without 'e'")
     )));
 }
 

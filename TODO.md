@@ -26,6 +26,7 @@ Last update: 2026-02-17
       - 2026-02-17: exact offset + `r` (`10:.../r`) は `@ >= offset` 条件で strict support 化
       - 2026-02-17: absolute range + `re` (`n,m:.../re`) は bounded window（`@ >= n` かつ `@+! <= n+m`）で strict support 化
       - 2026-02-17: exact offset + `e/re` は matcher-pcre 挙動（`adjshift==0` では `e` がwindowを狭めない）に合わせて strict support 化
+      - 2026-02-17: absolute range + non-`e`（`n,m:.../`）は start-window（`@ in [n, n+m]`）で strict support 化
 - [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
       「同型可/不可」で再分類し、同型可だけ support 化
 
