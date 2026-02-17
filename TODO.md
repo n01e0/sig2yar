@@ -86,6 +86,8 @@ Last update: 2026-02-17
 
 ### C1. strict support 化を検討する候補（優先度: 高）
 - [ ] `mdb` / `msb` / `imp` の strict mapping 設計と最小回帰テスト導入
+      - 2026-02-17: `mdb/msb` section-hash は strict support 化（`pe.sections[*]` + `hash.{md5,sha1,sha256}`）
+      - 継続: `imp`（import-hash）は DB種別ヒントなしの同型判定設計が未完
 
 ### C2. runtime依存が強いため要方針決定（優先度: 中）
 - [ ] `idb`, `cdb`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`,
@@ -105,4 +107,5 @@ Last update: 2026-02-17
 - [x] D2: P0として PCRE の同型拡張（`(?P...)` の過剰strict-false解消可能分）を段階実施
       - 2026-02-17: `(?P<name>...)` 許可 + `(?P'name'...)` rewrite許可を main へ反映
 - [ ] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）
+      - 2026-02-17: 第1弾として `mdb/msb` を実装（`imp` は継続）
 - [ ] D4: 対象外と判断した strict-safe 領域は README/checklist に非対象理由を明記
