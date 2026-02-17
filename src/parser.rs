@@ -10,6 +10,7 @@ pub mod hsu;
 pub mod idb;
 pub mod ign;
 pub mod ign2;
+pub mod imp;
 pub mod info;
 pub mod ldu;
 pub mod logical;
@@ -26,6 +27,7 @@ use clap::ValueEnum;
 #[derive(Debug, ValueEnum, Clone)]
 pub enum DbType {
     Hash,
+    Imp,
     Logical,
     Hdu,
     Hsu,

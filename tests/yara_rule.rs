@@ -1,9 +1,10 @@
 use sig2yar::parser::{
     cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature, fp::FpSignature,
     ftm::FtmSignature, hash::HashSignature, hdu::HduSignature, hsu::HsuSignature,
-    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, info::InfoSignature,
-    ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature, msu::MsuSignature,
-    ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
+    idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature, imp::ImpSignature,
+    info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
+    msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature, sfp::SfpSignature,
+    wdb::WdbSignature,
 };
 use sig2yar::yara::{self, YaraMeta, YaraRule, YaraString};
 
@@ -51,6 +52,19 @@ fn lowers_hash_section_signature_to_pe_section_hash_condition() {
     assert!(src.contains("pe.sections[i].raw_data_size == 512"));
     assert!(src.contains("hash.md5(pe.sections[i].raw_data_offset, pe.sections[i].raw_data_size) == \"615dec8b4678c0106c5ee2df433e457c\""));
     assert!(!src.contains("clamav_unsupported = \"section_hash\""));
+}
+
+#[test]
+fn lowers_imp_signature_to_pe_imphash_condition() {
+    let sig =
+        ImpSignature::parse("d41d8cd98f00b204e9800998ecf8427e:2048:Test.IMP.EmptyImports").unwrap();
+    let src = sig.to_string();
+
+    assert!(src.contains("import \"pe\""));
+    assert!(src.contains(
+        "pe.is_pe and filesize == 2048 and pe.imphash() == \"d41d8cd98f00b204e9800998ecf8427e\""
+    ));
+    assert!(!src.contains("clamav_unsupported"));
 }
 
 #[test]

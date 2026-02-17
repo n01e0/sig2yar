@@ -8,9 +8,9 @@ use sig2yar::{
         cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
         fp::FpSignature, ftm::FtmSignature, hash::HashSignature, hdu::HduSignature,
         hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
-        info::InfoSignature, ldu::LduSignature, logical::LogicalSignature, mdu::MduSignature,
-        msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature, pdb::PdbSignature,
-        sfp::SfpSignature, wdb::WdbSignature, DbType,
+        imp::ImpSignature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
+        mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
     },
     yara,
 };
@@ -21,6 +21,11 @@ fn render_rule(args: Args) -> Result<String> {
             let sig = HashSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
             yara::render_hash_signature(&ir)
+        }
+        DbType::Imp => {
+            let sig = ImpSignature::parse(&args.signature)?;
+            let ir = sig.to_ir();
+            yara::render_imp_signature(&ir)
         }
         DbType::Logical => {
             let sig = LogicalSignature::parse(&args.signature)?;

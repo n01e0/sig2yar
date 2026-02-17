@@ -54,6 +54,12 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
   --ndb-context "D2:0:$12:636363"
 ```
 
+例（`imp`、import-hash strict mapping）:
+
+```bash
+sig2yar imp "d41d8cd98f00b204e9800998ecf8427e:2048:Test.Imp.EmptyImports"
+```
+
 ## ClamAV DBサポート状況（概算）
 
 > ここは計画判断向けの概算。厳密ベンチマークではない。
@@ -64,5 +70,5 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
 | `ndb` | 強い部分サポート | **~90%** | signed/open jump境界、非canonicalな`[]` jump構造、一部runtime依存offset、予約/非対応target type |
 | `ldb` | 部分対応のみ | **strict基準で~0–10%**（かなり低い） | macro完全runtime意味、`fuzzy_img` runtime意味、PCREのruntime依存flags/offset組み合わせ、観測不能なtarget description制約 |
 | `mdb`, `msb` | 部分サポート | **~70–90%** | section-hash境界の広域検証（corpus拡張）が未完 |
-| `imp` | strictサポート未実装 | **~0%** | import-hashをwhole-file hash形式と衝突させず識別する設計が未実装 |
+| `imp` | 部分サポート | **~70–90%** | toolchain/fixture差分を含む `pe.imphash()` 境界の広域検証は未完 |
 | `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | parseはあるがstrict変換未実装 | **~0%** | 現状は strict-safe / fallback 経路で処理 |

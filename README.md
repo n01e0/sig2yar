@@ -54,6 +54,12 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
   --ndb-context "D2:0:$12:636363"
 ```
 
+Example (`imp`, strict import-hash mapping):
+
+```bash
+sig2yar imp "d41d8cd98f00b204e9800998ecf8427e:2048:Test.Imp.EmptyImports"
+```
+
 ## ClamAV DB support overview (coarse)
 
 > This is a planning-level summary, not a formal benchmark.
@@ -64,5 +70,5 @@ sig2yar logical "Foo.Bar-2;Target:1;${1-2}12$;41424344" \
 | `ndb` | Partially supported (strong subset) | **~90%** | Signed/open jump edges, non-canonical square-jump forms, some runtime-dependent offset semantics, reserved/unsupported target types |
 | `ldb` | Partial only | **~0–10% strict** (very low) | Full macro runtime semantics, `fuzzy_img` runtime hash behavior, PCRE runtime-dependent flags/offset combinations, non-observable target-description constraints |
 | `mdb`, `msb` | Partially supported | **~70–90%** | Section-hash edge semantics validation (broader corpus) |
-| `imp` | Not strictly supported yet | **~0%** | Import-hash strict mapping needs DB-type-aware disambiguation from whole-file hash format |
+| `imp` | Partially supported | **~70–90%** | Broad corpus validation and edge-case semantics (`pe.imphash()` parity across toolchain/fixtures) are still pending |
 | `ndu`, `idb`, `cdb`, `cfg`, `crb`, `pdb`, `wdb`, `cbc`, `ftm`, `fp`, `sfp`, `ign`, `ign2`, `hdu`, `hsu`, `ldu`, `mdu`, `msu`, `info` | Parse path exists; strict conversion not implemented | **~0%** | Currently handled as strict-safe / fallback path |

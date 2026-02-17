@@ -114,6 +114,86 @@ pub fn render_hash_signature(value: &ir::HashSignature) -> String {
     }
 }
 
+pub fn render_imp_signature(value: &ir::HashSignature) -> String {
+    let rule_name = format!(
+        "IMP_{}_{}",
+        normalize_rule_name(&value.name),
+        hash_tag(&value.hash)
+    );
+
+    let mut meta = vec![YaraMeta::Entry {
+        key: "original_ident".to_string(),
+        value: value.name.to_string(),
+    }];
+
+    if let Some(flevel) = value.min_flevel {
+        meta.push(YaraMeta::Entry {
+            key: "min_flevel".to_string(),
+            value: flevel.to_string(),
+        });
+    }
+
+    let (size, invalid_source) = match &value.source {
+        ir::HashSource::File { size } => (*size, false),
+        ir::HashSource::Section { size } => (*size, true),
+    };
+
+    meta.push(YaraMeta::Entry {
+        key: "clamav_imp_hash".to_string(),
+        value: value.hash.to_string(),
+    });
+    meta.push(YaraMeta::Entry {
+        key: "clamav_imp_size".to_string(),
+        value: size
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "*".to_string()),
+    });
+
+    if value.hash_type != ir::HashType::Md5 || invalid_source {
+        let mut notes = Vec::new();
+        if value.hash_type != ir::HashType::Md5 {
+            notes.push("imp signatures require md5 import-hash");
+        }
+        if invalid_source {
+            notes.push("imp signatures require file-hash shape, not section-hash");
+        }
+
+        meta.push(YaraMeta::Entry {
+            key: "clamav_unsupported".to_string(),
+            value: "imp_signature_shape_invalid".to_string(),
+        });
+        meta.push(YaraMeta::Entry {
+            key: "clamav_lowering_notes".to_string(),
+            value: format!("{}; lowered to false for safety", notes.join("; ")),
+        });
+
+        return YaraRule {
+            name: rule_name,
+            meta,
+            strings: Vec::new(),
+            condition: "false".to_string(),
+            imports: Vec::new(),
+        }
+        .to_string();
+    }
+
+    let size_guard = size
+        .map(|v| format!("filesize == {v} and "))
+        .unwrap_or_default();
+
+    YaraRule {
+        name: rule_name,
+        meta,
+        strings: Vec::new(),
+        condition: format!(
+            "pe.is_pe and {}pe.imphash() == \"{}\"",
+            size_guard, value.hash
+        ),
+        imports: vec!["pe".to_string()],
+    }
+    .to_string()
+}
+
 pub fn render_ndb_signature(value: &ir::NdbSignature) -> String {
     lower_ndb_signature(value).to_string()
 }
