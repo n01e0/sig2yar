@@ -29,10 +29,11 @@ Last update: 2026-02-17
       - 2026-02-17: absolute range + non-`e`（`n,m:.../`）は start-window（`@ in [n, n+m]`）で strict support 化
       - 2026-02-17: relative offset（`EP/Sx/SL/SE/EOF-`）上の non-`e` + maxshift も start-window 同型で strict support 化
       - 2026-02-17: range（maxshift）上の `r/re` は `matcher-pcre.c` 同型で window 条件に落とし込み、strict-false から除外
-- [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
+- [x] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
       「同型可/不可」で再分類し、同型可だけ support 化
       - 2026-02-17: count-comparator subset（`=x`, `=x,y`, `>x`, `<x`）は strict support 化
       - 2026-02-17: distinct comparator の single-subsig subset（`0>x,y`, `0<x,y`）は strict support 化（distinct閾値は note 付きで無視）
+      - 2026-02-17: strict-false維持経路（grouped distinct / self / missing / trigger parse fail / trigger expr parse fail / trigger resolved false）を `clamav_unsupported` tag で機械可読化
       - 維持: grouped distinct（`(a|b)>x,y` / `(a|b)<x,y`）と self/missing 参照は strict-false 維持
 
 ### A2. byte_comparison（優先度: 中）
