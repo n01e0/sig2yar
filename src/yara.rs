@@ -5019,13 +5019,26 @@ fn lower_pcre_offset_condition(
             None
         }
         PcreOffsetSpec::Absolute { start, maxshift } => {
-            let window = match maxshift {
-                Some(maxshift) => PcreOffsetWindow::Range {
-                    start: start.to_string(),
-                    end: start.saturating_add(maxshift).to_string(),
+            let window_start = start.to_string();
+            let window_end = maxshift.map(|maxshift| start.saturating_add(maxshift).to_string());
+
+            if rolling && encompass {
+                if let Some(end) = window_end {
+                    // ClamAV reference: unit_tests/check_matchers.c pcre_testdata
+                    // Test8/Test10 (`/apie/re` with `2,2`, `/atre/re` with `2,6`).
+                    // For absolute offset ranges, `re` behaves like bounded window
+                    // matching: start >= offset and end <= offset+maxshift.
+                    return Some(pcre_occurrence_window_expr(core, &window_start, &end));
+                }
+            }
+
+            let window = match window_end {
+                Some(end) => PcreOffsetWindow::Range {
+                    start: window_start,
+                    end,
                 },
                 None => PcreOffsetWindow::Exact {
-                    start: start.to_string(),
+                    start: window_start,
                 },
             };
             Some(lower_pcre_offset_window_condition(

@@ -627,25 +627,25 @@ fn yara_rule_with_pcre_exact_offset_with_encompass_flag_false_rejects_scan() {
 }
 
 #[test]
-fn yara_rule_with_re_range_offset_false_rejects_scan() {
-    // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (pcre_testdata expected_result)
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,6:0/atre/re").unwrap();
+fn yara_rule_with_re_range_offset_matches_scan_when_within_window() {
+    // ClamAV reference: unit_tests/check_matchers.c Test10 (`/atre/re` + `2,6` expected CL_VIRUS)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;2,6:0/atre/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("flag 'r' with maxshift"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxatre"), 0);
+    assert!(src.contains("(@s1[j] + !s1[j]) <= 8"));
+    assert_eq!(scan_match_count(src.as_str(), b"notatretruly"), 1);
 }
 
 #[test]
-fn yara_rule_with_re_range_offset_nonmatch_fixture_false_rejects_scan() {
-    // ClamAV reference: unit_tests/check_matchers.c:146-149,497-503 (Test8 `/apie/re` expected CL_SUCCESS)
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;2,2:0/apie/re").unwrap();
+fn yara_rule_with_re_range_offset_rejects_scan_when_outside_window() {
+    // ClamAV reference: unit_tests/check_matchers.c Test8 (`/apie/re` + `2,2` expected CL_SUCCESS)
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;6E6F74;2,2:0/apie/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("flag 'r' with maxshift"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAAxxapie"), 0);
+    assert!(src.contains("(@s1[j] + !s1[j]) <= 4"));
+    assert_eq!(scan_match_count(src.as_str(), b"notapietruly"), 0);
 }
 
 #[test]
