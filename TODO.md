@@ -45,6 +45,8 @@ Last update: 2026-02-18
       - 2026-02-18: non-raw little-endian `h` base を拡張
         - `width>1` は `exact(e)` かつ偶数幅の subset を strict support（ClamAVのLE byte-pair normalizationに同型化）
         - `width>1` かつ non-exact / odd幅 は strict-false 維持
+      - 2026-02-18: offset token の strict subsetを拡張
+        - plain `0` と empty token（`#...`）を ClamAV互換で offset=0 として strict support
 - [x] raw size 制約（1/2/4/8以外）と幅制約のうち、
       安全に同型へ寄せられる範囲があるかを検証
       - 2026-02-18: ClamAV `matcher-byte-comp.c` 再確認の結果、binary(raw) は 1/2/4/8 以外を loaderで拒否。

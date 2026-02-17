@@ -2144,6 +2144,24 @@ fn yara_rule_with_byte_comparison_offset_octal_matches_fixture() {
 }
 
 #[test]
+fn yara_rule_with_byte_comparison_offset_zero_token_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(0#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA"), 1);
+}
+
+#[test]
+fn yara_rule_with_byte_comparison_offset_empty_token_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA"), 1);
+}
+
+#[test]
 fn yara_rule_with_non_raw_byte_comparison_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

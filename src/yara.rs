@@ -3556,9 +3556,17 @@ fn parse_byte_comparison(raw: &str) -> Option<ParsedByteComparison> {
 }
 
 fn parse_byte_comparison_offset(input: &str) -> Option<i64> {
-    let (sign, rest) = if let Some(rest) = input.strip_prefix(">>") {
+    let trimmed = input.trim();
+
+    // ClamAV matcher-byte-comp accepts `0` and even empty offset token as
+    // "no shift" (offset 0) in addition to `>>n` / `<<n` forms.
+    if trimmed.is_empty() || trimmed == "0" {
+        return Some(0);
+    }
+
+    let (sign, rest) = if let Some(rest) = trimmed.strip_prefix(">>") {
         (1i64, rest)
-    } else if let Some(rest) = input.strip_prefix("<<") {
+    } else if let Some(rest) = trimmed.strip_prefix("<<") {
         (-1i64, rest)
     } else {
         return None;

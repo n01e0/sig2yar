@@ -2131,6 +2131,26 @@ fn lowers_byte_comparison_offset_with_octal_token() {
 }
 
 #[test]
+fn lowers_byte_comparison_offset_with_plain_zero_token() {
+    // ClamAV matcher-byte-comp.c treats offset token `0` as no-shift.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(0#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s0[j] + 0"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
+fn lowers_byte_comparison_offset_with_empty_token() {
+    // ClamAV matcher-byte-comp.c also accepts an empty offset token as offset=0.
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(#ib1#=65)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("@s0[j] + 0"));
+    assert!(!rule.condition.contains("and false"));
+}
+
+#[test]
 fn lowers_byte_comparison_non_raw_hex_exact_eq() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#he4#=1A2B)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
