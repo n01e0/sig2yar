@@ -605,13 +605,15 @@ fn yara_rule_with_exact_pcre_offset_match_fixture_compiles_with_yara_x() {
 }
 
 #[test]
-fn yara_rule_with_pcre_exact_offset_with_rolling_flag_false_rejects_scan() {
+fn yara_rule_with_pcre_exact_offset_with_rolling_flag_matches_scan() {
+    // ClamAV reference: unit_tests/check_matchers.c (pcre_testdata Test_3)
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/r").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("flag 'r' with exact offset prefix"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 0);
+    assert!(src.contains("@s1[j] >= 10"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabczzzzzz"), 0);
 }
 
 #[test]
