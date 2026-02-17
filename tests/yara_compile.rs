@@ -617,13 +617,15 @@ fn yara_rule_with_pcre_exact_offset_with_rolling_flag_matches_scan() {
 }
 
 #[test]
-fn yara_rule_with_pcre_exact_offset_with_encompass_flag_false_rejects_scan() {
+fn yara_rule_with_pcre_exact_offset_with_encompass_flag_matches_only_exact_start() {
+    // ClamAV reference: matcher-pcre.c exact offset path keeps anchored semantics when not rolling.
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("flag 'e' with exact offset prefix"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 0);
+    assert!(src.contains("@s1[j] == 10"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabczzzzzz"), 0);
 }
 
 #[test]
@@ -1359,13 +1361,14 @@ fn yara_rule_with_pcre_e_flag_without_offset_prefix_false_rejects_scan() {
 }
 
 #[test]
-fn yara_rule_with_pcre_exact_offset_with_re_flags_false_rejects_scan() {
+fn yara_rule_with_pcre_exact_offset_with_re_flags_matches_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("flag 'r' with exact offset prefix"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAAabc"), 0);
+    assert!(src.contains("@s1[j] >= 10"));
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAzzzzzzabc"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAAabczzzzzz"), 0);
 }
 
 #[test]

@@ -1007,32 +1007,35 @@ fn lowers_pcre_e_flag_without_offset_prefix_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_exact_offset_with_encompass_flag_to_false_for_safety() {
+fn lowers_pcre_exact_offset_with_encompass_flag_to_exact_equality_condition() {
+    // ClamAV reference: matcher-pcre.c
+    // - exact offset => `adjshift == 0`
+    // - encompass window restriction applies only when `adjshift != 0`
+    // - non-rolling exact path uses `PCRE2_ANCHORED`
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/e").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("false"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("@s1[j] == 10"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
-            if key == "clamav_lowering_notes"
-                && value.contains("flag 'e' with exact offset prefix")
-                && value.contains("lowered to false for safety")
+            if key == "clamav_lowering_notes" && value.contains("exact offset prefix")
     )));
 }
 
 #[test]
-fn lowers_pcre_exact_offset_with_re_flags_to_false_for_safety() {
+fn lowers_pcre_exact_offset_with_re_flags_to_exact_or_later_match_window() {
+    // ClamAV reference: matcher-pcre.c
+    // - exact offset => `adjshift == 0`, so `e` does not bound window
+    // - rolling disables anchored mode, so match start is `>= offset`
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;1;41414141;10:0/abc/re").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
-    assert!(rule.condition.contains("false"));
-    assert!(rule.meta.iter().any(|m| matches!(
+    assert!(rule.condition.contains("@s1[j] >= 10"));
+    assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
-            if key == "clamav_lowering_notes"
-                && value.contains("flag 'r' with exact offset prefix")
-                && value.contains("lowered to false for safety")
+            if key == "clamav_lowering_notes" && value.contains("exact offset prefix")
     )));
 }
 
