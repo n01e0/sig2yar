@@ -1179,6 +1179,18 @@ fn yara_rule_with_pcre_unsupported_flag_false_compiles_with_yara_x() {
 }
 
 #[test]
+fn yara_rule_with_pcre_python_named_syntax_false_compiles_with_yara_x() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0;0/(?P=funcname)/").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    assert!(src.contains("Python-style named capture/backreference syntax"));
+    yara_x::compile(src.as_str())
+        .expect("yara-x failed to compile pcre-python-named-syntax safety-false rule");
+    assert_eq!(scan_match_count(src.as_str(), b"funcname"), 0);
+}
+
+#[test]
 fn yara_rule_with_pcre_x_flag_compiles_with_yara_x() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0/a b c/x").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

@@ -109,6 +109,10 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記132: PCRE の Python-style named capture/backreference 構文（`(?P...)`）を strict-safe false + note に統一。
+  - 背景: 実データ scan-diff で `(?P=funcname)` が `yara-x` compile エラー（`unrecognized flag`）を誘発し、検証run停止要因になっていた。
+  - 変更: `src/yara.rs` で `parse_pcre_like` 後に `pattern.contains("(?P")` を検出し、`false + note` へ早期収束。
+  - テスト: `tests/yara_rule.rs` に note 検証、`tests/yara_compile.rs` に compile/scan（0 hit）検証を追加。
 - 2026-02-17 追記131: `hdb/hsb` の最小回帰を sig2yar 本体へ逆輸入し、size固定＋`*`（NoSize）の同時担保を `yara_compile` fixture で固定。
   - 変更: `tests/yara_compile.rs` に `hash_hdb_hsb_rules_match_size_fixed_and_wildcard_variants` を追加。
   - 内容: `abc` の既知 hash（MD5/SHA1/SHA256）を使い、`size=3` と `size=*` の6ルールが target で 6/6 hit、近傍 payload（`abd`）で 0 hit を検証。

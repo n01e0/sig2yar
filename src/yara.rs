@@ -3174,6 +3174,13 @@ fn lower_raw_or_pcre_subsignature(
     }
 
     if let Some(pcre) = parse_pcre_like(raw) {
+        if pcre_pattern_uses_python_named_syntax(pcre.pattern) {
+            notes.push(format!(
+                "subsig[{idx}] pcre pattern uses Python-style named capture/backreference syntax '(?P...)' unsupported by yara-x; lowered to false for safety"
+            ));
+            return RawSubsigLowering::Expr("false".to_string());
+        }
+
         let mut inline_flags = String::new();
         let mut anchored = false;
         let mut rolling = false;
@@ -5189,6 +5196,10 @@ fn parse_pcre_like(raw: &str) -> Option<ParsedPcre<'_>> {
             Some(prefix)
         },
     })
+}
+
+fn pcre_pattern_uses_python_named_syntax(pattern: &str) -> bool {
+    pattern.contains("(?P")
 }
 
 impl Display for YaraRule {
