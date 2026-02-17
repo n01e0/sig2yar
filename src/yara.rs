@@ -4048,15 +4048,25 @@ fn lower_textual_byte_comparison_condition(
         return Some("false".to_string());
     }
 
-    if matches!(base, ByteCmpBase::Auto) {
-        notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw auto base unsupported for strict lowering; lowered to false for safety"
-        ));
-        unsupported_tags.push("byte_comparison_nonraw_auto_base_unsupported".to_string());
-        return Some("false".to_string());
-    }
+    // ClamAV auto-base detection (`a`) decides decimal vs hex by looking at the
+    // extracted textual bytes (`0x`/`0X` prefix => hex, otherwise decimal).
+    // Strict subset: width<=2 can never trigger hex auto-detection (len<3), so it
+    // is safely equivalent to decimal mode.
+    let effective_base = if matches!(base, ByteCmpBase::Auto) {
+        if width <= 2 {
+            ByteCmpBase::Decimal
+        } else {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison non-raw auto base unsupported for width {width}>2 under strict lowering; lowered to false for safety"
+            ));
+            unsupported_tags.push("byte_comparison_nonraw_auto_base_unsupported".to_string());
+            return Some("false".to_string());
+        }
+    } else {
+        base
+    };
 
-    if matches!(base, ByteCmpBase::Decimal)
+    if matches!(effective_base, ByteCmpBase::Decimal)
         && byte_cmp
             .comparisons
             .iter()
@@ -4069,7 +4079,7 @@ fn lower_textual_byte_comparison_condition(
         return Some("false".to_string());
     }
 
-    if matches!(base, ByteCmpBase::Hex) && width > CLAMAV_BCOMP_MAX_HEX_BLEN {
+    if matches!(effective_base, ByteCmpBase::Hex) && width > CLAMAV_BCOMP_MAX_HEX_BLEN {
         notes.push(format!(
             "subsig[{idx}] byte_comparison non-raw hex width {width} exceeds ClamAV limit {CLAMAV_BCOMP_MAX_HEX_BLEN}; lowered to false for safety"
         ));
@@ -4088,7 +4098,7 @@ fn lower_textual_byte_comparison_condition(
 
     let mut cmp_parts = Vec::new();
     for cmp in &byte_cmp.comparisons {
-        let threshold_specs = build_textual_threshold_specs(base, width, cmp.value);
+        let threshold_specs = build_textual_threshold_specs(effective_base, width, cmp.value);
         if threshold_specs.is_empty() {
             notes.push(format!(
                 "subsig[{idx}] byte_comparison non-raw cannot represent value {} in width {}; lowered to false for safety",

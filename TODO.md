@@ -37,7 +37,7 @@ Last update: 2026-02-18
       - 維持: grouped distinct（`(a|b)>x,y` / `(a|b)<x,y`）と self/missing 参照は strict-false 維持
 
 ### A2. byte_comparison（優先度: 中）
-- [ ] non-raw little-endian / non-exact / auto-base など strict-false 系のうち、
+- [x] non-raw little-endian / non-exact / auto-base など strict-false 系のうち、
       同型実装できるケースを切り出して support 化
       - 2026-02-17: strict subset として `width=1` を support 化
         - non-raw non-exact（`!e`）は `width=1` のとき strict support
@@ -47,6 +47,9 @@ Last update: 2026-02-18
         - `width>1` かつ non-exact / odd幅 は strict-false 維持
       - 2026-02-18: offset token の strict subsetを拡張
         - plain `0` と empty token（`#...`）を ClamAV互換で offset=0 として strict support
+      - 2026-02-18: auto-base (`a`) の strict subsetを拡張
+        - `width<=2` は ClamAV auto-detect上 hex判定に入らないため decimal同型として strict support
+        - `width>2` は strict-false 維持（`0x` prefix有無による runtime分岐を未実装）
 - [x] raw size 制約（1/2/4/8以外）と幅制約のうち、
       安全に同型へ寄せられる範囲があるかを検証
       - 2026-02-18: ClamAV `matcher-byte-comp.c` 再確認の結果、binary(raw) は 1/2/4/8 以外を loaderで拒否。

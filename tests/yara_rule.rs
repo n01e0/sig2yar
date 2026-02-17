@@ -2287,8 +2287,8 @@ fn lowers_byte_comparison_non_raw_decimal_with_hex_alpha_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_byte_comparison_non_raw_auto_base_to_false_for_safety() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#ae2#=10)").unwrap();
+fn lowers_byte_comparison_non_raw_auto_base_width3_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>0#ae3#=10)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "($s0 and false)");
@@ -2296,7 +2296,7 @@ fn lowers_byte_comparison_non_raw_auto_base_to_false_for_safety() {
         m,
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
-                && value.contains("non-raw auto base unsupported for strict lowering")
+                && value.contains("non-raw auto base unsupported for width 3>2")
                 && value.contains("lowered to false for safety")
     )));
     assert!(rule.meta.iter().any(|m| matches!(
@@ -2305,6 +2305,32 @@ fn lowers_byte_comparison_non_raw_auto_base_to_false_for_safety() {
             if key == "clamav_unsupported"
                 && value == "byte_comparison_nonraw_auto_base_unsupported"
     )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_auto_base_width1_as_decimal() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;35;0(>>0#ae1#=5)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 0) + 1 <= filesize"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_auto_base_unsupported"
+    )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_auto_base_width2_exact_as_decimal() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;3037;0(>>0#ae2#=07)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    assert!(rule.condition.contains("(@s0[j] + 0) + 2 <= filesize"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 0) == 0x30"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 0) + 1) == 0x37"));
 }
 
 #[test]
