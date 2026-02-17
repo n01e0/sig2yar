@@ -382,6 +382,11 @@ fn lowers_pcre_self_referential_trigger_to_false_for_safety() {
                 && value.contains("self-referential")
                 && value.contains("lowered to false for safety")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_self_reference"
+    )));
 }
 
 #[test]
@@ -397,6 +402,11 @@ fn lowers_pcre_trigger_prefix_with_mixed_self_reference_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("self-referential")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_self_reference"
     )));
 }
 
@@ -460,6 +470,12 @@ fn lowers_pcre_trigger_prefix_with_multi_gt_expression_to_false_for_safety() {
             if key == "clamav_lowering_notes"
                 && value.contains("distinct/nested-count operators unsupported for strict lowering")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "pcre_trigger_distinct_or_nested_count_unsupported"
+    )));
 }
 
 #[test]
@@ -475,6 +491,12 @@ fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("distinct/nested-count operators unsupported for strict lowering")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "pcre_trigger_distinct_or_nested_count_unsupported"
     )));
 }
 
@@ -571,6 +593,11 @@ fn lowers_pcre_trigger_prefix_missing_reference_to_false_for_safety() {
                 && value.contains("references unsupported/missing subsig index(es) 9")
                 && value.contains("lowered to false for safety")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_missing_subsig_reference"
+    )));
 }
 
 #[test]
@@ -585,6 +612,11 @@ fn lowers_pcre_trigger_prefix_with_false_subsig_dependency_to_false_for_safety()
             if key == "clamav_lowering_notes"
                 && value.contains("trigger expression resolved to false")
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_expression_resolved_false"
     )));
 }
 
@@ -601,6 +633,11 @@ fn lowers_pcre_trigger_prefix_with_missing_trigger_expression_to_false_for_safet
                 && value.contains("pcre trigger prefix parse failed")
                 && value.contains("missing trigger expression after ':'")
     )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_prefix_parse_failure"
+    )));
 }
 
 #[test]
@@ -614,6 +651,11 @@ fn lowers_pcre_trigger_prefix_with_malformed_trigger_expression_to_false_for_saf
         YaraMeta::Entry { key, value }
             if key == "clamav_lowering_notes"
                 && value.contains("lowered to false for safety")
+    )));
+    assert!(rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported" && value == "pcre_trigger_expression_parse_failure"
     )));
 }
 

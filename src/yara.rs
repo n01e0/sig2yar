@@ -2329,12 +2329,13 @@ pub fn lower_logical_signature_with_ndb_context(
         });
     }
 
-    let (strings, id_map, subsig_notes, saw_fuzzy_img_subsig) = lower_subsignatures(
-        &value.subsignatures,
-        value.target_description.target_type.as_deref(),
-        &mut imports,
-        &macro_groups,
-    );
+    let (strings, id_map, subsig_notes, subsig_unsupported_tags, saw_fuzzy_img_subsig) =
+        lower_subsignatures(
+            &value.subsignatures,
+            value.target_description.target_type.as_deref(),
+            &mut imports,
+            &macro_groups,
+        );
     notes.extend(subsig_notes);
     let base_condition = lower_condition(&value.expression, &id_map, &mut notes);
 
@@ -2386,6 +2387,18 @@ pub fn lower_logical_signature_with_ndb_context(
             key: "clamav_unsupported".to_string(),
             value: "target_description_icon_group2_constraint".to_string(),
         });
+    }
+
+    if !subsig_unsupported_tags.is_empty() {
+        let mut dedup = BTreeSet::new();
+        for tag in subsig_unsupported_tags {
+            if dedup.insert(tag.clone()) {
+                meta.push(YaraMeta::Entry {
+                    key: "clamav_unsupported".to_string(),
+                    value: tag,
+                });
+            }
+        }
     }
 
     if !notes.is_empty() {
@@ -2507,10 +2520,17 @@ fn lower_subsignatures(
     target_type: Option<&str>,
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
-) -> (Vec<YaraString>, Vec<Option<String>>, Vec<String>, bool) {
+) -> (
+    Vec<YaraString>,
+    Vec<Option<String>>,
+    Vec<String>,
+    Vec<String>,
+    bool,
+) {
     let mut strings = Vec::new();
     let mut id_map = Vec::with_capacity(subsigs.len());
     let mut notes = Vec::new();
+    let mut unsupported_tags = Vec::new();
     let mut saw_fuzzy_img_subsig = false;
 
     for (idx, subsig) in subsigs.iter().enumerate() {
@@ -2583,6 +2603,7 @@ fn lower_subsignatures(
                 imports,
                 macro_groups,
                 &mut notes,
+                &mut unsupported_tags,
                 &mut saw_fuzzy_img_subsig,
             ) {
                 RawSubsigLowering::String(line) => {
@@ -2610,7 +2631,7 @@ fn lower_subsignatures(
         }
     }
 
-    (strings, id_map, notes, saw_fuzzy_img_subsig)
+    (strings, id_map, notes, unsupported_tags, saw_fuzzy_img_subsig)
 }
 
 fn lower_condition(
@@ -3105,6 +3126,7 @@ fn lower_raw_or_pcre_subsignature(
     imports: &mut Vec<String>,
     macro_groups: &MacroGroupIndex,
     notes: &mut Vec<String>,
+    unsupported_tags: &mut Vec<String>,
     saw_fuzzy_img_subsig: &mut bool,
 ) -> RawSubsigLowering {
     if raw.trim().is_empty() {
@@ -3289,6 +3311,7 @@ fn lower_raw_or_pcre_subsignature(
             known_ids,
             imports,
             notes,
+            unsupported_tags,
         ) {
             return RawSubsigLowering::StringExpr { line, expr };
         }
@@ -4555,6 +4578,7 @@ fn lower_pcre_trigger_condition(
     known_ids: &[Option<String>],
     imports: &mut Vec<String>,
     notes: &mut Vec<String>,
+    unsupported_tags: &mut Vec<String>,
 ) -> Option<String> {
     let prefix = prefix?.trim();
     if prefix.is_empty() {
@@ -4567,6 +4591,7 @@ fn lower_pcre_trigger_condition(
             notes.push(format!(
                 "subsig[{idx}] pcre trigger prefix parse failed ({reason}); lowered to false for safety"
             ));
+            unsupported_tags.push("pcre_trigger_prefix_parse_failure".to_string());
             return Some("false".to_string());
         }
     };
@@ -4577,14 +4602,24 @@ fn lower_pcre_trigger_condition(
             notes.push(format!(
                 "subsig[{idx}] pcre trigger expression parse failed; lowered to false for safety"
             ));
+            unsupported_tags.push("pcre_trigger_expression_parse_failure".to_string());
             return Some("false".to_string());
         }
     };
+
+    if pcre_trigger_expression_is_structurally_invalid(&trigger_ir) {
+        notes.push(format!(
+            "subsig[{idx}] pcre trigger expression parse failed; lowered to false for safety"
+        ));
+        unsupported_tags.push("pcre_trigger_expression_parse_failure".to_string());
+        return Some("false".to_string());
+    }
 
     if pcre_trigger_refs_self(&trigger_ir, idx) {
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression is self-referential (ClamAV rejects self-referential PCRE triggers); lowered to false for safety"
         ));
+        unsupported_tags.push("pcre_trigger_self_reference".to_string());
         return Some("false".to_string());
     }
 
@@ -4598,6 +4633,7 @@ fn lower_pcre_trigger_condition(
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression references unsupported/missing subsig index(es) {rendered}; lowered to false for safety"
         ));
+        unsupported_tags.push("pcre_trigger_missing_subsig_reference".to_string());
         return Some("false".to_string());
     }
 
@@ -4605,6 +4641,7 @@ fn lower_pcre_trigger_condition(
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression uses distinct/nested-count operators unsupported for strict lowering; lowered to false for safety"
         ));
+        unsupported_tags.push("pcre_trigger_distinct_or_nested_count_unsupported".to_string());
         return Some("false".to_string());
     }
 
@@ -4612,6 +4649,7 @@ fn lower_pcre_trigger_condition(
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
         ));
+        unsupported_tags.push("pcre_trigger_expression_resolved_false".to_string());
         return Some("false".to_string());
     }
 
@@ -4620,6 +4658,7 @@ fn lower_pcre_trigger_condition(
         notes.push(format!(
             "subsig[{idx}] pcre trigger expression resolved to false; lowered to false for safety"
         ));
+        unsupported_tags.push("pcre_trigger_expression_resolved_false".to_string());
         return Some("false".to_string());
     }
 
@@ -4663,6 +4702,26 @@ fn parse_pcre_trigger_prefix(prefix: &str) -> Result<ParsedPcrePrefix<'_>, Strin
         trigger: prefix,
         offset: None,
     })
+}
+
+fn pcre_trigger_expression_is_structurally_invalid(expr: &ir::LogicalExpression) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(_) => false,
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
+            nodes.is_empty()
+                || nodes
+                    .iter()
+                    .any(pcre_trigger_expression_is_structurally_invalid)
+        }
+        ir::LogicalExpression::MatchCount(inner, _)
+        | ir::LogicalExpression::Gt(inner, _)
+        | ir::LogicalExpression::Lt(inner, _)
+        | ir::LogicalExpression::MultiMatchCount(inner, _, _)
+        | ir::LogicalExpression::MultiGt(inner, _, _)
+        | ir::LogicalExpression::MultiLt(inner, _, _) => {
+            pcre_trigger_expression_is_structurally_invalid(inner)
+        }
+    }
 }
 
 fn pcre_trigger_refs_self(expr: &ir::LogicalExpression, self_idx: usize) -> bool {

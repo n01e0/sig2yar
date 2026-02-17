@@ -111,6 +111,10 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記145: LDB/PCRE trigger-prefix strict-false 維持経路を `clamav_unsupported` tag で機械可読化。
+  - 追加tag: `pcre_trigger_prefix_parse_failure`, `pcre_trigger_expression_parse_failure`, `pcre_trigger_self_reference`, `pcre_trigger_missing_subsig_reference`, `pcre_trigger_distinct_or_nested_count_unsupported`, `pcre_trigger_expression_resolved_false`。
+  - 対象: grouped distinct / self / missing / parse-fail / resolved-false など trigger-prefix strict-false 経路。
+  - 効果: scan-diff 側で strict-false mismatch の原因分類を note 文字列依存から tag 優先で安定化可能。
 - 2026-02-17 追記144: LDB/PCRE trigger prefix の distinct comparator（`>x,y`, `<x,y`）について、single-subsig subset のみ strict support 化。
   - 変更: `src/yara.rs` の trigger representable 判定で `MultiGt` / `MultiLt` を一律 false から分岐し、operand が single subsig の場合のみ許可。
   - lower方針: `#sN > x` / `#sN < x` を使い、distinct 閾値 `y` は既存方針どおり note（ignored）として記録。
