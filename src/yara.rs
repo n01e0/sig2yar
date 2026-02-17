@@ -4943,10 +4943,9 @@ fn lower_pcre_offset_window_condition(
                 // (`matcher-pcre.c`), so match *end* must stay within `start + maxshift`.
                 pcre_occurrence_window_expr(core, &start, &end)
             } else {
-                notes.push(format!(
-                    "subsig[{idx}] pcre maxshift present without 'e'; lowered to false for safety"
-                ));
-                "false".to_string()
+                // ClamAV non-encompass + maxshift accepts matches whose start offset
+                // is within maxshift from the adjusted buffer start.
+                pcre_occurrence_start_window_expr(core, &start, &end)
             }
         }
     }
