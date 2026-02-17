@@ -4603,7 +4603,7 @@ fn lower_pcre_trigger_condition(
 
     if !pcre_trigger_expression_is_strictly_representable(&trigger_ir) {
         notes.push(format!(
-            "subsig[{idx}] pcre trigger expression uses count/distinct operators unsupported for strict lowering; lowered to false for safety"
+            "subsig[{idx}] pcre trigger expression uses distinct/nested-count operators unsupported for strict lowering; lowered to false for safety"
         ));
         return Some("false".to_string());
     }
@@ -4728,6 +4728,27 @@ fn pcre_trigger_expression_is_strictly_representable(expr: &ir::LogicalExpressio
                 && nodes
                     .iter()
                     .all(pcre_trigger_expression_is_strictly_representable)
+        }
+        ir::LogicalExpression::MatchCount(inner, _)
+        | ir::LogicalExpression::Gt(inner, _)
+        | ir::LogicalExpression::Lt(inner, _)
+        | ir::LogicalExpression::MultiMatchCount(inner, _, _) => {
+            pcre_trigger_count_operand_is_strictly_representable(inner)
+        }
+        // `>x,y` / `<x,y` carry distinct-count semantics. We keep them strict-false
+        // until we can prove ClamAV parity end-to-end for trigger-prefix evaluation.
+        ir::LogicalExpression::MultiGt(_, _, _) | ir::LogicalExpression::MultiLt(_, _, _) => false,
+    }
+}
+
+fn pcre_trigger_count_operand_is_strictly_representable(expr: &ir::LogicalExpression) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(_) => true,
+        ir::LogicalExpression::And(nodes) | ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(pcre_trigger_count_operand_is_strictly_representable)
         }
         ir::LogicalExpression::MatchCount(_, _)
         | ir::LogicalExpression::Gt(_, _)

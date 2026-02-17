@@ -16,6 +16,18 @@ fn scan_match_count(src: &str, data: &[u8]) -> usize {
     results.matching_rules().len()
 }
 
+fn trigger_prefix_fixture(prefix_bytes: &[&[u8]], pcre_start_offset: usize) -> Vec<u8> {
+    let mut data = Vec::new();
+    for bytes in prefix_bytes {
+        data.extend_from_slice(bytes);
+    }
+    if data.len() < pcre_start_offset {
+        data.resize(pcre_start_offset, b'z');
+    }
+    data.extend_from_slice(b"abc");
+    data
+}
+
 fn hash_rules_source(signatures: &[&str]) -> String {
     let mut out = String::from("import \"hash\"\n");
 
@@ -1308,27 +1320,37 @@ fn yara_rule_with_pcre_mixed_self_referential_trigger_false_rejects_scan() {
 }
 
 #[test]
-fn yara_rule_with_pcre_count_trigger_prefix_false_rejects_scan() {
+fn yara_rule_with_pcre_count_trigger_prefix_matches_and_rejects_scan() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let two_triggers = trigger_prefix_fixture(&[b"AAAA", b"BBBB"], 220);
+    let no_trigger = trigger_prefix_fixture(&[b"CCCC"], 220);
+
+    assert!(src.contains("1 of ($s0, $s1)"));
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 1);
+    assert_eq!(scan_match_count(src.as_str(), &two_triggers), 1);
+    assert_eq!(scan_match_count(src.as_str(), &no_trigger), 0);
 }
 
 #[test]
-fn yara_rule_with_pcre_match_range_trigger_prefix_false_rejects_scan() {
+fn yara_rule_with_pcre_match_range_trigger_prefix_matches_scan() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)=1,2/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let two_triggers = trigger_prefix_fixture(&[b"AAAA", b"BBBB"], 220);
+
+    assert!(src.contains("(1 of ($s0, $s1)) and not (3 of ($s0, $s1))"));
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 1);
+    assert_eq!(scan_match_count(src.as_str(), &two_triggers), 1);
 }
 
 #[test]
@@ -1339,7 +1361,7 @@ fn yara_rule_with_pcre_multi_gt_trigger_prefix_false_rejects_scan() {
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
+    assert!(src.contains("distinct/nested-count operators unsupported for strict lowering"));
     assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
 }
 
@@ -1351,32 +1373,40 @@ fn yara_rule_with_pcre_multi_lt_trigger_prefix_false_rejects_scan() {
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
+    assert!(src.contains("distinct/nested-count operators unsupported for strict lowering"));
     assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
 }
 
 #[test]
-fn yara_rule_with_pcre_gt_trigger_prefix_false_rejects_scan() {
+fn yara_rule_with_pcre_gt_trigger_prefix_matches_and_rejects_scan() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let two_triggers = trigger_prefix_fixture(&[b"AAAA", b"BBBB"], 220);
+
+    assert!(src.contains("2 of ($s0, $s1)"));
+    assert_eq!(scan_match_count(src.as_str(), &two_triggers), 1);
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 0);
 }
 
 #[test]
-fn yara_rule_with_pcre_lt_trigger_prefix_false_rejects_scan() {
+fn yara_rule_with_pcre_lt_trigger_prefix_matches_and_rejects_scan() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)<2/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
     let src = rule.to_string();
 
-    assert!(src.contains("count/distinct operators unsupported for strict lowering"));
-    assert_eq!(scan_match_count(src.as_str(), b"AAAABBBBzzzzabc"), 0);
+    let one_trigger = trigger_prefix_fixture(&[b"AAAA"], 220);
+    let two_triggers = trigger_prefix_fixture(&[b"AAAA", b"BBBB"], 220);
+
+    assert!(src.contains("not (2 of ($s0, $s1))"));
+    assert_eq!(scan_match_count(src.as_str(), &one_trigger), 1);
+    assert_eq!(scan_match_count(src.as_str(), &two_triggers), 0);
 }
 
 #[test]

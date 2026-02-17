@@ -31,6 +31,8 @@ Last update: 2026-02-17
       - 2026-02-17: range（maxshift）上の `r/re` は `matcher-pcre.c` 同型で window 条件に落とし込み、strict-false から除外
 - [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
       「同型可/不可」で再分類し、同型可だけ support 化
+      - 2026-02-17: count-comparator subset（`=x`, `=x,y`, `>x`, `<x`）は strict support 化
+      - 維持: distinct 系（`>x,y`, `<x,y`）と self/missing 参照は strict-false 維持
 
 ### A2. byte_comparison（優先度: 中）
 - [ ] non-raw little-endian / non-exact / auto-base など strict-false 系のうち、
