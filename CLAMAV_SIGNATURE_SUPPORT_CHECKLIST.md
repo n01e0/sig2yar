@@ -111,9 +111,13 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記135: LDB/PCRE の quote-style named capture（`(?P'name'...)`）を同型rewrite（`(?P<name>...)`）で strict support 化。
+  - 変更: `src/yara.rs` に Python-style named syntax 正規化を追加し、`(?P'name'...)` は group名検証後に angle-style へ変換。
+  - 維持: `(?P=...)`（named backreference）は yara-x 非対応のため strict-false を維持。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に quote-style rewrite の positive（compile + match）を追加。
 - 2026-02-17 追記134: LDB/PCRE の `(?P...)` strict-false 判定を細分化し、yara-x 互換な named-capture subset（`(?P<name>...)`）を strict support 化。
-  - 変更: `src/yara.rs` の判定を `pattern.contains("(?P")` から構文種別判定へ更新し、`(?P=...)` / `(?P'...')` / その他非 `<` 系のみ strict-false へ。
-  - 維持: backreference系（`(?P=...)`）と quote-style named capture（`(?P'...')`）は `yara-x` 非互換のため strict-false + note を維持。
+  - 変更: `src/yara.rs` の判定を `pattern.contains("(?P")` から構文種別判定へ更新し、`(?P=...)` / `(?P'...')` / その他非 `<` 系を strict-false へ（※`(?P'...')` は追記135で同型rewrite対応）。
+  - 維持: backreference系（`(?P=...)`）は `yara-x` 非互換のため strict-false + note を維持。
   - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に positive（`(?P<funcname>abc)` match）と negative（`(?P=...)`, `(?P'...')` strict-false）を追加。
 - 2026-02-17 追記133: strict-safe で残っている不足機能を `TODO.md` として新規作成し、実装可能な strict support 化トラックを分類した。
   - 追加: `TODO.md`（LDB/PCRE・byte_comparison・NDB jump/offset・DBタイプ単位の strict-safe 残課題）

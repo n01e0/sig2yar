@@ -17,7 +17,9 @@ Last update: 2026-02-17
 ### A1. PCRE 変換（優先度: 高）
 - [x] `(?P...)` の blanket strict-false を分解し、
       **同型で落とせる subset**（例: 名前付きcaptureのみで backrefなし）を抽出して strict support 化
-      - 2026-02-17: `(?P<name>...)` は許可、`(?P=...)` / `(?P'...')` のみ strict-false に限定
+      - 2026-02-17: `(?P<name>...)` は許可
+      - 2026-02-17: `(?P'name'...)` は `(?P<name>...)` へ同型rewriteして許可
+      - 維持: `(?P=...)`（named backreference）など yara-x 非互換経路は strict-false
 - [ ] PCRE flags/offset の strict-false 経路を分類し、
       YARA側で同型表現可能なものを個別に support 化
 - [ ] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
@@ -80,6 +82,7 @@ Last update: 2026-02-17
 
 - [ ] D1: strict-false 経路を `clamav_unsupported` / lowering note 単位で再集計し、
       「実装で潰せる順」にランキング化
-- [ ] D2: P0として PCRE の同型拡張（`(?P...)` の過剰strict-false解消可能分）を1PRで実施
+- [x] D2: P0として PCRE の同型拡張（`(?P...)` の過剰strict-false解消可能分）を段階実施
+      - 2026-02-17: `(?P<name>...)` 許可 + `(?P'name'...)` rewrite許可を main へ反映
 - [ ] D3: P1として `mdb/msb/imp` strict mapping の最小縦切り実装（parse→lower→compile→scan回帰）
 - [ ] D4: 対象外と判断した strict-safe 領域は README/checklist に非対象理由を明記
