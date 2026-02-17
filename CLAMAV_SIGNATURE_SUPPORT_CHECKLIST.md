@@ -119,6 +119,9 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記156: NDB target_type strict-false のうち reserved/invalid/internal+ を non-target として運用固定。
+  - 対象: reserved `8`, internal+ `13/14`, invalid literal（non-numeric）。
+  - 方針: standalone YARAで同型化対象に含めず strict-false固定（README support表と NDB-5 fixture 方針に一致）。
 - 2026-02-18 追記155: byte_comparison auto-base の strict subset を追加。
   - 変更: `src/yara.rs` `lower_textual_byte_comparison_condition(...)` で `a`(auto) の `width<=2` を decimal同型として strict support。
   - 根拠: ClamAV `matcher-byte-comp.c` の auto-detectは `0x/0X` prefix 判定（len>=3前提）であり、`width<=2` では decimal経路固定。
