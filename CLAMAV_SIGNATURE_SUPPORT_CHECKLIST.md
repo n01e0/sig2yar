@@ -4,6 +4,8 @@ Last update: 2026-02-17
 
 このチェックリストは「sig2yarでどのClamAVシグネチャタイプをサポートできていて、どこが未対応か」を管理するためのメモ。
 
+strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TODO.md`](./TODO.md) で管理する。
+
 ---
 
 ## 1) トップレベルDBタイプ（拡張子）
@@ -109,6 +111,9 @@ Last update: 2026-02-17
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記133: strict-safe で残っている不足機能を `TODO.md` として新規作成し、実装可能な strict support 化トラックを分類した。
+  - 追加: `TODO.md`（LDB/PCRE・byte_comparison・NDB jump/offset・DBタイプ単位の strict-safe 残課題）
+  - 方針: 「実装不足で潰せる strict-false」と「runtime依存で standalone YARA 同型が難しい strict-false」を分離し、前者を優先して解消。
 - 2026-02-17 追記132: PCRE の Python-style named capture/backreference 構文（`(?P...)`）を strict-safe false + note に統一。
   - 背景: 実データ scan-diff で `(?P=funcname)` が `yara-x` compile エラー（`unrecognized flag`）を誘発し、検証run停止要因になっていた。
   - 変更: `src/yara.rs` で `parse_pcre_like` 後に `pattern.contains("(?P")` を検出し、`false + note` へ早期収束。
