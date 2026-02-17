@@ -2314,6 +2314,17 @@ fn yara_rule_with_non_raw_byte_comparison_little_endian_hex_width1_matches_fixtu
 }
 
 #[test]
+fn yara_rule_with_non_raw_byte_comparison_little_endian_hex_width4_exact_matches_fixture() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle4#=3412)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+    let src = rule.to_string();
+
+    // LE(hex,width=4) normalizes "1234" -> "3412" in ClamAV.
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA1234"), 1);
+    assert_eq!(scan_match_count(src.as_str(), b"AAAA3412"), 0);
+}
+
+#[test]
 fn yara_rule_with_raw_byte_comparison_size3_false_rejects_scan() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#ib3#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();

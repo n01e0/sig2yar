@@ -3994,16 +3994,42 @@ fn lower_textual_byte_comparison_condition(
         }
     };
 
-    // ClamAV matcher-byte-comp.c: non-raw LE normalization is effectively a no-op for 1-byte hex,
-    // so that subset is representable with the same textual comparator lowering.
-    if matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little))
-        && !(matches!(base, ByteCmpBase::Hex) && width == 1)
-    {
-        notes.push(format!(
-            "subsig[{idx}] byte_comparison non-raw little-endian unsupported; lowered to false for safety"
-        ));
-        unsupported_tags.push("byte_comparison_nonraw_little_endian_unsupported".to_string());
-        return Some("false".to_string());
+    let little_endian = matches!(byte_cmp.options.endian, Some(ByteCmpEndian::Little));
+
+    // ClamAV matcher-byte-comp.c:
+    // - non-raw LE is valid only for hex/auto-hex paths
+    // - LE normalization reorders hex byte-pairs for width>1
+    // Strict subset currently supported:
+    //   * hle1 (existing no-op subset)
+    //   * hle{2,4,...} with exact (`e`) and even width
+    if little_endian {
+        if !matches!(base, ByteCmpBase::Hex) {
+            notes.push(format!(
+                "subsig[{idx}] byte_comparison non-raw little-endian unsupported; lowered to false for safety"
+            ));
+            unsupported_tags.push("byte_comparison_nonraw_little_endian_unsupported".to_string());
+            return Some("false".to_string());
+        }
+
+        if width > 1 {
+            if !byte_cmp.options.exact {
+                notes.push(format!(
+                    "subsig[{idx}] byte_comparison non-raw little-endian requires exact-width semantics for width>1; lowered to false for safety"
+                ));
+                unsupported_tags
+                    .push("byte_comparison_nonraw_little_endian_unsupported".to_string());
+                return Some("false".to_string());
+            }
+
+            if width % 2 != 0 {
+                notes.push(format!(
+                    "subsig[{idx}] byte_comparison non-raw little-endian odd width {width} unsupported for strict lowering; lowered to false for safety"
+                ));
+                unsupported_tags
+                    .push("byte_comparison_nonraw_little_endian_unsupported".to_string());
+                return Some("false".to_string());
+            }
+        }
     }
 
     if !byte_cmp.options.exact && width != 1 {
@@ -4046,6 +4072,12 @@ fn lower_textual_byte_comparison_condition(
     let mut guards = base_guards.to_vec();
     guards.push(format!("({start_expr}) + {width} <= filesize"));
 
+    let digit_positions = if little_endian && width > 1 {
+        build_little_endian_hex_digit_positions(width)
+    } else {
+        (0..width).collect()
+    };
+
     let mut cmp_parts = Vec::new();
     for cmp in &byte_cmp.comparisons {
         let threshold_specs = build_textual_threshold_specs(base, width, cmp.value);
@@ -4060,7 +4092,7 @@ fn lower_textual_byte_comparison_condition(
 
         let mut exprs = Vec::new();
         for spec in &threshold_specs {
-            let expr = build_textual_clause_condition(start_expr, spec, cmp.op);
+            let expr = build_textual_clause_condition(start_expr, spec, cmp.op, &digit_positions);
             if !exprs.contains(&expr) {
                 exprs.push(expr);
             }
@@ -4171,20 +4203,31 @@ fn build_hex_textual_threshold(width: usize, value: u64) -> Option<TextualThresh
     })
 }
 
+fn build_little_endian_hex_digit_positions(width: usize) -> Vec<usize> {
+    let mut out = Vec::with_capacity(width);
+    for pos in 0..width {
+        let base = width - 2 - ((pos / 2) * 2);
+        out.push(base + (pos % 2));
+    }
+    out
+}
+
 fn build_textual_clause_condition(
     start_expr: &str,
     threshold: &TextualThresholdSpec,
     op: ByteCmpOp,
+    digit_positions: &[usize],
 ) -> String {
-    let all_valid = build_textual_all_valid_condition(start_expr, threshold);
+    let all_valid = build_textual_all_valid_condition(start_expr, threshold, digit_positions);
 
     let cmp_expr = match op {
         ByteCmpOp::Eq => {
             let mut parts = Vec::new();
             for (pos, digit) in threshold.digits.iter().enumerate() {
+                let source_pos = digit_positions[pos];
                 parts.push(build_textual_digit_eq_condition(
                     start_expr,
-                    pos,
+                    source_pos,
                     threshold.radix,
                     *digit,
                 ));
@@ -4196,24 +4239,26 @@ fn build_textual_clause_condition(
             for pos in 0..threshold.digits.len() {
                 let mut parts = Vec::new();
                 for prev in 0..pos {
+                    let source_prev = digit_positions[prev];
                     parts.push(build_textual_digit_eq_condition(
                         start_expr,
-                        prev,
+                        source_prev,
                         threshold.radix,
                         threshold.digits[prev],
                     ));
                 }
 
+                let source_pos = digit_positions[pos];
                 let boundary = match op {
                     ByteCmpOp::Gt => build_textual_digit_gt_condition(
                         start_expr,
-                        pos,
+                        source_pos,
                         threshold.radix,
                         threshold.digits[pos],
                     ),
                     ByteCmpOp::Lt => build_textual_digit_lt_condition(
                         start_expr,
-                        pos,
+                        source_pos,
                         threshold.radix,
                         threshold.digits[pos],
                     ),
@@ -4239,12 +4284,17 @@ fn build_textual_clause_condition(
     format!("({all_valid} and {cmp_expr})")
 }
 
-fn build_textual_all_valid_condition(start_expr: &str, threshold: &TextualThresholdSpec) -> String {
+fn build_textual_all_valid_condition(
+    start_expr: &str,
+    threshold: &TextualThresholdSpec,
+    digit_positions: &[usize],
+) -> String {
     let mut parts = Vec::new();
     for pos in 0..threshold.digits.len() {
+        let source_pos = digit_positions[pos];
         parts.push(build_textual_digit_valid_condition(
             start_expr,
-            pos,
+            source_pos,
             threshold.radix,
         ));
     }

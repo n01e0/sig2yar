@@ -63,7 +63,7 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ### 2.2 近似/暫定対応（要改善）
 
-- [x] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/<`（基本は exact(e)、加えて strict subset として `width=1` の `!e` / `h+l`）を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..`/`+010` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..`/`+010` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08` / `=+08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-raw `!e` の `width>1`、non-raw little-endian の `h+width=1` 以外、`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。2026-02-17: strict-false 主要経路に `clamav_unsupported` taxonomy tag を付与（追記146）。2026-02-17: strict subset として non-raw `width=1` の一部（`!e` / `h+l`）を strict support 化（追記147）。
+- [x] `byte_comparison` は `i`(raw, 1/2/4/8byte) と non-raw `=/>/<`（基本は exact(e)、加えて strict subset として `width=1` の `!e` / `h+l`）を条件式にlower済み。`h` base の数値トークンは hex 値として解釈（例: `=10` -> `0x10`）。offset は `strtol(...,0)` 相当へ寄せ、`0x..`/octal に加えて `+0x..`/`+010` などの明示 `+` 付き数値を受理し、bare-hex（例: `>>0A`）は malformed 扱い。threshold は `0x..`/`+0x..`/`+010` を受理し、digit-only の leading-zero token は base-0 で octal 解釈（例: `=010` -> `8`）、invalid octal（例: `=08` / `=+08`）は malformed。decimal base では bare hex-alpha（例: `A0`）のみ strict false。unsupported ケース（non-raw `!e` の `width>1`、non-raw little-endian のうち `h+width=1` と `h+e+偶数width` 以外、`a`(auto) base・表現不能値・`h` base 幅>18（`CLI_BCOMP_MAX_HEX_BLEN`）・decimal baseでbare hex-alpha閾値、comparison clause 3件以上（ClamAVは最大2件）、negative comparison value、rawの3/5/6/7byte および 9byte+・型幅超過閾値、矛盾した multi-clause、malformed byte_comparison format）は safety false に倒す（fallbackではなく厳密化）。2026-02-17: strict-false 主要経路に `clamav_unsupported` taxonomy tag を付与（追記146）。2026-02-17: strict subset として non-raw `width=1` の一部（`!e` / `h+l`）を strict support 化（追記147）。
 - [x] `macro` (`${min-max}id$`) は ClamAV source 準拠で **macro group id** として解釈し、未表現部分は safety false に厳密化済み（descending range / invalid format / malformed trailing `$` 欠落 / group>=32 を含む。追記86で linked ndb 側 `offset=$32` など out-of-range group も ignore + false fallback を fixture 固定、追記87で linked ndb body が strict non-representable な場合の ignore + false fallback を fixture 固定、追記88で linked ndb が mixed（一部ignore＋一部採用）でも採用可能メンバーだけで lower 継続する挙動を fixture 固定、追記89で linked ndb が all-ignored（一部invalid target＋一部non-representable body）でも ignore reason を残したうえで macro false fallback する挙動を fixture 固定）。
   - 2026-02-12メモ: Cisco-Talos/clamav の公式テスト参照対象（`unit_tests/check_matchers.c`, `unit_tests/clamscan/regex_test.py`, `unit_tests/clamscan/fuzzy_img_hash_test.py`）および `unit_tests` 配下の `\$\{[0-9]` grep では、macro-group挙動を直接検証できるfixtureを確認できず（未発見）。
   - source根拠: `libclamav/readdb.c` (`${min-max}group$` parse, group<32)、`libclamav/matcher-ac.c` (`macro_lastmatch[group]` 依存)。**単独lowerでは runtime state 非観測のため false+note 維持**。
@@ -119,6 +119,11 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記152: A2拡張として non-raw little-endian hex の strict subset を追加。
+  - 変更: `src/yara.rs` `lower_textual_byte_comparison_condition(...)` で `h+le+e+偶数width` を strict support。
+  - 方針: ClamAV `matcher-byte-comp.c` の LE normalization（hex byte-pair reverse）に同型化し、比較桁位置を YARA条件へ写像。
+  - 維持: `h+le` の non-exact(`!e`) と odd幅（`width>1`）は strict-false 維持。
+  - テスト: `tests/yara_rule.rs` / `tests/yara_compile.rs` に `hle4` 回帰（`AAAA1234` match, `AAAA3412` reject）を追加。
 - 2026-02-18 追記151: D4（non-target明文化）を実施。
   - 変更: README/README.ja に「strict-safe 非対象スコープ（v1方針）」を追記。
   - 変更: 本checklist 1.4 に non-target 固定リスト（runtime依存 / override意味 / 外部サブシステム依存）を追加。
