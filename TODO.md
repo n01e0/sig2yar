@@ -42,6 +42,9 @@ Last update: 2026-02-18
       - 2026-02-17: strict subset として `width=1` を support 化
         - non-raw non-exact（`!e`）は `width=1` のとき strict support
         - non-raw little-endian は `h` base かつ `width=1` のとき strict support
+      - 2026-02-18: non-raw little-endian `h` base を拡張
+        - `width>1` は `exact(e)` かつ偶数幅の subset を strict support（ClamAVのLE byte-pair normalizationに同型化）
+        - `width>1` かつ non-exact / odd幅 は strict-false 維持
 - [ ] raw size 制約（1/2/4/8以外）と幅制約のうち、
       安全に同型へ寄せられる範囲があるかを検証
 - [x] strict-false 維持経路の機械可読化（taxonomy）

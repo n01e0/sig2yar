@@ -2354,15 +2354,15 @@ fn lowers_byte_comparison_non_raw_non_exact_width1() {
 }
 
 #[test]
-fn lowers_byte_comparison_non_raw_little_endian_to_false_for_safety() {
-    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle2#=12)").unwrap();
+fn lowers_byte_comparison_non_raw_little_endian_non_exact_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hl2#=12)").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "($s0 and false)");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("little-endian unsupported; lowered to false for safety"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("little-endian requires exact-width semantics"))));
     assert!(rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
@@ -2378,6 +2378,24 @@ fn lowers_byte_comparison_non_raw_little_endian_hex_width1() {
 
     assert!(rule.condition.contains("for any j in (1..#s0)"));
     assert!(rule.condition.contains("(@s0[j] + 4) + 1 <= filesize"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_unsupported"
+                && value == "byte_comparison_nonraw_little_endian_unsupported"
+    )));
+}
+
+#[test]
+fn lowers_byte_comparison_non_raw_little_endian_hex_width4_exact() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;0&1;41414141;0(>>4#hle4#=3412)").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("for any j in (1..#s0)"));
+    // LE(hex, width=4) compares normalized byte-pair-swapped view, so value 0x3412 maps to
+    // original bytes "1234" and references positions +2,+3,+0,+1 in that logical order.
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 2) == 0x33"));
+    assert!(rule.condition.contains("uint8((@s0[j] + 4) + 0) == 0x31"));
     assert!(!rule.meta.iter().any(|m| matches!(
         m,
         YaraMeta::Entry { key, value }
