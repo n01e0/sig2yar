@@ -111,6 +111,10 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-17 追記148: scan-diff の strict-false 集計に track分類と actionability ranking を追加（D1）。
+  - 変更: `scripts/logical-scan-diff.sh` の `summary.json` に `top_strict_false_tracks` / `strict_false_actionability_ranking` を追加。
+  - 変更: `report.md` に `top strict_false tracks` / `strict_false actionability ranking (tag -> track)` セクションを追加。
+  - 目的: `clamav_unsupported` tag を TODOレーン（A1/A2/B/C1/C2等）へ直接マップして、次の strict-support 実装順を機械的に決められるようにする。
 - 2026-02-17 追記147: `byte_comparison` non-raw strict-false の一部を strict support 化。
   - 変更: `src/yara.rs` の `lower_textual_byte_comparison_condition(...)` で `width=1` subset を許可。
     - non-raw non-exact（`!e`）は `width=1` のとき strict support。
