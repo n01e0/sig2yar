@@ -504,9 +504,41 @@ fn lowers_pcre_trigger_prefix_with_match_range_expression_to_count_window_condit
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_multi_gt_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_multi_gt_or_subset_to_grouped_distinct_condition() {
     let sig =
         LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)>1,1/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("((#s0 + #s1) > 1) and (1 of ($s0, $s1))"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
+    )));
+}
+
+#[test]
+fn lowers_pcre_trigger_prefix_with_multi_lt_or_subset_to_grouped_distinct_condition() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)<2,1/abc/")
+            .unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert!(rule.condition.contains("((#s0 + #s1) < 2) and (1 of ($s0, $s1))"));
+    assert!(!rule.meta.iter().any(|m| matches!(
+        m,
+        YaraMeta::Entry { key, value }
+            if key == "clamav_lowering_notes"
+                && value.contains("distinct/nested-count operators unsupported for strict lowering")
+    )));
+}
+
+#[test]
+fn lowers_pcre_trigger_prefix_with_multi_gt_non_or_expression_to_false_for_safety() {
+    let sig =
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0&1)>1,1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
@@ -526,9 +558,9 @@ fn lowers_pcre_trigger_prefix_with_multi_gt_expression_to_false_for_safety() {
 }
 
 #[test]
-fn lowers_pcre_trigger_prefix_with_multi_lt_expression_to_false_for_safety() {
+fn lowers_pcre_trigger_prefix_with_multi_lt_non_or_expression_to_false_for_safety() {
     let sig =
-        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0|1)<2,1/abc/")
+        LogicalSignature::parse("Foo.Bar-1;Target:1;2;41414141;42424242;200,300:(0&1)<2,1/abc/")
             .unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 

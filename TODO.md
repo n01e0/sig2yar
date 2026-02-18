@@ -34,8 +34,9 @@ Last update: 2026-02-18
       「同型可/不可」で再分類し、同型可だけ support 化
       - 2026-02-17: count-comparator subset（`=x`, `=x,y`, `>x`, `<x`）は strict support 化
       - 2026-02-17: distinct comparator の single-subsig subset（`0>x,y`, `0<x,y`）は strict support 化（distinct閾値は note 付きで無視）
+      - 2026-02-18: distinct comparator の OR-only grouped subset（`(0|1|...)>x,y`, `<x,y`）を strict support 化
       - 2026-02-17: strict-false維持経路（grouped distinct / self / missing / trigger parse fail / trigger expr parse fail / trigger resolved false）を `clamav_unsupported` tag で機械可読化
-      - 維持: grouped distinct（`(a|b)>x,y` / `(a|b)<x,y`）と self/missing 参照は strict-false 維持
+      - 維持: 非OR grouped distinct（`&` 含む、nested count/distinct）と self/missing 参照は strict-false 維持
 
 ### A2. byte_comparison（優先度: 中）
 - [x] non-raw little-endian / non-exact / auto-base など strict-false 系のうち、

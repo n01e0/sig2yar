@@ -5086,12 +5086,13 @@ fn pcre_trigger_expression_is_strictly_representable(expr: &ir::LogicalExpressio
         | ir::LogicalExpression::MultiMatchCount(inner, _, _) => {
             pcre_trigger_count_operand_is_strictly_representable(inner)
         }
-        // Distinct-count comparators are accepted only for the single-subsig subset,
-        // where lowering already has an exact path (`#sN > x` / `#sN < x`) and merely
-        // drops the redundant distinct threshold note.
+        // Distinct-count comparators are accepted for:
+        // - single-subsig subset (`#sN > x` / `#sN < x`), and
+        // - OR-only grouped subset (`(#s0 + #s1 + ...)` + `y of (...)`).
+        // Other grouped forms (e.g. `&`/nested count operators) remain strict-false.
         ir::LogicalExpression::MultiGt(inner, _, _)
         | ir::LogicalExpression::MultiLt(inner, _, _) => {
-            pcre_trigger_distinct_operand_is_single_subsig(inner)
+            pcre_trigger_distinct_operand_is_supported_subset(inner)
         }
     }
 }
@@ -5114,8 +5115,21 @@ fn pcre_trigger_count_operand_is_strictly_representable(expr: &ir::LogicalExpres
     }
 }
 
-fn pcre_trigger_distinct_operand_is_single_subsig(expr: &ir::LogicalExpression) -> bool {
-    matches!(expr, ir::LogicalExpression::SubExpression(_))
+fn pcre_trigger_distinct_operand_is_supported_subset(expr: &ir::LogicalExpression) -> bool {
+    pcre_trigger_distinct_operand_is_or_only_string_set(expr)
+}
+
+fn pcre_trigger_distinct_operand_is_or_only_string_set(expr: &ir::LogicalExpression) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(_) => true,
+        ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(pcre_trigger_distinct_operand_is_or_only_string_set)
+        }
+        _ => false,
+    }
 }
 
 fn pcre_trigger_expression_definitely_false(
