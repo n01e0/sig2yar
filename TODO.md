@@ -68,12 +68,16 @@ Last update: 2026-02-18
       runtime依存なしで確定化できる経路を追加
 
 ### A4. target description（優先度: 低）
-- [ ] `Engine` / `Container` / `Intermediates` / `IconGroup1` / `IconGroup2` の strict-false について、
+- [x] `Engine` / `Container` / `Intermediates` / `IconGroup1` / `IconGroup2` の strict-false について、
       standalone YARAで観測可能にする設計があるか再調査
+      - 2026-02-18: v1 non-target方針へ統合。
+        README の ldb caveat（"non-observable target-description constraints"）に合わせ、strict-false固定を運用継続。
 
 ### A5. fuzzy_img（優先度: 低）
-- [ ] `fuzzy_img` strict-false の改善可能性を調査
+- [x] `fuzzy_img` strict-false の改善可能性を調査
       （standalone YARA内で同型不可なら「明確に非対象」として固定）
+      - 2026-02-18: v1 non-target方針へ統合。
+        ClamAV runtime hash behavior 依存のため standalone YARA同型不可として strict-false固定。
 
 ---
 
