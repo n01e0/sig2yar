@@ -64,8 +64,10 @@ Last update: 2026-02-18
 ### A3. logical expression 周辺（優先度: 中）
 - [x] `MultiGt` / `MultiLt` grouped strict-false のうち、
       distinct条件を壊さず表現できる subset の有無を調査
-      - 2026-02-18: 再調査の結果、grouped distinct 条件は standalone YARAで同型保持不可。
-        single-subsig subset（既存対応）以外は strict-false 維持で固定。
+      - 2026-02-18: 再調査で OR-only grouped subset（`(a|b|...)>x,y` / `<x,y`）は
+        `(#a + #b + ...)` と `y of ($a,$b,...)` の組み合わせで strict support 化可能と確認。
+      - 2026-02-18: 実装反映後は OR-only grouped subset を strict support 化し、
+        非OR grouped（`&` 含む、入れ子count/distinct等）は strict-false 維持で固定。
 - [x] macro trigger/anchor 周辺 strict-false のうち、
       runtime依存なしで確定化できる経路を追加
       - 2026-02-18: 既存 strict subset（linked NDB + direct anchor）で打ち止め。

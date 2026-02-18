@@ -207,15 +207,23 @@ fn lowers_multilt_for_single_subsig_with_occurrence_count() {
 }
 
 #[test]
-fn lowers_multigt_for_group_to_false_for_safety() {
+fn lowers_multigt_for_group_or_subset_with_distinct_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)>2,1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "((#s0 + #s1) > 2) and (1 of ($s0, $s1))");
+}
+
+#[test]
+fn lowers_multigt_for_group_non_or_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0&1)>2,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "false");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-gt grouped expression unsupported for strict lowering"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-gt grouped expression unsupported for strict lowering (requires OR-only string set)"))));
 }
 
 #[test]
@@ -344,15 +352,23 @@ fn lowers_hex_subsignature_with_wide_ascii_fullword_modifier_to_branch_dispatche
 }
 
 #[test]
-fn lowers_multilt_for_group_to_false_for_safety() {
+fn lowers_multilt_for_group_or_subset_with_distinct_condition() {
     let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0|1)<3,1;41414141;42424242").unwrap();
+    let rule = YaraRule::try_from(&sig).unwrap();
+
+    assert_eq!(rule.condition, "((#s0 + #s1) < 3) and (1 of ($s0, $s1))");
+}
+
+#[test]
+fn lowers_multilt_for_group_non_or_to_false_for_safety() {
+    let sig = LogicalSignature::parse("Foo.Bar-1;Target:1;(0&1)<3,1;41414141;42424242").unwrap();
     let rule = YaraRule::try_from(&sig).unwrap();
 
     assert_eq!(rule.condition, "false");
     assert!(rule
         .meta
         .iter()
-        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt grouped expression unsupported for strict lowering"))));
+        .any(|m| matches!(m, YaraMeta::Entry { key, value } if key == "clamav_lowering_notes" && value.contains("multi-lt grouped expression unsupported for strict lowering (requires OR-only string set)"))));
 }
 
 #[test]
