@@ -2795,9 +2795,21 @@ fn lower_condition(
                 return format!("#{single} > {count}");
             }
 
+            if let Some(set) = lower_distinct_group_set(inner, id_map, notes) {
+                if *distinct > set.len() {
+                    notes.push(format!(
+                        "multi-gt distinct threshold {distinct} exceeds grouped operand size {}; lowered to false",
+                        set.len()
+                    ));
+                    return "false".to_string();
+                }
+
+                return lower_grouped_distinct_condition(set, *count, *distinct, ">");
+            }
+
             if lower_count_set(inner, id_map, notes).is_some() {
                 notes.push(
-                    "multi-gt grouped expression unsupported for strict lowering; lowered to false for safety"
+                    "multi-gt grouped expression unsupported for strict lowering (requires OR-only string set); lowered to false for safety"
                         .to_string(),
                 );
             }
@@ -2825,9 +2837,21 @@ fn lower_condition(
                 return "false".to_string();
             }
 
+            if let Some(set) = lower_distinct_group_set(inner, id_map, notes) {
+                if *distinct > set.len() {
+                    notes.push(format!(
+                        "multi-lt distinct threshold {distinct} exceeds grouped operand size {}; lowered to false",
+                        set.len()
+                    ));
+                    return "false".to_string();
+                }
+
+                return lower_grouped_distinct_condition(set, *count, *distinct, "<");
+            }
+
             if lower_count_set(inner, id_map, notes).is_some() {
                 notes.push(
-                    "multi-lt grouped expression unsupported for strict lowering; lowered to false for safety"
+                    "multi-lt grouped expression unsupported for strict lowering (requires OR-only string set); lowered to false for safety"
                         .to_string(),
                 );
             }
@@ -2896,6 +2920,87 @@ fn lower_count_set(
         );
         None
     }
+}
+
+fn lower_distinct_group_set(
+    expr: &ir::LogicalExpression,
+    id_map: &[Option<String>],
+    notes: &mut Vec<String>,
+) -> Option<Vec<String>> {
+    let mut set = Vec::<String>::new();
+    if collect_or_subexpr_terms(expr, id_map, notes, &mut set) {
+        if set.is_empty() {
+            notes.push(
+                "multi-threshold grouped expression had no resolvable subsigs; lowered to false"
+                    .to_string(),
+            );
+            None
+        } else {
+            Some(set)
+        }
+    } else {
+        None
+    }
+}
+
+fn collect_or_subexpr_terms(
+    expr: &ir::LogicalExpression,
+    id_map: &[Option<String>],
+    notes: &mut Vec<String>,
+    out: &mut Vec<String>,
+) -> bool {
+    match expr {
+        ir::LogicalExpression::SubExpression(idx) => {
+            let id = id_for(*idx, id_map, notes);
+            if id == "false" {
+                return true;
+            }
+
+            if !is_yara_string_identifier(&id) {
+                notes.push(format!(
+                    "count expression references non-string subsig index {}; lowered to false",
+                    idx
+                ));
+                return false;
+            }
+
+            if !out.contains(&id) {
+                out.push(id);
+            }
+            true
+        }
+        ir::LogicalExpression::Or(nodes) => {
+            !nodes.is_empty()
+                && nodes
+                    .iter()
+                    .all(|node| collect_or_subexpr_terms(node, id_map, notes, out))
+        }
+        _ => false,
+    }
+}
+
+fn lower_grouped_distinct_condition(
+    set: Vec<String>,
+    threshold: usize,
+    distinct: usize,
+    cmp: &str,
+) -> String {
+    let occurrences = set
+        .iter()
+        .map(|id| format!("#{}", id.trim_start_matches('$')))
+        .collect::<Vec<_>>();
+    let total = if occurrences.len() == 1 {
+        occurrences[0].clone()
+    } else {
+        format!("({})", occurrences.join(" + "))
+    };
+
+    if distinct == 0 {
+        return format!("{total} {cmp} {threshold}");
+    }
+
+    let set_expr = set.join(", ");
+    format!("({total} {cmp} {threshold}) and ({distinct} of ({set_expr}))")
 }
 
 fn collect_subexpr_terms(
