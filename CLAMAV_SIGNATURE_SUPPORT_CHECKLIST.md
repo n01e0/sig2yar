@@ -119,6 +119,9 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記157: TODO A1-2（PCRE flags/offset strict-false 再分類）を完了化。
+  - 対応済み strict subset: `g` flag, exact/range offset + `r/re/e` の同型window条件。
+  - 維持: 同型不可の残件は `pcre_unsupported_flag` / `pcre_offset_*` taxonomy で strict-false運用。
 - 2026-02-18 追記156: NDB target_type strict-false のうち reserved/invalid/internal+ を non-target として運用固定。
   - 対象: reserved `8`, internal+ `13/14`, invalid literal（non-numeric）。
   - 方針: standalone YARAで同型化対象に含めず strict-false固定（README support表と NDB-5 fixture 方針に一致）。

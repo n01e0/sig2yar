@@ -20,7 +20,7 @@ Last update: 2026-02-18
       - 2026-02-17: `(?P<name>...)` は許可
       - 2026-02-17: `(?P'name'...)` は `(?P<name>...)` へ同型rewriteして許可
       - 維持: `(?P=...)`（named backreference）など yara-x 非互換経路は strict-false
-- [ ] PCRE flags/offset の strict-false 経路を分類し、
+- [x] PCRE flags/offset の strict-false 経路を分類し、
       YARA側で同型表現可能なものを個別に support 化
       - 2026-02-17: `g` flag は strict-false から除外（同型で表現可能として許可）
       - 2026-02-17: exact offset + `r` (`10:.../r`) は `@ >= offset` 条件で strict support 化
@@ -29,6 +29,7 @@ Last update: 2026-02-18
       - 2026-02-17: absolute range + non-`e`（`n,m:.../`）は start-window（`@ in [n, n+m]`）で strict support 化
       - 2026-02-17: relative offset（`EP/Sx/SL/SE/EOF-`）上の non-`e` + maxshift も start-window 同型で strict support 化
       - 2026-02-17: range（maxshift）上の `r/re` は `matcher-pcre.c` 同型で window 条件に落とし込み、strict-false から除外
+      - 2026-02-18: A1-2は完了扱い（同型で表現不能な残件は `pcre_unsupported_flag` / `pcre_offset_*` taxonomy で strict-false維持）
 - [x] trigger prefix の strict-false 経路（count/distinct/self/missing含む）を
       「同型可/不可」で再分類し、同型可だけ support 化
       - 2026-02-17: count-comparator subset（`=x`, `=x,y`, `>x`, `<x`）は strict support 化
