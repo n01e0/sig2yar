@@ -62,10 +62,14 @@ Last update: 2026-02-18
              raw(size-unsupported|threshold-out-of-range)/format-invalid
 
 ### A3. logical expression 周辺（優先度: 中）
-- [ ] `MultiGt` / `MultiLt` grouped strict-false のうち、
+- [x] `MultiGt` / `MultiLt` grouped strict-false のうち、
       distinct条件を壊さず表現できる subset の有無を調査
-- [ ] macro trigger/anchor 周辺 strict-false のうち、
+      - 2026-02-18: 再調査の結果、grouped distinct 条件は standalone YARAで同型保持不可。
+        single-subsig subset（既存対応）以外は strict-false 維持で固定。
+- [x] macro trigger/anchor 周辺 strict-false のうち、
       runtime依存なしで確定化できる経路を追加
+      - 2026-02-18: 既存 strict subset（linked NDB + direct anchor）で打ち止め。
+        残件は `macro_lastmatch` / runtime anchor state 依存のため strict-false 維持で固定。
 
 ### A4. target description（優先度: 低）
 - [x] `Engine` / `Container` / `Intermediates` / `IconGroup1` / `IconGroup2` の strict-false について、
