@@ -87,8 +87,10 @@ Last update: 2026-02-18
 ### B2. offset/target_type（優先度: 中）
 - [ ] offset strict-false（EP/Sx/SE/SL/VI/macro系）を
       「runtime必須」と「実装不足」で分類し直す
-- [ ] target_type strict-false（reserved/invalid/internal+）は
+- [x] target_type strict-false（reserved/invalid/internal+）は
       仕様上サポート対象外として明確化（実装TODOからは分離）
+      - 2026-02-18: NDB-5方針として `target_type=8/13+` と invalid literal を strict-false固定で運用。
+        README の support表（"reserved/unsupported target types"）と checklist（NDB-5/追記7）へ根拠を集約。
 
 ---
 
