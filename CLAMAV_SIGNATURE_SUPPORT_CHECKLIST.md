@@ -119,6 +119,11 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記158: TODO B2 offset strict-false の分類を確定。
+  - runtime必須: `VI` offset, macro offset（`$group$`）
+    - 根拠: ClamAV runtime の version-info / macro_lastmatch 依存。
+  - 実装不足: 当面なし。
+    - `EP/Sx/SE/SL` の strict-false は「非exec targetで無効」または「offset token不正」の仕様境界として整理。
 - 2026-02-18 追記157: TODO A1-2（PCRE flags/offset strict-false 再分類）を完了化。
   - 対応済み strict subset: `g` flag, exact/range offset + `r/re/e` の同型window条件。
   - 維持: 同型不可の残件は `pcre_unsupported_flag` / `pcre_offset_*` taxonomy で strict-false運用。
