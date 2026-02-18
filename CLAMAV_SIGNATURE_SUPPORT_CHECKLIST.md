@@ -119,6 +119,11 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記159: TODO A4/A5 を non-target方針へ統合して完了化。
+  - A4（target description: Engine/Container/Intermediates/IconGroup1/2）
+    - standalone YARAで観測不能な制約として strict-false固定（README ldb caveat に整合）。
+  - A5（fuzzy_img）
+    - ClamAV runtime hash behavior 依存のため strict-false固定（v1 non-target）。
 - 2026-02-18 追記158: TODO B2 offset strict-false の分類を確定。
   - runtime必須: `VI` offset, macro offset（`$group$`）
     - 根拠: ClamAV runtime の version-info / macro_lastmatch 依存。
