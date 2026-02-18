@@ -86,8 +86,13 @@ Last update: 2026-02-18
       matcher source と矛盾しない拡張余地を再評価
 
 ### B2. offset/target_type（優先度: 中）
-- [ ] offset strict-false（EP/Sx/SE/SL/VI/macro系）を
+- [x] offset strict-false（EP/Sx/SE/SL/VI/macro系）を
       「runtime必須」と「実装不足」で分類し直す
+      - 2026-02-18: 分類結果
+        - runtime必須: `VI` / macro offset（`$group$`）
+          - 理由: ClamAV の version-info / macro_lastmatch runtime state に依存し、standalone YARA単体では観測不可。
+        - 実装不足: なし（当面）
+          - `EP/Sx/SE/SL` の strict-false経路は現状「非exec targetで無効」または「offset token不正」の仕様境界として扱う。
 - [x] target_type strict-false（reserved/invalid/internal+）は
       仕様上サポート対象外として明確化（実装TODOからは分離）
       - 2026-02-18: NDB-5方針として `target_type=8/13+` と invalid literal を strict-false固定で運用。
