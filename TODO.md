@@ -88,10 +88,14 @@ Last update: 2026-02-18
 ## B. NDB の strict-safe ギャップ
 
 ### B1. body/jump 構造（優先度: 中）
-- [ ] signed/open/descending/over-maxdist jump strict-false のうち、
+- [x] signed/open/descending/over-maxdist jump strict-false のうち、
       ClamAV matcher と同型で実装可能な subset があるかを再評価
-- [ ] `[]` jump の非canonical構造 strict-false のうち、
+      - 2026-02-18: 再評価の結果、追加で引き上げ可能な strict subset なし。
+        representable な open-ended subset（例: `{10-}`）は既存対応済みで、残り（signed/descending/over-maxdist）は strict-false固定。
+- [x] `[]` jump の非canonical構造 strict-false のうち、
       matcher source と矛盾しない拡張余地を再評価
+      - 2026-02-18: 再評価の結果、single-byte flank + core の canonical 構造以外は同型化余地なし。
+        非canonical（flank不成立/過剰`[]`/open-or-signed境界）は strict-false固定。
 
 ### B2. offset/target_type（優先度: 中）
 - [x] offset strict-false（EP/Sx/SE/SL/VI/macro系）を

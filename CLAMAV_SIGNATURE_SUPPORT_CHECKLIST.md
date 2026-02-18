@@ -119,6 +119,9 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記161: TODO B1（NDB body/jump 再評価）を完了化。
+  - signed/descending/over-maxdist jump: 追加で引き上げ可能な strict subset なし（open-ended representable subset は既存対応済み）。
+  - `[]` jump 非canonical構造: single-byte flank + core 以外は matcher同型にできないため strict-false固定。
 - 2026-02-18 追記160: TODO A3（logical expression周辺）を再調査して完了化。
   - `MultiGt/MultiLt` grouped distinct
     - single-subsig subset（既存対応）以外は distinct条件を同型保持できず、strict-false固定。
