@@ -119,6 +119,12 @@ strict-safe (`false + note`) で残っている不足機能の実装TODOは [`TO
 
 ## 4) メモ（現状観測）
 
+- 2026-02-18 追記160: TODO A3（logical expression周辺）を再調査して完了化。
+  - `MultiGt/MultiLt` grouped distinct
+    - single-subsig subset（既存対応）以外は distinct条件を同型保持できず、strict-false固定。
+  - macro trigger/anchor
+    - linked NDB + direct anchor の strict subset（既存対応）で打ち止め。
+    - 残件は `macro_lastmatch` / runtime anchor state 依存のため strict-false固定。
 - 2026-02-18 追記159: TODO A4/A5 を non-target方針へ統合して完了化。
   - A4（target description: Engine/Container/Intermediates/IconGroup1/2）
     - standalone YARAで観測不能な制約として strict-false固定（README ldb caveat に整合）。
