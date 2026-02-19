@@ -12,6 +12,13 @@ pub struct Args {
     ///   sig2yar logical '<lsig>' --ndb-context 'D1:0:$12:626262' --ndb-context 'D2:0:$12:636363'
     #[arg(long = "ndb-context", value_name = "NDB_SIG")]
     pub ndb_context: Vec<String>,
+
+    /// Best-effort mode for logical lowering: replace strict-false guard tokens (`false`) with
+    /// `true` where possible, to emit a more permissive representable subset.
+    ///
+    /// This intentionally relaxes strict-safe guarantees and may increase false positives.
+    #[arg(long = "relax-strict-false", alias = "non-strict", default_value_t = false)]
+    pub relax_strict_false: bool,
 }
 
 #[cfg(test)]
@@ -62,5 +69,18 @@ mod tests {
 
             assert!(matches!(args.db_type, DbType::Hash));
         }
+    }
+
+    #[test]
+    fn parses_relax_strict_false_alias() {
+        let args = Args::try_parse_from([
+            "sig2yar",
+            "ldb",
+            "Foo.Bar-1;Target:1;0;41424344",
+            "--non-strict",
+        ])
+        .expect("failed to parse --non-strict alias");
+
+        assert!(args.relax_strict_false);
     }
 }

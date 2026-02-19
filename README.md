@@ -51,6 +51,13 @@ Example (`logical`):
 sig2yar logical "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
 ```
 
+Example (`logical` + best-effort non-strict mode):
+
+```bash
+sig2yar ldb "Foo.Bar-1;Engine:51-255,Target:1;0;41424344" --relax-strict-false
+# alias: --non-strict
+```
+
 Example (`logical` with linked NDB context for macro-group subset):
 
 ```bash

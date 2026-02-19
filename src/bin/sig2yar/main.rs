@@ -15,6 +15,71 @@ use sig2yar::{
     yara,
 };
 
+fn replace_false_tokens(expr: &str) -> (String, bool) {
+    let mut out = String::with_capacity(expr.len());
+    let mut tok = String::new();
+    let mut replaced = false;
+
+    let flush = |out: &mut String, tok: &mut String, replaced: &mut bool| {
+        if tok.is_empty() {
+            return;
+        }
+        if tok == "false" {
+            out.push_str("true");
+            *replaced = true;
+        } else {
+            out.push_str(tok);
+        }
+        tok.clear();
+    };
+
+    for ch in expr.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            tok.push(ch);
+        } else {
+            flush(&mut out, &mut tok, &mut replaced);
+            out.push(ch);
+        }
+    }
+    flush(&mut out, &mut tok, &mut replaced);
+
+    (out, replaced)
+}
+
+fn seems_unconditional_true(expr: &str) -> bool {
+    let lowered = expr.to_ascii_lowercase();
+    !lowered.contains('$')
+        && !lowered.contains("filesize")
+        && !lowered.contains("pe.")
+        && !lowered.contains("elf.")
+        && !lowered.contains("math.")
+        && !lowered.contains("hash.")
+        && !lowered.contains("for any")
+        && !lowered.contains("for all")
+}
+
+fn relax_logical_rule(mut rule: yara::YaraRule) -> yara::YaraRule {
+    let (candidate, replaced) = replace_false_tokens(&rule.condition);
+    if !replaced {
+        return rule;
+    }
+
+    if seems_unconditional_true(&candidate) {
+        rule.meta.push(yara::YaraMeta::Entry {
+            key: "clamav_relaxed".to_string(),
+            value: "requested_but_blocked_unconditional_true".to_string(),
+        });
+        return rule;
+    }
+
+    rule.condition = candidate;
+    rule.meta.push(yara::YaraMeta::Entry {
+        key: "clamav_relaxed".to_string(),
+        value: "drop_strict_false_tokens".to_string(),
+    });
+    rule
+}
+
 fn render_rule(args: Args) -> Result<String> {
     let rendered = match args.db_type {
         DbType::Hash => {
@@ -41,6 +106,12 @@ fn render_rule(args: Args) -> Result<String> {
                 yara::lower_logical_signature(&ir)?
             } else {
                 yara::lower_logical_signature_with_ndb_context(&ir, &linked_ndb)?
+            };
+
+            let rule = if args.relax_strict_false {
+                relax_logical_rule(rule)
+            } else {
+                rule
             };
 
             rule.to_string()
@@ -167,6 +238,7 @@ mod tests {
             db_type: DbType::Logical,
             signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
             ndb_context: Vec::new(),
+            relax_strict_false: false,
         };
 
         let out = render_rule(args).expect("render failed");
@@ -180,6 +252,7 @@ mod tests {
             db_type: DbType::Logical,
             signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
             ndb_context: vec!["D1:0:$12:626262".to_string()],
+            relax_strict_false: false,
         };
 
         let out = render_rule(args).expect("render failed");
@@ -195,8 +268,24 @@ mod tests {
             db_type: DbType::Logical,
             signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
             ndb_context: vec!["not-an-ndb-line".to_string()],
+            relax_strict_false: false,
         };
 
         assert!(render_rule(args).is_err());
+    }
+
+    #[test]
+    fn logical_relax_strict_false_replaces_false_tokens() {
+        let args = Args {
+            db_type: DbType::Logical,
+            signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
+            ndb_context: Vec::new(),
+            relax_strict_false: true,
+        };
+
+        let out = render_rule(args).expect("render failed");
+        assert!(out.contains("clamav_relaxed = \"drop_strict_false_tokens\""));
+        assert!(out.contains("($s0 and true)"));
+        assert!(!out.contains("($s0 and false)"));
     }
 }
