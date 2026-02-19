@@ -69,6 +69,7 @@ if [[ "${MAX_FILES}" -gt 0 ]]; then
   python3 - "${CORPUS_DIR}" "${MAX_FILES}" "${SEED}" "${SUBSET_DIR}" <<'PY'
 import pathlib
 import random
+import shutil
 import sys
 
 if len(sys.argv) != 5:
@@ -97,7 +98,10 @@ else:
 
 for idx, src in enumerate(selected):
     dst = out_dir / f"{idx:06d}_{src.name}"
-    dst.symlink_to(src)
+    try:
+        dst.hardlink_to(src)
+    except OSError:
+        shutil.copy2(src, dst)
 PY
   SCAN_CORPUS_DIR="${SUBSET_DIR}"
 fi
