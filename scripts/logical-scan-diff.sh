@@ -232,7 +232,10 @@ def parse_rules_metadata(path: pathlib.Path):
                 continue
 
         condition_expr = " ".join(condition_expr_parts).strip()
-        strict_false = (condition_expr == "false") or ("(false)" in condition_expr)
+        expr_lc = condition_expr.lower()
+        has_false_token = re.search(r"\bfalse\b", expr_lc) is not None
+        has_or_token = re.search(r"\bor\b", expr_lc) is not None
+        strict_false = (expr_lc == "false") or (has_false_token and not has_or_token)
 
         info[rid] = {
             "strict_false": strict_false,
@@ -323,8 +326,13 @@ for raw in clamscan_out.read_text(encoding="utf-8", errors="ignore").splitlines(
     if ": " not in line:
         continue
     file_part, sig_part = line.rsplit(": ", 1)
-    sig_name = sig_part[:-6]  # strip " FOUND"
-    if sig_name not in sample_names:
+    sig_name_raw = sig_part[:-6]  # strip " FOUND"
+
+    if sig_name_raw in sample_names:
+        matched_sig_name = sig_name_raw
+    elif sig_name_raw.endswith(".UNOFFICIAL") and sig_name_raw[:-11] in sample_names:
+        matched_sig_name = sig_name_raw[:-11]
+    else:
         continue
 
     file_path = pathlib.Path(file_part)
@@ -334,7 +342,7 @@ for raw in clamscan_out.read_text(encoding="utf-8", errors="ignore").splitlines(
         rel = "."
     else:
         rel = file_path.name
-    clam_hits[rel].add(sig_name)
+    clam_hits[rel].add(matched_sig_name)
 
 yara_hits_map = collections.defaultdict(set)
 for raw in yara_hits.read_text(encoding="utf-8", errors="ignore").splitlines():
