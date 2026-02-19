@@ -28,6 +28,11 @@ cargo build --bin sig2yar
 sig2yar <db_type> <signature>
 ```
 
+`db_type` は ClamAV DB ファミリ名の互換aliasも受け付ける。
+
+- `logical` ↔ `ldb`
+- `hash` ↔ `hdb` / `hsb` / `mdb` / `msb`
+
 ヘルプ:
 
 ```bash
