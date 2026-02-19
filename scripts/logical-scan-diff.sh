@@ -7,6 +7,8 @@ CORPUS_DIR="${CLAMAV_DIFF_CORPUS_DIR:-}"
 SAMPLE_SIZE="${CLAMAV_DIFF_SAMPLE_SIZE:-200}"
 SEED="${CLAMAV_DIFF_SEED:-7331}"
 OUT_DIR="${CLAMAV_DIFF_OUT_DIR:-${ROOT_DIR}/target/validation/scan-diff}"
+EXCLUDE_TRACKS="${CLAMAV_DIFF_EXCLUDE_TRACKS:-}"
+EXCLUDE_TAGS="${CLAMAV_DIFF_EXCLUDE_TAGS:-}"
 
 if [[ -z "${CORPUS_DIR}" ]]; then
   echo "CLAMAV_DIFF_CORPUS_DIR is required" >&2
@@ -138,15 +140,15 @@ cut -f2 "${RULE_MAP}" | sort -u > "${EFFECTIVE_NAMES}"
   fi
 )
 
-python3 - "${CORPUS_DIR}" "${CLAMAV_OUT}" "${YARA_HITS}" "${RULE_MAP}" "${EFFECTIVE_NAMES}" "${RULES_FILE}" "${SUMMARY_JSON}" "${MISMATCH_TSV}" "${REPORT_MD}" <<'PY'
+python3 - "${CORPUS_DIR}" "${CLAMAV_OUT}" "${YARA_HITS}" "${RULE_MAP}" "${EFFECTIVE_NAMES}" "${RULES_FILE}" "${SUMMARY_JSON}" "${MISMATCH_TSV}" "${REPORT_MD}" "${EXCLUDE_TRACKS}" "${EXCLUDE_TAGS}" <<'PY'
 import collections
 import json
 import pathlib
 import re
 import sys
 
-if len(sys.argv) != 10:
-    raise SystemExit("usage: <corpus_dir> <clamscan_out> <yara_hits> <rule_map> <effective_names> <rules_file> <summary_json> <mismatch_tsv> <report_md>")
+if len(sys.argv) != 12:
+    raise SystemExit("usage: <corpus_dir> <clamscan_out> <yara_hits> <rule_map> <effective_names> <rules_file> <summary_json> <mismatch_tsv> <report_md> <exclude_tracks_csv> <exclude_tags_csv>")
 
 corpus_dir = pathlib.Path(sys.argv[1]).resolve()
 clamscan_out = pathlib.Path(sys.argv[2])
@@ -157,6 +159,8 @@ rules_file = pathlib.Path(sys.argv[6])
 summary_json = pathlib.Path(sys.argv[7])
 mismatch_tsv = pathlib.Path(sys.argv[8])
 report_md = pathlib.Path(sys.argv[9])
+exclude_tracks_csv = sys.argv[10]
+exclude_tags_csv = sys.argv[11]
 
 
 def relpath(p: pathlib.Path) -> str:
@@ -164,6 +168,10 @@ def relpath(p: pathlib.Path) -> str:
         return p.resolve().relative_to(corpus_dir).as_posix()
     except Exception:
         return p.name
+
+
+def parse_csv_set(value: str):
+    return {item.strip() for item in value.split(",") if item.strip()}
 
 
 def unescape_yara_string(value: str) -> str:
@@ -288,6 +296,24 @@ def track_priority(track: str) -> int:
     }
     return order.get(track, 99)
 
+exclude_tracks = parse_csv_set(exclude_tracks_csv)
+exclude_tags = parse_csv_set(exclude_tags_csv)
+
+
+def should_exclude_strict_false(tags):
+    if not (exclude_tracks or exclude_tags):
+        return False
+    if not tags:
+        return False
+    for tag in tags:
+        if tag in exclude_tags:
+            continue
+        if classify_track_from_tag(tag) in exclude_tracks:
+            continue
+        return False
+    return True
+
+
 files = sorted([p for p in corpus_dir.rglob("*") if p.is_file()])
 all_files = [relpath(p) for p in files]
 
@@ -363,6 +389,7 @@ mismatches = []
 only_clamav_counter = collections.Counter()
 only_yara_counter = collections.Counter()
 only_clamav_strict_false_counter = collections.Counter()
+only_clamav_strict_false_excluded_counter = collections.Counter()
 only_clamav_non_strict_counter = collections.Counter()
 strict_false_unsupported_counter = collections.Counter()
 strict_false_notes_counter = collections.Counter()
@@ -381,15 +408,21 @@ for rel in all_keys:
         continue
 
     only_clamav_strict_false = []
+    only_clamav_strict_false_excluded = []
     only_clamav_non_strict = []
     file_strict_false_tags = set()
 
     for sig_name in only_clamav:
         meta = name_infos.get(sig_name)
         if meta and meta.get("strict_false", False):
-            only_clamav_strict_false.append(sig_name)
             tags = meta.get("unsupported_tags", [])
             notes = meta.get("lowering_notes", [])
+
+            if should_exclude_strict_false(tags):
+                only_clamav_strict_false_excluded.append(sig_name)
+                continue
+
+            only_clamav_strict_false.append(sig_name)
             if tags:
                 strict_false_unsupported_counter.update(tags)
                 file_strict_false_tags.update(tags)
@@ -404,6 +437,12 @@ for rel in all_keys:
         else:
             only_clamav_non_strict.append(sig_name)
 
+    only_clamav_strict_false_excluded_counter.update(only_clamav_strict_false_excluded)
+
+    effective_only_clamav = sorted(only_clamav_strict_false + only_clamav_non_strict)
+    if not (effective_only_clamav or only_yara):
+        continue
+
     if only_clamav_non_strict:
         detection_gap_files += 1
     if only_yara:
@@ -414,15 +453,16 @@ for rel in all_keys:
     mismatches.append(
         {
             "file": rel,
-            "only_clamav": only_clamav,
+            "only_clamav": effective_only_clamav,
             "only_clamav_strict_false": only_clamav_strict_false,
+            "only_clamav_strict_false_excluded": only_clamav_strict_false_excluded,
             "only_clamav_non_strict": only_clamav_non_strict,
             "only_yara": only_yara,
             "strict_false_unsupported_tags": sorted(file_strict_false_tags),
         }
     )
 
-    only_clamav_counter.update(only_clamav)
+    only_clamav_counter.update(effective_only_clamav)
     only_yara_counter.update(only_yara)
     only_clamav_strict_false_counter.update(only_clamav_strict_false)
     only_clamav_non_strict_counter.update(only_clamav_non_strict)
@@ -445,6 +485,8 @@ strict_false_actionability_ranking.sort(
 summary = {
     "files_scanned": len(all_files),
     "sampled_rules": len(rule_to_orig),
+    "exclude_tracks": sorted(exclude_tracks),
+    "exclude_tags": sorted(exclude_tags),
     "clamav_hit_files": sum(1 for v in clam_hits.values() if v),
     "yara_hit_files": sum(1 for v in yara_hits_map.values() if v),
     "clamav_hit_total": sum(len(v) for v in clam_hits.values()),
@@ -454,6 +496,9 @@ summary = {
     "only_clamav_strict_false_total": sum(
         len(item["only_clamav_strict_false"]) for item in mismatches
     ),
+    "only_clamav_strict_false_excluded_total": int(sum(
+        only_clamav_strict_false_excluded_counter.values()
+    )),
     "only_clamav_non_strict_total": sum(
         len(item["only_clamav_non_strict"]) for item in mismatches
     ),
@@ -466,6 +511,7 @@ summary = {
     "mismatch_examples": mismatches[:20],
     "top_only_clamav": only_clamav_counter.most_common(20),
     "top_only_clamav_strict_false": only_clamav_strict_false_counter.most_common(20),
+    "top_only_clamav_strict_false_excluded": only_clamav_strict_false_excluded_counter.most_common(20),
     "top_only_clamav_non_strict": only_clamav_non_strict_counter.most_common(20),
     "top_only_yara": only_yara_counter.most_common(20),
     "top_strict_false_unsupported_tags": strict_false_unsupported_counter.most_common(20),
@@ -478,7 +524,7 @@ summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n"
 
 with mismatch_tsv.open("w", encoding="utf-8") as f:
     f.write(
-        "file\tonly_clamav\tonly_clamav_strict_false\tonly_clamav_non_strict\tonly_yara\tstrict_false_unsupported_tags\n"
+        "file\tonly_clamav\tonly_clamav_strict_false\tonly_clamav_strict_false_excluded\tonly_clamav_non_strict\tonly_yara\tstrict_false_unsupported_tags\n"
     )
     for item in mismatches:
         f.write(
@@ -487,6 +533,7 @@ with mismatch_tsv.open("w", encoding="utf-8") as f:
                     item["file"],
                     ",".join(item["only_clamav"]),
                     ",".join(item["only_clamav_strict_false"]),
+                    ",".join(item["only_clamav_strict_false_excluded"]),
                     ",".join(item["only_clamav_non_strict"]),
                     ",".join(item["only_yara"]),
                     ",".join(item["strict_false_unsupported_tags"]),
@@ -500,6 +547,8 @@ report_lines = [
     "",
     f"- files_scanned: {summary['files_scanned']}",
     f"- sampled_rules: {summary['sampled_rules']}",
+    f"- exclude_tracks: {summary['exclude_tracks']}",
+    f"- exclude_tags: {summary['exclude_tags']}",
     f"- clamav_hit_total(filtered): {summary['clamav_hit_total']}",
     f"- yara_hit_total(filtered): {summary['yara_hit_total']}",
     f"- mismatch_files: {summary['mismatch_files']}",
@@ -507,6 +556,7 @@ report_lines = [
     "## mismatch categorization",
     f"- only_clamav_total: {summary['only_clamav_total']}",
     f"- only_clamav_strict_false_total: {summary['only_clamav_strict_false_total']}",
+    f"- only_clamav_strict_false_excluded_total: {summary['only_clamav_strict_false_excluded_total']}",
     f"- only_clamav_non_strict_total: {summary['only_clamav_non_strict_total']}",
     f"- only_yara_total: {summary['only_yara_total']}",
     f"- files(strict_false_only): {summary['mismatch_category_files']['strict_false_only']}",
@@ -525,6 +575,8 @@ if summary["mismatch_examples"]:
             + str(item["only_clamav"])
             + " | only_clamav_strict_false="
             + str(item["only_clamav_strict_false"])
+            + " | only_clamav_strict_false_excluded="
+            + str(item["only_clamav_strict_false_excluded"])
             + " | only_clamav_non_strict="
             + str(item["only_clamav_non_strict"])
             + " | only_yara="
@@ -545,6 +597,13 @@ else:
 report_lines.extend(["", "## top only_clamav (strict_false) signatures"])
 if summary["top_only_clamav_strict_false"]:
     for name, count in summary["top_only_clamav_strict_false"]:
+        report_lines.append(f"- {name}: {count}")
+else:
+    report_lines.append("- none")
+
+report_lines.extend(["", "## top only_clamav (strict_false excluded) signatures"])
+if summary["top_only_clamav_strict_false_excluded"]:
+    for name, count in summary["top_only_clamav_strict_false_excluded"]:
         report_lines.append(f"- {name}: {count}")
 else:
     report_lines.append("- none")
