@@ -51,6 +51,13 @@ sig2yar hash "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature"
 sig2yar logical "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
 ```
 
+例（`logical` + best-effort 非strictモード）:
+
+```bash
+sig2yar ldb "Foo.Bar-1;Engine:51-255,Target:1;0;41424344" --relax-strict-false
+# alias: --non-strict
+```
+
 例（`logical` + macro-group 用 `ndb` コンテキスト）:
 
 ```bash
