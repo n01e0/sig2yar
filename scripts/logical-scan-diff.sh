@@ -9,6 +9,9 @@ SEED="${CLAMAV_DIFF_SEED:-7331}"
 OUT_DIR="${CLAMAV_DIFF_OUT_DIR:-${ROOT_DIR}/target/validation/scan-diff}"
 EXCLUDE_TRACKS="${CLAMAV_DIFF_EXCLUDE_TRACKS:-}"
 EXCLUDE_TAGS="${CLAMAV_DIFF_EXCLUDE_TAGS:-}"
+CLAMSCAN_ALLMATCH="${CLAMAV_DIFF_CLAMSCAN_ALLMATCH:-0}"
+MAX_FILES="${CLAMAV_DIFF_MAX_FILES:-0}"
+CLEAN_STALE_RUN_CONTAINERS="${CLAMAV_DIFF_CLEAN_STALE_RUN_CONTAINERS:-1}"
 
 if [[ -z "${CORPUS_DIR}" ]]; then
   echo "CLAMAV_DIFF_CORPUS_DIR is required" >&2
@@ -26,6 +29,24 @@ if [[ ! -d "${CORPUS_DIR}" ]]; then
   exit 2
 fi
 
+case "${CLAMSCAN_ALLMATCH,,}" in
+  1|true|yes|on)
+    CLAMSCAN_MATCH_FLAG="--allmatch"
+    ;;
+  0|false|no|off)
+    CLAMSCAN_MATCH_FLAG=""
+    ;;
+  *)
+    echo "invalid CLAMAV_DIFF_CLAMSCAN_ALLMATCH=${CLAMSCAN_ALLMATCH} (expected 0/1/true/false)" >&2
+    exit 2
+    ;;
+esac
+
+if ! [[ "${MAX_FILES}" =~ ^[0-9]+$ ]]; then
+  echo "invalid CLAMAV_DIFF_MAX_FILES=${MAX_FILES} (expected non-negative integer)" >&2
+  exit 2
+fi
+
 mkdir -p "${OUT_DIR}"
 RUN_DIR="$(mktemp -d "${OUT_DIR}/run.XXXXXX")"
 
@@ -40,6 +61,46 @@ CLAMAV_ERR="${RUN_DIR}/clamscan.err"
 SUMMARY_JSON="${RUN_DIR}/summary.json"
 MISMATCH_TSV="${RUN_DIR}/mismatches.tsv"
 REPORT_MD="${RUN_DIR}/report.md"
+
+SCAN_CORPUS_DIR="${CORPUS_DIR}"
+if [[ "${MAX_FILES}" -gt 0 ]]; then
+  SUBSET_DIR="${RUN_DIR}/corpus-subset"
+  mkdir -p "${SUBSET_DIR}"
+  python3 - "${CORPUS_DIR}" "${MAX_FILES}" "${SEED}" "${SUBSET_DIR}" <<'PY'
+import pathlib
+import random
+import sys
+
+if len(sys.argv) != 5:
+    raise SystemExit("usage: <corpus_dir> <max_files> <seed> <out_dir>")
+
+corpus_dir = pathlib.Path(sys.argv[1]).resolve()
+max_files = max(0, int(sys.argv[2]))
+seed = int(sys.argv[3])
+out_dir = pathlib.Path(sys.argv[4]).resolve()
+
+files = sorted([p for p in corpus_dir.rglob("*") if p.is_file()])
+if max_files == 0 or len(files) <= max_files:
+    selected = files
+else:
+    rng = random.Random(seed)
+    selected = []
+    seen = 0
+    for path in files:
+        seen += 1
+        if len(selected) < max_files:
+            selected.append(path)
+        else:
+            i = rng.randrange(seen)
+            if i < max_files:
+                selected[i] = path
+
+for idx, src in enumerate(selected):
+    dst = out_dir / f"{idx:06d}_{src.name}"
+    dst.symlink_to(src)
+PY
+  SCAN_CORPUS_DIR="${SUBSET_DIR}"
+fi
 
 python3 - "${DB_DIR}" "${SAMPLE_SIZE}" "${SEED}" "${SAMPLE_LDB}" <<'PY'
 import pathlib
@@ -121,17 +182,26 @@ fi
 
 cut -f2 "${RULE_MAP}" | sort -u > "${EFFECTIVE_NAMES}"
 
-"${YARA_SCAN_BIN}" --rules "${RULES_FILE}" --corpus "${CORPUS_DIR}" --out "${YARA_HITS}"
+"${YARA_SCAN_BIN}" --rules "${RULES_FILE}" --corpus "${SCAN_CORPUS_DIR}" --out "${YARA_HITS}"
 
 (
   cd "${ROOT_DIR}"
+
+  if [[ "${CLEAN_STALE_RUN_CONTAINERS,,}" == "1" || "${CLEAN_STALE_RUN_CONTAINERS,,}" == "true" || "${CLEAN_STALE_RUN_CONTAINERS,,}" == "yes" || "${CLEAN_STALE_RUN_CONTAINERS,,}" == "on" ]]; then
+    stale_ids="$(docker ps -aq --filter name=sig2yar-clamav-run- || true)"
+    if [[ -n "${stale_ids}" ]]; then
+      docker rm -f ${stale_ids} >/dev/null 2>&1 || true
+    fi
+  fi
+
   set +e
   docker compose run --rm \
-    -v "${CORPUS_DIR}:/scan:ro" \
+    -e CLAMSCAN_MATCH_FLAG="${CLAMSCAN_MATCH_FLAG}" \
+    -v "${SCAN_CORPUS_DIR}:/scan:ro" \
     -v "${RUN_DIR}:/work" \
     --entrypoint /bin/sh \
     clamav \
-    -lc 'set -e; set +e; clamscan -r --allmatch --infected --no-summary --database /var/lib/clamav/unpacked /scan > /work/clamscan.out 2> /work/clamscan.err; ec=$?; set -e; if [ "$ec" -gt 1 ]; then cat /work/clamscan.err >&2; exit "$ec"; fi; exit 0'
+    -lc 'set -e; set +e; clamscan -r ${CLAMSCAN_MATCH_FLAG} --infected --no-summary --database /var/lib/clamav/unpacked /scan > /work/clamscan.out 2> /work/clamscan.err; ec=$?; set -e; if [ "$ec" -gt 1 ]; then cat /work/clamscan.err >&2; exit "$ec"; fi; exit 0'
   ec=$?
   set -e
   if [[ "$ec" -ne 0 ]]; then
@@ -140,15 +210,15 @@ cut -f2 "${RULE_MAP}" | sort -u > "${EFFECTIVE_NAMES}"
   fi
 )
 
-python3 - "${CORPUS_DIR}" "${CLAMAV_OUT}" "${YARA_HITS}" "${RULE_MAP}" "${EFFECTIVE_NAMES}" "${RULES_FILE}" "${SUMMARY_JSON}" "${MISMATCH_TSV}" "${REPORT_MD}" "${EXCLUDE_TRACKS}" "${EXCLUDE_TAGS}" <<'PY'
+python3 - "${SCAN_CORPUS_DIR}" "${CLAMAV_OUT}" "${YARA_HITS}" "${RULE_MAP}" "${EFFECTIVE_NAMES}" "${RULES_FILE}" "${SUMMARY_JSON}" "${MISMATCH_TSV}" "${REPORT_MD}" "${EXCLUDE_TRACKS}" "${EXCLUDE_TAGS}" "${CLAMSCAN_ALLMATCH}" "${MAX_FILES}" <<'PY'
 import collections
 import json
 import pathlib
 import re
 import sys
 
-if len(sys.argv) != 12:
-    raise SystemExit("usage: <corpus_dir> <clamscan_out> <yara_hits> <rule_map> <effective_names> <rules_file> <summary_json> <mismatch_tsv> <report_md> <exclude_tracks_csv> <exclude_tags_csv>")
+if len(sys.argv) != 14:
+    raise SystemExit("usage: <corpus_dir> <clamscan_out> <yara_hits> <rule_map> <effective_names> <rules_file> <summary_json> <mismatch_tsv> <report_md> <exclude_tracks_csv> <exclude_tags_csv> <allmatch_flag> <max_files>")
 
 corpus_dir = pathlib.Path(sys.argv[1]).resolve()
 clamscan_out = pathlib.Path(sys.argv[2])
@@ -161,6 +231,8 @@ mismatch_tsv = pathlib.Path(sys.argv[8])
 report_md = pathlib.Path(sys.argv[9])
 exclude_tracks_csv = sys.argv[10]
 exclude_tags_csv = sys.argv[11]
+clamscan_allmatch = sys.argv[12]
+max_files = int(sys.argv[13])
 
 
 def relpath(p: pathlib.Path) -> str:
@@ -485,6 +557,8 @@ strict_false_actionability_ranking.sort(
 summary = {
     "files_scanned": len(all_files),
     "sampled_rules": len(rule_to_orig),
+    "clamscan_allmatch": clamscan_allmatch,
+    "max_files": max_files,
     "exclude_tracks": sorted(exclude_tracks),
     "exclude_tags": sorted(exclude_tags),
     "clamav_hit_files": sum(1 for v in clam_hits.values() if v),
@@ -547,6 +621,8 @@ report_lines = [
     "",
     f"- files_scanned: {summary['files_scanned']}",
     f"- sampled_rules: {summary['sampled_rules']}",
+    f"- clamscan_allmatch: {summary['clamscan_allmatch']}",
+    f"- max_files: {summary['max_files']}",
     f"- exclude_tracks: {summary['exclude_tracks']}",
     f"- exclude_tags: {summary['exclude_tags']}",
     f"- clamav_hit_total(filtered): {summary['clamav_hit_total']}",
