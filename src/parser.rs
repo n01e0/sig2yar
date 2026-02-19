@@ -26,8 +26,10 @@ use clap::ValueEnum;
 
 #[derive(Debug, ValueEnum, Clone)]
 pub enum DbType {
+    #[value(alias = "hdb", alias = "hsb", alias = "mdb", alias = "msb")]
     Hash,
     Imp,
+    #[value(alias = "ldb")]
     Logical,
     Hdu,
     Hsu,
