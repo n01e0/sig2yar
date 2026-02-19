@@ -1,16 +1,16 @@
 mod args;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use args::Args;
 use clap::Parser;
 use sig2yar::{
     parser::{
-        cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
+        DbType, cbc::CbcSignature, cdb::CdbSignature, cfg::CfgSignature, crb::CrbSignature,
         fp::FpSignature, ftm::FtmSignature, hash::HashSignature, hdu::HduSignature,
         hsu::HsuSignature, idb::IdbSignature, ign::IgnSignature, ign2::Ign2Signature,
         imp::ImpSignature, info::InfoSignature, ldu::LduSignature, logical::LogicalSignature,
         mdu::MduSignature, msu::MsuSignature, ndb::NdbSignature, ndu::NduSignature,
-        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature, DbType,
+        pdb::PdbSignature, sfp::SfpSignature, wdb::WdbSignature,
     },
     yara,
 };
@@ -80,8 +80,59 @@ fn relax_logical_rule(mut rule: yara::YaraRule) -> yara::YaraRule {
     rule
 }
 
+fn detect_db_type(signature: &str) -> Result<DbType> {
+    // Prefer high-confidence detection families.
+    // Some DB parsers are intentionally broad (e.g. cbc/info/ldu), which can cause excessive
+    // ambiguity if we probe everything indiscriminately.
+
+    if signature.contains(';') && LogicalSignature::parse(signature).is_ok() {
+        return Ok(DbType::Logical);
+    }
+
+    if HashSignature::parse(signature).is_ok() {
+        return Ok(DbType::Hash);
+    }
+
+    if NdbSignature::parse(signature).is_ok() {
+        return Ok(DbType::Ndb);
+    }
+
+    if NduSignature::parse(signature).is_ok() {
+        return Ok(DbType::Ndu);
+    }
+
+    if IdbSignature::parse(signature).is_ok() {
+        return Ok(DbType::Idb);
+    }
+
+    if ImpSignature::parse(signature).is_ok() {
+        return Ok(DbType::Imp);
+    }
+
+    // Conservative fallback for broad formats.
+    if (signature.starts_with("ClamAV-VDB:") || signature.starts_with("DSIG:"))
+        && InfoSignature::parse(signature).is_ok()
+    {
+        return Ok(DbType::Info);
+    }
+
+    if signature.contains('\n') && CbcSignature::parse(signature).is_ok() {
+        return Ok(DbType::Cbc);
+    }
+
+    Err(anyhow!(
+        "failed to auto-detect db_type from signature; pass explicit db_type"
+    ))
+}
+
 fn render_rule(args: Args) -> Result<String> {
-    let rendered = match args.db_type {
+    let args = args.resolve()?;
+    let db_type = match args.db_type {
+        Some(db_type) => db_type,
+        None => detect_db_type(&args.signature)?,
+    };
+
+    let rendered = match db_type {
         DbType::Hash => {
             let sig = HashSignature::parse(&args.signature)?;
             let ir = sig.to_ir();
@@ -235,8 +286,8 @@ mod tests {
     #[test]
     fn logical_macro_without_ndb_context_stays_strict_false() {
         let args = Args {
-            db_type: DbType::Logical,
-            signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
+            db_type_or_signature: "logical".to_string(),
+            signature: Some("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string()),
             ndb_context: Vec::new(),
             relax_strict_false: false,
         };
@@ -249,8 +300,8 @@ mod tests {
     #[test]
     fn logical_macro_with_ndb_context_links_member() {
         let args = Args {
-            db_type: DbType::Logical,
-            signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
+            db_type_or_signature: "logical".to_string(),
+            signature: Some("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string()),
             ndb_context: vec!["D1:0:$12:626262".to_string()],
             relax_strict_false: false,
         };
@@ -265,8 +316,8 @@ mod tests {
     #[test]
     fn logical_with_invalid_ndb_context_returns_error() {
         let args = Args {
-            db_type: DbType::Logical,
-            signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
+            db_type_or_signature: "logical".to_string(),
+            signature: Some("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string()),
             ndb_context: vec!["not-an-ndb-line".to_string()],
             relax_strict_false: false,
         };
@@ -277,8 +328,8 @@ mod tests {
     #[test]
     fn logical_relax_strict_false_replaces_false_tokens() {
         let args = Args {
-            db_type: DbType::Logical,
-            signature: "Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string(),
+            db_type_or_signature: "logical".to_string(),
+            signature: Some("Foo.Bar-1;Target:1;0&1;616161;${6-7}12$".to_string()),
             ndb_context: Vec::new(),
             relax_strict_false: true,
         };
@@ -287,5 +338,19 @@ mod tests {
         assert!(out.contains("clamav_relaxed = \"drop_strict_false_tokens\""));
         assert!(out.contains("($s0 and true)"));
         assert!(!out.contains("($s0 and false)"));
+    }
+
+    #[test]
+    fn auto_mode_detects_logical_when_db_type_omitted() {
+        let args = Args {
+            db_type_or_signature: "Foo.Bar-1;Target:1;0;41424344".to_string(),
+            signature: None,
+            ndb_context: Vec::new(),
+            relax_strict_false: false,
+        };
+
+        let out = render_rule(args).expect("render failed");
+        assert!(out.contains("rule Foo_Bar_1"));
+        assert!(out.contains("$s0 = { 41 42 43 44 }"));
     }
 }

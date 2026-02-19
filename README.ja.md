@@ -25,8 +25,11 @@ cargo build --bin sig2yar
 ## 使い方
 
 ```bash
-sig2yar <db_type> <signature>
+sig2yar [db_type] <signature>
 ```
+
+`db_type` を省略した場合は、署名構文から自動判定する。
+自動判定が曖昧な場合は `db_type` を明示指定する。
 
 `db_type` は ClamAV DB ファミリ名の互換aliasも受け付ける。
 
@@ -49,6 +52,12 @@ sig2yar hash "44d88612fea8a8f36de82e1278abb02f:68:Eicar-Test-Signature"
 
 ```bash
 sig2yar logical "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
+```
+
+例（自動判定、db_type省略）:
+
+```bash
+sig2yar "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
 ```
 
 例（`logical` + best-effort 非strictモード）:
