@@ -25,8 +25,11 @@ cargo build --bin sig2yar
 ## Usage
 
 ```bash
-sig2yar <db_type> <signature>
+sig2yar [db_type] <signature>
 ```
+
+If `db_type` is omitted, sig2yar tries auto-detection from signature syntax.
+When auto-detection is ambiguous, pass `db_type` explicitly.
 
 `db_type` accepts compatibility aliases by ClamAV DB family as well:
 
@@ -49,6 +52,12 @@ Example (`logical`):
 
 ```bash
 sig2yar logical "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
+```
+
+Example (`auto-detect`, db_type omitted):
+
+```bash
+sig2yar "Foo.Bar-1;Engine:51-255,Target:1;0;41424344"
 ```
 
 Example (`logical` + best-effort non-strict mode):
